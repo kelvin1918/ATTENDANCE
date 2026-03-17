@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+<meta charset="UTF-8">
+<title>Classes & Subjects</title>
+
+<link rel="stylesheet" href="/static/css/style.css">
+
+</head>
+
+
+<body>
+
+<div class="layout">
+
+<!-- SIDEBAR -->
+
+<div class="sidebar">
+
+<div>
+
+<div class="profile">
+
+<div class="avatar">AD</div>
+
+<div>
+<b>Admin User</b>
+<p>Instructor</p>
+</div>
+
+</div>
+
+<nav>
+<a href="/">🏠 Home</a>
+<a href="/classes">📚 Classes</a>
+<a href="/history">🕒 History</a>
+</nav>
+
+</div>
+
+<a href="/logout">⚙ Logout</a>
+
+</div>
+
+
+
+<!-- MAIN CONTENT -->
+
+<div class="main">
+
+<!-- HEADER -->
+
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+
+<h1>Classes & Subjects</h1>
+
+<button class="addTask" onclick="openClassModal()">+ New Class</button>
+
+</div>
+
+
+<!-- SEARCH -->
+
+<input class="search" placeholder="Search classes...">
+
+
+<!-- CLASS GRID -->
+
+<div class="class-grid" id="classGrid">
+
+{% for c in classes %}
+
+<div class="class-card" onclick="openClass('{{c[0]}}')">
+
+<div class="book-icon">📖</div>
+
+<div class="class-title">{{c[1]}}</div>
+
+<div class="class-section">{{c[2]}}</div>
+
+<div class="created">
+Created {{c[3]}}
+</div>
+
+<button class="menu-btn" onclick="showMenu(event,'{{c[0]}}')">⋮</button>
+
+</div>
+
+{% endfor %}
+
+</div>
+
+</div>
+
+
+
+<!-- RIGHT PANEL (CLOCK + SCHEDULE) -->
+
+<div class="rightpanel">
+
+<div class="clock">
+
+<h2 id="time"></h2>
+<p id="date"></p>
+
+</div>
+
+<h3>Schedule</h3>
+
+<div id="scheduleList">
+
+<div class="schedule-item">
+<b>7:00 AM - 12:00 PM | CPT-113</b>
+<span>📍 VMB 401</span>
+</div>
+
+</div>
+
+<button class="addTask">+ Add Task</button>
+
+</div>
+
+</div>
+
+
+
+<!-- NEW CLASS MODAL -->
+
+<div id="classModal" class="modal">
+
+<div class="modal-content">
+
+<h2>Create Class</h2>
+
+<input id="subject" placeholder="Subject Name">
+
+<input id="section" placeholder="Section">
+
+<button onclick="createClass()">Create</button>
+
+</div>
+
+</div>
+
+
+
+<!-- FLOATING ACTION MENU -->
+
+<div id="floatingMenu" class="floating-menu" style="display:none">
+
+<button onclick="editClass()">✎ Edit</button>
+
+<button class="delete" onclick="deleteClass()">🗑 Delete</button>
+
+</div>
+
+
+
+<script>
+
+
+/* CLOCK */
+
+setInterval(function(){
+
+let now = new Date()
+
+document.getElementById("time").innerText =
+now.toLocaleTimeString()
+
+document.getElementById("date").innerText =
+now.toDateString()
+
+},1000)
+
+
+
+/* OPEN CLASS FOLDER */
+
+function openClass(id){
+
+window.location.href = "/class/" + id
+
+}
+
+
+
+/* MODAL */
+
+function openClassModal(){
+
+document.getElementById("classModal").style.display="flex"
+
+}
+
+
+
+/* CREATE CLASS */
+
+function createClass(){
+
+let subject=document.getElementById("subject").value
+let section=document.getElementById("section").value
+
+fetch("/create_class",{
+
+method:"POST",
+
+headers:{
+"Content-Type":"application/json"
+},
+
+body:JSON.stringify({
+subject:subject,
+section:section
+})
+
+})
+.then(res=>res.json())
+.then(data=>{
+location.reload()
+})
+
+}
+
+
+
+/* FLOATING MENU */
+
+let selectedClass = null
+
+function showMenu(event,id){
+
+event.stopPropagation()
+
+selectedClass = id
+
+let menu = document.getElementById("floatingMenu")
+
+menu.style.display="block"
+menu.style.left = event.pageX + "px"
+menu.style.top = event.pageY + "px"
+
+}
+
+
+
+/* DELETE CLASS */
+
+function deleteClass(){
+
+fetch("/delete_class/"+selectedClass,{
+method:"DELETE"
+})
+.then(()=>location.reload())
+
+}
+
+
+
+/* EDIT CLASS */
+
+function editClass(){
+
+let newName = prompt("Rename class")
+
+fetch("/edit_class/"+selectedClass,{
+
+method:"POST",
+
+headers:{
+"Content-Type":"application/json"
+},
+
+body:JSON.stringify({
+name:newName
+})
+
+})
+.then(()=>location.reload())
+
+}
+
+
+
+/* CLOSE MENU */
+
+document.addEventListener("click",function(){
+
+document.getElementById("floatingMenu").style.display="none"
+
+})
+
+</script>
+
+
+</body>
+</html>
