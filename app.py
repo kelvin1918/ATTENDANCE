@@ -3,8 +3,13 @@ import os
 import json
 from datetime import datetime
 from reportlab.pdfgen import canvas
+import psycopg2
+conn = psycopg2.connect("postgresql://user:password@localhost/attendance_db")
+
 
 app = Flask(__name__)
+
+
 
 DATA_FILE = "dashboard_data.json"
 
