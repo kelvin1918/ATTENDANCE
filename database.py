@@ -12,215 +12,227 @@ Tables:
 """
 
 import psycopg2
-import os
+import psycopg2.extras   # for RealDictCursor (rows behave like dicts)
 from datetime import datetime
 
 DATABASE = "attendance.db"
 
+DB_CONFIG = {
+    "host":     "localhost",
+    "port":     5432,
+    "database": "attendance_fr",   # the database you created in pgAdmin
+    "user":     "postgres",        # default PostgreSQL username
+    "password": "kelvin123",   # your pgAdmin/PostgreSQL password
+}
 
 # ── CONNECTION ────────────────────────────────────────────────────────────────
 
-def get_db():
+def get_db(): # dito makikita at ma dedefine ang database connection sa Pgadmin
     
     """
-    Returns a database connection.
-    SQLite: uses attendance.db file in project root.
-
-    To switch to PostgreSQL, replace with:
-        import psycopg2
-        conn = psycopg2.connect(
-            host="localhost",
-            database="attendance_db",
-            user="postgres",
-            password="yourpassword"
-        )
-        return conn
+    Returns a psycopg2 connection.
+    RealDictCursor makes rows behave like dicts: row["name"]
     """
 
-
-    conn = psycopg2.connect(
-            host="localhost",
-            database="attendance_db",
-            user="postgres",
-            password="kelvin123"
-        )
+    conn = psycopg2.connect(**DB_CONFIG)
     return conn
 
-    """""
-    conn = sqlite3.connect(DATABASE)
-    conn.row_factory = sqlite3.Row   # rows behave like dicts: row["name"]
-    return conn
-    """""
 
+def get_cursor(conn):
+    """Returns a RealDictCursor — rows come back as dicts automatically."""
+    return conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+ 
 
-
-
-# ── INIT ──────────────────────────────────────────────────────────────────────
-
+# ── INIT — creates all tables ─────────────────────────────────────────────────
+ 
 def init_db():
-    """
-    Creates all tables if they don't exist yet.
-    Called once when app.py starts.
-    """
-    db = get_db()
-    db.executescript("""
+    conn = get_db()
+    cur  = conn.cursor()
 
-        -- Class folders (subject + section)
+    cur.execute("""
         CREATE TABLE IF NOT EXISTS classes (
-            id          INTEGER PRIMARY KEY AUTOINCREMENT,
-            subject     TEXT    NOT NULL,
-            section     TEXT    NOT NULL,
-            created     TEXT    NOT NULL
+            id           VARCHAR(50)  PRIMARY KEY,
+            course_code  VARCHAR(20)  NOT NULL,
+            subject      VARCHAR(50),
+            section      VARCHAR(50),
+            created      DATE DEFAULT CURRENT_DATE
         );
-
-        -- Students enrolled in a class
-        CREATE TABLE IF NOT EXISTS students (
-            id          INTEGER PRIMARY KEY AUTOINCREMENT,
-            class_code    INTEGER NOT NULL,
-            name        TEXT    NOT NULL,
-            address     TEXT,
-            number      TEXT,
-            sr_code     TEXT,
-            age         INTEGER,
-            sex         TEXT,
-            email       TEXT,
-            photo       TEXT,
-            signature   TEXT,
-            FOREIGN KEY (class_code) REFERENCES classes(id)
-        );
-
-        -- Attendance records per session
-        CREATE TABLE IF NOT EXISTS attendance (
-            id          INTEGER PRIMARY KEY AUTOINCREMENT,
-            class_code     INTEGER NOT NULL,
-            student_id  TEXT,
-            name        TEXT    NOT NULL,
-            section     TEXT,
-            room        TEXT,
-            instructor   TEXT,
-            subject     TEXT,
-            status      TEXT    NOT NULL,  -- 'Present', 'Late', 'Absent'
-            timestamp   TEXT,
-            date        TEXT    NOT NULL,
-            FOREIGN KEY (class_code) REFERENCES classes(id)
-        );
-
-        -- Right panel schedule items
-        CREATE TABLE IF NOT EXISTS schedules (
-            id      INTEGER PRIMARY KEY AUTOINCREMENT,
-            time    TEXT,
-            subject TEXT,
-            room    TEXT
-        );
-
     """)
-    db.commit()
-    db.close()
-    print("[DB] Tables ready.")
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS students (
+            id         INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+            class_code VARCHAR(50)  NOT NULL REFERENCES classes(id) ON DELETE CASCADE,
+            name       VARCHAR(50)  NOT NULL,
+            address    VARCHAR(100),
+            number     VARCHAR(50),
+            sr_code    VARCHAR(50)  UNIQUE,  --  unique for referencing
+            age        INTEGER,
+            sex        VARCHAR(10),
+            email      VARCHAR(100),
+            photo      TEXT,
+            signature  TEXT
+        );
+    """)
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS attendance (
+            id          INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+            class_code  VARCHAR(50)  NOT NULL REFERENCES classes(id) ON DELETE CASCADE,
+            sr_code     VARCHAR(50)  REFERENCES students(sr_code),  -- ✅ linked to students
+            name        VARCHAR(50)  NOT NULL,
+            section     VARCHAR(50),
+            subject     VARCHAR(50),
+            status      VARCHAR(20)  NOT NULL,
+            timestamp   TIMESTAMP(0) DEFAULT NOW(),
+            date        DATE         NOT NULL
+        );
+    """)
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS schedules (
+            id          INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+            class_code  VARCHAR(50)  REFERENCES classes(id) ON DELETE CASCADE,
+            time        VARCHAR(50),
+            subject     VARCHAR(50),
+            room        VARCHAR(50)
+        );
+    """)
+
+    conn.commit()
+    cur.close()
+    conn.close()
+    print("[DB] PostgreSQL tables ready.")
+ 
 
 
 # ── CLASSES ───────────────────────────────────────────────────────────────────
 
 def get_all_classes():
-    db   = get_db()
-    rows = db.execute(
-        "SELECT * FROM classes ORDER BY id DESC"
-    ).fetchall()
-    db.close()
+    conn = get_db()
+    cur  = get_cursor(conn)
+    cur.execute("SELECT * FROM classes ORDER BY id DESC")
+    rows = cur.fetchall()
+    cur.close(); conn.close()
     return rows
 
 
 def get_class(class_code):
-    db  = get_db()
-    row = db.execute(
-        "SELECT * FROM classes WHERE id = ?", (class_code,)
-    ).fetchone()
-    db.close()
+    conn = get_db()
+    cur  = get_cursor(conn)
+    cur.execute("SELECT * FROM classes WHERE id = %s", (class_code,))
+    row = cur.fetchone()
+    cur.close(); conn.close()
     return row
 
 
-def create_class(subject, section):
-    db = get_db()
-    db.execute(
-        "INSERT INTO classes (subject, section, created) VALUES (?, ?, ?)",
-        (subject, section, datetime.now().strftime("%Y-%m-%d"))
+def create_class(class_code, course_code, subject, section):
+    conn = get_db()
+    cur  = conn.cursor()
+    created = datetime.now().strftime("%Y-%m-%d")
+    cur.execute(
+        "INSERT INTO classes (id, course_code, subject, section, created) VALUES (%s, %s, %s, %s, %s)",
+        (class_code, course_code, subject, section, created)
     )
-    db.commit()
-    db.close()
+    conn.commit()
+    cur.close(); conn.close()
 
 
-def edit_class(class_code, subject, section):
-    db = get_db()
-    db.execute(
-        "UPDATE classes SET subject = ?, section = ? WHERE id = ?",
-        (subject, section, class_code)
+def edit_class(class_code, course_code, subject, section):
+    conn = get_db()
+    cur  = conn.cursor()
+    cur.execute(
+    """UPDATE classes 
+        SET course_code = %s, subject = %s, section = %s
+        WHERE id = %s""",
+        (course_code, subject, section, class_code)
     )
-    db.commit()
-    db.close()
+    conn.commit()
+    cur.close(); conn.close()
 
 
 def delete_class(class_code):
-    db = get_db()
-    db.execute("DELETE FROM classes    WHERE id       = ?", (class_code,))
-    db.execute("DELETE FROM students   WHERE class_code = ?", (class_code,))
-    db.execute("DELETE FROM attendance WHERE class_code = ?", (class_code,))
-    db.commit()
-    db.close()
+    """Deletes class + cascades to students, attendance, schedules."""
+    conn = get_db()
+    cur  = get_cursor(conn)
+    cur.execute("DELETE FROM classes WHERE id = %s", (class_code,))
+    conn.commit()
+    cur.close(); conn.close()
 
 
 # ── STUDENTS ──────────────────────────────────────────────────────────────────
 
 def get_students(class_code):
-    db   = get_db()
-    rows = db.execute(
-        "SELECT * FROM students WHERE class_code = ? ORDER BY name",
+    """Get all students in a class."""
+    conn = get_db()
+    cur  = get_cursor(conn)
+    cur.execute(
+        "SELECT * FROM students WHERE class_code = %s ORDER BY name",
         (class_code,)
-    ).fetchall()
-    db.close()
+    )
+    rows = cur.fetchall()
+    cur.close(); conn.close()
     return rows
 
 
 def get_student(student_db_id):
-    db  = get_db()
-    row = db.execute(
-        "SELECT * FROM students WHERE id = ?", (student_db_id,)
-    ).fetchone()
-    db.close()
+    """Get one student by their auto-increment id."""
+    conn = get_db()
+    cur  = get_cursor(conn)
+    cur.execute("SELECT * FROM students WHERE id = %s", (student_db_id,))
+    row = cur.fetchone()
+    cur.close(); conn.close()
+    return row
+
+
+def get_student_by_srcode(sr_code):
+    """Get one student by their SR code (unique student number)."""
+    conn = get_db()
+    cur  = get_cursor(conn)
+    cur.execute("SELECT * FROM students WHERE sr_code = %s", (sr_code,))
+    row = cur.fetchone()
+    cur.close(); conn.close()
     return row
 
 
 def add_student(class_code, name, address, number,
                 sr_code, age, sex, email, photo, signature):
-    db = get_db()
-    db.execute(
+    conn = get_db()
+    cur  = conn.cursor()
+    cur.execute(
         """INSERT INTO students
-           (class_code, name, address, number, sr_code, age, sex, email, photo, signature)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+           (class_code, name, address, number,
+             sr_code, age, sex, email, photo, signature)
+           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
         (class_code, name, address, number,
          sr_code, age, sex, email, photo, signature)
     )
-    db.commit()
-    db.close()
+    conn.commit()
+    cur.close(); conn.close()
 
 
 def edit_student(student_db_id, name, address, number,
                  sr_code, age, sex, email):
-    db = get_db()
-    db.execute(
+    conn = get_db()
+    cur  = get_cursor(conn)
+    cur.execute(
         """UPDATE students
-           SET name=?, address=?, number=?, sr_code=?, age=?, sex=?, email=?
-           WHERE id=?""",
+           SET name=%s, address=%s, number=%s,
+               sr_code=%s, age=%s, sex=%s, email=%s
+           WHERE id=%s""",
         (name, address, number, sr_code, age, sex, email, student_db_id)
     )
-    db.commit()
-    db.close()
+    conn.commit()
+    cur.close(); conn.close()
+
 
 
 def delete_student(student_db_id):
-    db = get_db()
-    db.execute("DELETE FROM students WHERE id = ?", (student_db_id,))
-    db.commit()
-    db.close()
+    conn = get_db()
+    cur  = conn.cursor()
+    cur.execute("DELETE FROM students WHERE id = %s", (student_db_id,))
+    conn.commit()
+    cur.close(); conn.close()
 
 
 # ── ATTENDANCE ────────────────────────────────────────────────────────────────
@@ -233,39 +245,50 @@ def save_attendance(class_code, section, subject, records, date=None):
              "status": "Present", "timestamp": "07:02:34"},
             ...
         ]
+    Deletes existing records for this class+date before inserting
+    so the teacher can re-save without duplicates.
+
     """
     if date is None:
         date = datetime.now().strftime("%Y-%m-%d")
-
-    db = get_db()
-
-    # Remove any existing records for this class+date (allow re-save)
-    db.execute(
-        "DELETE FROM attendance WHERE class_code = ? AND date = ?",
+ 
+    conn = get_db()
+    cur  = get_cursor(conn)
+ 
+    # Remove existing records for this class+date before re-saving
+    cur.execute(
+        "DELETE FROM attendance WHERE class_code = %s AND date = %s",
         (class_code, date)
     )
-
+ 
     for r in records:
-        db.execute(
+        cur.execute(
             """INSERT INTO attendance
-               (class_code, student_id, name, section, subject,
+               (class_code, sr_code, name, section, subject,
                 status, timestamp, date)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-            (class_code, r.get("student_id", ""),
-             r["name"], section, subject,
-             r["status"], r.get("timestamp", ""), date)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s)""",
+            (
+                class_code, 
+                r.get("student_id", ""),
+                r["name"],
+                section, 
+                subject,
+                r["status"], 
+                r.get("timestamp", ""), #forgotten
+                date)
         )
-
-    db.commit()
-    db.close()
+ 
+    conn.commit()
+    cur.close(); conn.close()
 
 
 def get_attendance_session(class_code, date):
-    """Returns all attendance rows for one class on one date."""
-    db   = get_db()
-    rows = db.execute(
+    """All attendance rows for one class on one date, sorted Present→Late→Absent."""
+    conn = get_db()
+    cur  = get_cursor(conn)
+    cur.execute(
         """SELECT * FROM attendance
-           WHERE class_code = ? AND date = ?
+           WHERE class_code = %s AND date = %s
            ORDER BY
              CASE status
                WHEN 'Present' THEN 1
@@ -274,105 +297,115 @@ def get_attendance_session(class_code, date):
              END,
              name""",
         (class_code, date)
-    ).fetchall()
-    db.close()
+    )
+    rows = cur.fetchall()
+    cur.close(); conn.close()
     return rows
 
 
 def get_all_sessions():
-    """
-    Returns one row per (class_code, date) combination — for the History page.
-    """
-    db   = get_db()
-    rows = db.execute(
+    """One row per (class_code, date) — for the History page list."""
+    conn = get_db()
+    cur  = get_cursor(conn)
+    cur.execute(
         """SELECT
                a.class_code,
                a.date,
                a.section,
                a.subject,
-               COUNT(*) AS total,
-               SUM(CASE WHEN a.status = 'Present' THEN 1 ELSE 0 END) AS present,
-               SUM(CASE WHEN a.status = 'Late'    THEN 1 ELSE 0 END) AS late,
-               SUM(CASE WHEN a.status = 'Absent'  THEN 1 ELSE 0 END) AS absent
+               COUNT(*)                                          AS total,
+               SUM(CASE WHEN a.status='Present' THEN 1 ELSE 0 END) AS present,
+               SUM(CASE WHEN a.status='Late'    THEN 1 ELSE 0 END) AS late,
+               SUM(CASE WHEN a.status='Absent'  THEN 1 ELSE 0 END) AS absent
            FROM attendance a
-           GROUP BY a.class_code, a.date
-           ORDER BY a.date DESC""",
-    ).fetchall()
-    db.close()
+           GROUP BY a.class_code, a.date, a.section, a.subject
+           ORDER BY a.date DESC"""
+    )
+    rows = cur.fetchall()
+    cur.close(); conn.close()
     return rows
 
 
 def get_recent_activity(limit=10):
-    """
-    Returns the most recent attendance sessions for the dashboard.
-    One row per (class_id, date) — shown in Recent Activities list.
-    """
-    db   = get_db()
-    rows = db.execute(
+    """Most recent sessions for the dashboard Recent Activities list."""
+    conn = get_db()
+    cur  = get_cursor(conn)
+    cur.execute(
         """SELECT
-               class_id,
+               class_code,
                date,
                section,
                subject,
-               MIN(timestamp) AS time
+               MIN(timestamp::text) AS time
            FROM attendance
-           GROUP BY class_id, date
+           GROUP BY class_code, date, section, subject
            ORDER BY date DESC, time DESC
-           LIMIT ?""",
+           LIMIT %s""",
         (limit,)
-    ).fetchall()
-    db.close()
+    )
+    rows = cur.fetchall()
+    cur.close(); conn.close()
     return rows
 
 
 def get_absence_counts():
-    """
-    Returns students who have at least one absence — for the dashboard chart.
-    [{"name": "JohnDoe", "count": 3}, ...]
-    """
-    db   = get_db()
-    rows = db.execute(
+    """Students with at least one absence — for the dashboard chart."""
+    conn = get_db()
+    cur  = get_cursor(conn)
+    cur.execute(
         """SELECT name, COUNT(*) AS count
            FROM attendance
            WHERE status = 'Absent'
            GROUP BY name
            ORDER BY count DESC"""
-    ).fetchall()
-    db.close()
+    )
+    rows = cur.fetchall()
+    cur.close(); conn.close()
     return [{"name": r["name"], "count": r["count"]} for r in rows]
 
 
 # ── SCHEDULES ─────────────────────────────────────────────────────────────────
 
-def get_schedules():
-    db   = get_db()
-    rows = db.execute("SELECT * FROM schedules ORDER BY id").fetchall()
-    db.close()
+def get_schedules(class_code=None):
+    conn = get_db()
+    cur  = get_cursor(conn)
+    if class_code:
+        cur.execute(
+            "SELECT * FROM schedules WHERE class_code = %s ORDER BY id",
+            (class_code,)
+        )
+    else:
+        cur.execute("SELECT * FROM schedules ORDER BY id")
+    rows = cur.fetchall()
+    cur.close(); conn.close()
     return rows
 
 
-def add_schedule(time, subject, room):
-    db = get_db()
-    db.execute(
-        "INSERT INTO schedules (time, subject, room) VALUES (?, ?, ?)",
-        (time, subject, room)
+def add_schedule(class_code, time, subject, room):
+    conn = get_db()
+    cur  = get_cursor(conn)
+    cur.execute(
+        "INSERT INTO schedules (class_code, time, subject, room) VALUES (%s,%s,%s,%s)",
+        (class_code, time, subject, room)
     )
-    db.commit()
-    db.close()
+    conn.commit()
+    cur.close(); conn.close()
 
 
 def edit_schedule(schedule_id, time, subject, room):
-    db = get_db()
-    db.execute(
-        "UPDATE schedules SET time=?, subject=?, room=? WHERE id=?",
+    conn = get_db()
+    cur  = get_cursor(conn)
+    cur.execute(
+        "UPDATE schedules SET time=%s, subject=%s, room=%s WHERE id=%s",
         (time, subject, room, schedule_id)
     )
-    db.commit()
-    db.close()
+    conn.commit()
+    cur.close(); conn.close()
 
 
 def delete_schedule(schedule_id):
-    db = get_db()
-    db.execute("DELETE FROM schedules WHERE id = ?", (schedule_id,))
-    db.commit()
-    db.close()
+    conn = get_db()
+    cur  = get_cursor(conn)
+    cur.execute("DELETE FROM schedules WHERE id = %s", (schedule_id,))
+    conn.commit()
+    cur.close(); conn.close()
