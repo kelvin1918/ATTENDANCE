@@ -1,0 +1,535 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ADMIN PANEL - Secure Access</title>
+    //CSS
+    <style>
+        :root { 
+            --red: #d32f2f; 
+            --bg: #f4f7f6; 
+            --card: #ffffff; 
+            --text-dark: #1a1a1a;
+            --text-light: #888;
+        }
+        
+        body { 
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; 
+            background: var(--bg); 
+            margin: 0; 
+            padding: 0; 
+            min-height: 100vh; 
+            color: var(--text-dark);
+        }
+
+        /* --- LOADING OVERLAY --- */
+        #loading-overlay {
+            position: fixed; inset: 0;
+            background: var(--bg);
+            display: flex; flex-direction: column; 
+            justify-content: center; 
+            align-items: center;
+            z-index: 1500;
+        }
+        .spinner {
+            width: 40px; height: 40px;
+            border: 4px solid rgba(211, 47, 47, 0.1);
+            border-left-color: var(--red);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin { 
+            to { transform: rotate(360deg); } 
+        }
+
+        /* --- LOGIN OVERLAY --- */
+        #login-overlay { 
+            position: fixed; inset: 0; 
+            background: var(--bg); 
+            display: flex; 
+            justify-content: center; 
+            align-items: center; 
+            z-index: 1000; 
+        }
+
+        .login-card { 
+            background: white; 
+            padding: 40px; 
+            border-radius: 20px; 
+            width: 380px; 
+            text-align: center; 
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1); 
+        }
+
+        .login-card h2 { 
+            color: var(--red); 
+            font-size: 2rem; 
+            margin-bottom: 5px; 
+            letter-spacing: 2px; 
+        }
+
+        .login-card p { 
+            color: var(--text-light); 
+            margin-bottom: 25px; 
+            font-size: 0.9rem; 
+        }
+
+        .login-card input { 
+            width: 100%; 
+            padding: 14px; 
+            margin: 10px 0; 
+            border: 1px solid #ddd; 
+            border-radius: 10px; 
+            box-sizing: border-box; 
+            font-size: 1rem; 
+            outline: none; 
+            transition: 0.3s;
+        }
+
+        .login-card input:focus { 
+            border-color: var(--red); 
+            box-shadow: 0 0 0 2px rgba(211, 47, 47, 0.1); 
+        }
+
+        .login-card button { 
+            width: 100%; 
+            padding: 14px; 
+            background: var(--red); 
+            color: white; 
+            border: none; 
+            border-radius: 10px; 
+            cursor: pointer; 
+            font-weight: bold; 
+            margin-top: 15px; 
+            font-size: 1rem;
+        }
+
+        /* --- DASHBOARD LAYOUT --- */
+        .container { 
+            max-width: 1100px; 
+            margin: 0 auto; 
+            padding: 40px 20px; 
+        }
+
+        .header { 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center; 
+            margin-bottom: 40px; 
+        }
+
+        .header h1 { 
+            margin: 0; 
+            font-size: 2.2rem; 
+        }
+
+        .btn-logout { 
+            background: #fff; 
+            border: 1px solid #ddd; 
+            padding: 8px 18px; 
+            border-radius: 8px; 
+            cursor: pointer; 
+            color: #666; 
+            font-weight: 600; 
+        }
+
+        /* Stats Cards */
+        .stats-grid { 
+            display: grid; 
+            grid-template-columns: repeat(3, 1fr); 
+            gap: 25px; 
+            margin-bottom: 40px; 
+        }
+
+        .stat-box { 
+            background: white; 
+            padding: 25px; 
+            border-radius: 16px; 
+            box-shadow: 0 4px 12px rgba(0,0,0,0.03); 
+            border-bottom: 4px solid #eee;
+        }
+
+        .stat-box.active-border { 
+            border-color: var(--red); 
+        }
+
+        .stat-box h4 { 
+            margin: 0; 
+            font-size: 0.85rem; 
+            color: var(--text-light); 
+            text-transform: uppercase; 
+            letter-spacing: 1px; 
+        }
+
+        .stat-box p { 
+            margin: 12px 0 0; 
+            font-size: 2.2rem; 
+            font-weight: 800; 
+            color: #333; 
+        }
+
+        /* Table Section */
+        .data-card { 
+            background: white; 
+            border-radius: 16px; 
+            padding: 30px; 
+            box-shadow: 0 4px 20px rgba(0,0,0,0.04); 
+        }
+
+        table { 
+            width: 100%; 
+            border-collapse: collapse; 
+            margin-top: 10px; 
+        }
+
+        th { 
+            text-align: left; 
+            color: #aaa; 
+            font-size: 0.8rem; 
+            padding: 15px 10px; 
+            text-transform: uppercase; 
+            border-bottom: 1px solid #eee; 
+        }
+
+        td { 
+            padding: 20px 10px; 
+            border-bottom: 1px solid #f9f9f9; 
+            font-size: 0.95rem; 
+            color: #444; 
+        }
+        
+        .status-pill { 
+            padding: 6px 14px; 
+            border-radius: 20px; 
+            font-size: 0.75rem; 
+            font-weight: bold; 
+            text-transform: uppercase; 
+        }
+
+        .status-pending { 
+            background: #fff8e1; 
+            color: #f57f17; 
+        }
+
+        .status-approved { 
+            background: #e8f5e9; 
+            color: #2e7d32; 
+        }
+        
+        .btn-action { 
+            padding: 8px 15px; 
+            border: none; 
+            border-radius: 8px; 
+            cursor: pointer; 
+            font-weight: bold; 
+            font-size: 0.8rem; 
+            transition: 0.2s; 
+        }
+
+        .btn-approve { 
+            background: var(--red); 
+            color: white; 
+            margin-right: 8px; 
+        }
+
+        .btn-delete { 
+            background: #f5f5f5; 
+            color: #666; 
+        }
+
+        /* --- POP-UP MODAL STYLES --- */
+        .modal-overlay {
+            position: fixed; 
+            inset: 0; 
+            background: rgba(0,0,0,0.4);
+            display: flex; 
+            justify-content: center; 
+            align-items: flex-start;
+            z-index: 2000; 
+            backdrop-filter: blur(2px);
+            padding-top: 50px;
+        }
+
+        .modal-content {
+            background: white; 
+            padding: 25px; 
+            border-radius: 15px;
+            width: 400px; 
+            text-align: center; 
+            box-shadow: 0 15px 50px rgba(0,0,0,0.15);
+            animation: slideDown 0.3s ease-out;
+        }
+
+        @keyframes slideDown { 
+            from { transform: translateY(-50px); opacity: 0; } 
+            to { transform: translateY(0); opacity: 1; } 
+        }
+        
+        .modal-content h3 { 
+            margin: 0 0 10px 0; 
+            color: var(--red); 
+            font-size: 1.2rem; 
+        }
+
+        .modal-content p { 
+            color: #555; 
+            margin-bottom: 20px; 
+            font-size: 0.95rem; 
+            line-height: 1.4; 
+        }
+
+        .modal-btns { 
+            display: flex; 
+            gap: 10px; 
+            justify-content: center; 
+        }
+
+        .modal-btns button { 
+            min-width: 100px; 
+            padding: 10px 20px; 
+            border-radius: 8px; 
+            cursor: pointer; 
+            border: none; 
+            font-weight: bold; 
+        }
+
+        .btn-modal-cancel { 
+            background: #eee; 
+            color: #666; 
+            border: 2px solid transparent !important; 
+        }
+
+        .btn-modal-cancel:focus { 
+            border-color: #000 !important; 
+            outline: none; 
+        }
+
+        .btn-modal-confirm { 
+            background: var(--red); 
+            color: white; 
+            border: 2px solid transparent; 
+        }
+
+        .btn-modal-confirm:focus { 
+            border-color: #000; 
+            outline: none; 
+        }
+
+        /* TOAST */
+        #toast {
+            position: fixed; 
+            bottom: 30px; 
+            left: 50%; 
+            transform: translateX(-50%) translateY(100px);
+            background: #333; 
+            color: white; 
+            padding: 10px 25px; 
+            border-radius: 50px; 
+            z-index: 3000; 
+            transition: 0.4s;
+            opacity: 0; 
+            font-size: 0.85rem;
+        }
+
+        #toast.show { 
+            transform: translateX(-50%) translateY(0); 
+            opacity: 1; 
+        }
+
+        .hidden { 
+            display: none !important; 
+        }
+    </style>
+</head>
+//HTML
+<body>
+
+    <div id="loading-overlay" class="hidden">
+        <div class="spinner"></div>
+        <p style="margin-top: 15px; font-weight: 600; color: var(--text-light);">Loading Dashboard...</p>
+    </div>
+
+    <div id="login-overlay">
+        <div class="login-card">
+            <h2>ADMIN</h2>
+            <p>Verification Portal</p>
+            <input type="email" id="adm-email" placeholder="Email" value="Ian@gmail.com">
+            <input type="password" id="adm-pass" placeholder="Password" autofocus>
+            <button onclick="adminLogin()">Login</button>
+        </div>
+    </div>
+
+    <div id="main-content" class="container hidden">
+        <div class="header">
+            <div>
+                <h1>Dashboard</h1>
+                <span style="color: var(--red); font-weight: bold; font-size: 0.8rem;">INSTRUCTOR MANAGEMENT</span>
+            </div>
+            <button class="btn-logout" onclick="handleSignOut()">Sign Out</button>
+        </div>
+
+        <div class="stats-grid">
+            <div class="stat-box"><h4>Total Accounts</h4><p id="stat-total">0</p></div>
+            <div class="stat-box"><h4>Pending</h4><p id="stat-pending">0</p></div>
+            <div class="stat-box active-border"><h4>Approved</h4><p id="stat-approved">0</p></div>
+        </div>
+
+        <div class="data-card">
+            <h3 style="margin:0 0 20px 0;">Registration Requests</h3>
+            <table>
+                <thead>
+                    <tr><th>Email</th><th>Status</th><th style="text-align: right;">Action</th></tr>
+                </thead>
+                <tbody id="instructor-list"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <div id="modal-container" class="modal-overlay hidden">
+        <div class="modal-content">
+            <h3 id="modal-title">Confirm</h3>
+            <p id="modal-msg">Description here.</p>
+            <div class="modal-btns">
+                <button id="modal-cancel-btn" class="btn-modal-cancel" onclick="closeModal()">Cancel</button>
+                <button id="modal-confirm-btn" class="btn-modal-confirm">Confirm</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="toast">Message here</div>
+
+    //JS
+    <script>
+        let currentConfirmAction = null;
+
+        // KEYBOARD LISTENERS
+        window.addEventListener('keydown', (e) => {
+            const modal = document.getElementById('modal-container');
+            if (!modal.classList.contains('hidden')) {
+                // Remove Escape functionality as requested
+                
+                // Arrow navigation logic
+                if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+                    const confirmBtn = document.getElementById('modal-confirm-btn');
+                    const cancelBtn = document.getElementById('modal-cancel-btn');
+                    
+                    if (document.activeElement === confirmBtn) {
+                        cancelBtn.focus();
+                    } else {
+                        confirmBtn.focus();
+                    }
+                }
+
+                // Enter key to trigger the focused button
+                if (e.key === 'Enter') {
+                    // Default behavior of focused button will trigger click
+                }
+            }
+        });
+
+        function showToast(msg) {
+            const t = document.getElementById('toast');
+            t.innerText = msg;
+            t.classList.add('show');
+            setTimeout(() => t.classList.remove('show'), 3000);
+        }
+
+        function openModal(title, msg, onConfirm) {
+            document.getElementById('modal-title').innerText = title;
+            document.getElementById('modal-msg').innerText = msg;
+            document.getElementById('modal-container').classList.remove('hidden');
+            
+            // Set the confirm action
+            const confirmBtn = document.getElementById('modal-confirm-btn');
+            confirmBtn.onclick = () => {
+                onConfirm();
+                closeModal();
+            };
+            
+            currentConfirmAction = onConfirm;
+            setTimeout(() => confirmBtn.focus(), 50);
+        }
+
+        function closeModal() {
+            document.getElementById('modal-container').classList.add('hidden');
+            currentConfirmAction = null;
+        }
+
+        // SIGN OUT WITH MODAL
+        function handleSignOut() {
+            openModal(
+                "Sign Out", 
+                "Are you sure you want to end your session, Ian?", 
+                () => { location.reload(); }
+            );
+        }
+
+        function adminLogin() {
+            const email = document.getElementById('adm-email').value;
+            const pass = document.getElementById('adm-pass').value;
+            if(email === "Ian@gmail.com" && pass === "admin123") {
+                // Show Loading first
+                document.getElementById('login-overlay').classList.add('hidden');
+                document.getElementById('loading-overlay').classList.remove('hidden');
+
+                setTimeout(() => {
+                    document.getElementById('loading-overlay').classList.add('hidden');
+                    document.getElementById('main-content').classList.remove('hidden');
+                    showToast("Welcome back, Admin Ian!");
+                    renderAdmin();
+                }, 1500); // 1.5 seconds loading delay
+            } else { 
+                showToast("Invalid Credentials!"); 
+            }
+        }
+
+        async function renderAdmin() {
+            try {
+                const res   = await fetch('/api/instructors');
+                const users = await res.json();
+                const tbody = document.getElementById('instructor-list');
+                document.getElementById('stat-total').innerText    = users.length;
+                document.getElementById('stat-pending').innerText   = users.filter(u => u.status === 'pending').length;
+                document.getElementById('stat-approved').innerText  = users.filter(u => u.status === 'approved').length;
+                tbody.innerHTML = '';
+                if(users.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;padding:30px;color:#999;">No instructors yet.</td></tr>';
+                    return;
+                }
+                users.forEach(u => {
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `
+                        <td><strong>${u.email}</strong></td>
+                        <td><span class="status-pill status-${u.status}">${u.status}</span></td>
+                        <td style="text-align:right;">
+                            ${u.status === 'pending' ? `<button class="btn-action btn-approve" onclick="handleAction(${u.id},'approved')">Approve</button>` : ''}
+                            <button class="btn-action btn-delete" onclick="handleAction(${u.id},'delete')">Remove</button>
+                        </td>`;
+                    tbody.appendChild(tr);
+                });
+            } catch { showToast("Could not load instructors."); }
+        }
+
+        function handleAction(id, type) {
+            if(type === 'delete') {
+                openModal("Remove Instructor?", "Permanently delete this account? (Arrows to navigate, Enter to confirm)", async () => {
+                    await fetch(`/api/instructors/${id}`, { method: 'DELETE' });
+                    showToast("Account deleted.");
+                    renderAdmin();
+                });
+            } else {
+                openModal("Confirm Approval", "Allow this instructor to access the portal?", async () => {
+                    await fetch(`/api/instructors/${id}/approve`, { method: 'POST' });
+                    showToast("Account approved!");
+                    renderAdmin();
+                });
+            }
+        }
+
+        document.getElementById('adm-pass').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') adminLogin();
+        });
+    </script>
+</body>
+</html>

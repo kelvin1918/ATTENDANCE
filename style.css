@@ -1,0 +1,104 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800;900&display=swap');
+* { font-family: 'Inter', sans-serif; margin: 0; padding: 0; box-sizing: border-box; }
+.scroll-hide::-webkit-scrollbar { 
+    display: none; 
+}
+
+.sidebar-active { 
+    background-color: #FEF2F2; 
+    color: #D32F2F !important; 
+    border-right: 4px solid #D32F2F; 
+}
+
+.reg-input { 
+    width: 100%; 
+    background-color: #F9FAFB; 
+    border: 1px solid #F3F4F6; 
+    border-radius: 12px; 
+    padding: 12px 16px; 
+    font-size: 13px; 
+    font-weight: 600; 
+    outline: none; 
+    transition: all 0.2s; 
+}
+
+.reg-input:focus { 
+    border-color: #D32F2F; 
+    background-color: white; 
+}
+
+@keyframes scanLine { 
+    0% { top: 0%; opacity: 0; } 
+    50% { opacity: 1; } 
+    100% { top: 100%; opacity: 0; } 
+}
+
+.scan-line { 
+    position: absolute; 
+    width: 100%; 
+    height: 4px; 
+    background: linear-gradient(to right, transparent, #D32F2F, transparent); 
+    box-shadow: 0 0 15px #D32F2F; 
+    animation: scanLine 2s linear infinite; 
+    z-index: 10; 
+    pointer-events: none; 
+}
+
+#camStatusDot { 
+    animation: pulseGlow 1.5s infinite; 
+    background-color: #EF4444; 
+}
+
+@keyframes pulseGlow { 
+    0% { transform: scale(0.95); opacity: 0.5; } 
+    50% { transform: scale(1); opacity: 1; } 
+    100% { transform: scale(0.95); opacity: 0.5; } 
+}
+
+/* Print Fixes */
+@media print {
+    body * { visibility: hidden; }
+    .print-container, .print-container #printArea, .print-container #printArea * { 
+        visibility: visible; 
+    }
+    .print-hide { 
+        display: none !important; 
+    }
+
+    .print-container { 
+        position: fixed; 
+        left: 0; 
+        top: 0; 
+        width: 100%; 
+        height: 100%;
+        background: white !important;
+    }
+
+    #printArea {
+        padding: 0 !important;
+        background: white !important;
+    }
+}
+
+/*Navigation*/
+.nav-collapsed {
+    width: 80px !important; 
+}
+
+.nav-collapsed .nav-label {
+    display: none !important;
+}
+
+.nav-collapsed .nav-btn, .nav-collapsed .flex {
+    justify-content: center !important;
+}
+
+.nav-collapsed .p-8, .nav-collapsed .p-6 {
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+}
+
+#navSidebar, main {
+    transition: all 0.3s ease-in-out;
+}
+
