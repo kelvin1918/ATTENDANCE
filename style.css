@@ -57,26 +57,23 @@
 
 /* Print Fixes */
 @media print {
-    body * { visibility: hidden; }
-    .print-container, .print-container #printArea, .print-container #printArea * { 
-        visibility: visible; 
+    body * {
+        visibility: hidden !important;
     }
-    .print-hide { 
-        display: none !important; 
+    #printArea, #printArea * {
+        visibility: visible !important;
     }
-
-    .print-container { 
-        position: fixed; 
-        left: 0; 
-        top: 0; 
-        width: 100%; 
-        height: 100%;
-        background: white !important;
-    }
-
     #printArea {
+        position: absolute !important;
+        left: 0 !important;
+        top: 0 !important;
+        width: 100% !important;
         padding: 0 !important;
+        margin: 0 !important;
         background: white !important;
+    }
+    .print-hide {
+        display: none !important;
     }
 }
 
@@ -101,4 +98,3 @@
 #navSidebar, main {
     transition: all 0.3s ease-in-out;
 }
-

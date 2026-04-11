@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Portal Selection - Attendance Monitoring System</title>
+    <script src="https://unpkg.com/lucide@0.321.0"></script>
+    <style>
+        :root { 
+            --red: #d32f2f; 
+            --bg: #f4f7f6; 
+            --card: #ffffff; 
+            --text-dark: #1a1a1a;
+            --text-light: #5f6368;
+            --border: #dadce0;
+        }
+        
+        body { 
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; 
+            background: var(--bg); 
+            margin: 0; 
+            padding: 0; 
+            min-height: 100vh; 
+            color: var(--text-dark);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 450px;
+            padding: 32px;
+            background: var(--card);
+            border-radius: 16px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24);
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 35px;
+        }
+
+        .header h1 {
+            font-weight: 700;
+            color: var(--text-dark);
+            letter-spacing: -0.5px;
+            margin-bottom: 8px;
+            font-size: 1.75rem;
+        }
+
+        .header p {
+            color: var(--text-light);
+            margin-top: 0;
+            font-size: 0.95rem;
+        }
+
+        .options-wrapper {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .portal-option {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 20px;
+            display: flex;
+            align-items: center;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            text-decoration: none;
+            color: inherit;
+        }
+
+        .portal-option:hover {
+            background-color: #f8f9fa;
+            border-color: var(--red);
+        }
+
+        .icon-box {
+            width: 44px;
+            height: 44px;
+            background: #fef2f2;
+            color: var(--red);
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-right: 16px;
+        }
+
+        .content-box {
+            flex: 1;
+        }
+
+        .content-box h2 {
+            margin: 0 0 2px 0;
+            font-size: 1rem;
+            font-weight: 600;
+            color: var(--text-dark);
+        }
+
+        .content-box p {
+            margin: 0;
+            font-size: 0.85rem;
+            color: var(--text-light);
+        }
+
+        .arrow-icon {
+            color: #bdc1c6;
+            transition: transform 0.2s ease;
+        }
+
+        .portal-option:hover .arrow-icon {
+            color: var(--red);
+            transform: translateX(4px);
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <div class="header">
+            <h1>Select Portal</h1>
+            <p>Please select your access level to proceed to login.</p>
+        </div>
+
+        <div class="options-wrapper">
+            <a href="login.html" class="portal-option">
+                <div class="icon-box">
+                    <i data-lucide="user"></i>
+                </div>
+                <div class="content-box">
+                    <h2>Instructor Portal</h2>
+                    <p>Log in to record and evaluate attendance.</p>
+                </div>
+                <i data-lucide="chevron-right" class="arrow-icon"></i>
+            </a>
+
+            <a href="admin.html" class="portal-option">
+                <div class="icon-box">
+                    <i data-lucide="shield"></i>
+                </div>
+                <div class="content-box">
+                    <h2>Administrator Portal</h2>
+                    <p>Manage accounts and system configurations.</p>
+                </div>
+                <i data-lucide="chevron-right" class="arrow-icon"></i>
+            </a>
+        </div>
+    </div>
+
+    <script>
+        lucide.createIcons();
+    </script>
+</body>
+</html>

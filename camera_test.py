@@ -16,7 +16,7 @@ import threading
 import time
 
 FACES_DIR     = "faces"
-SCALE         = 0.25
+SCALE         = 0.5       # 0.5 = detects smaller/farther faces across the room
 CAMERA_SOURCE = 0         # change to "rtsp://..." for IP camera
 
 
@@ -90,7 +90,7 @@ def main():
                 face_locations[0] = scaled
                 face_names[0]     = names
 
-            time.sleep(1.0 / 8)   # 8 recognitions per second
+            time.sleep(1.0 / 4)   # 4 recognitions per second — balanced for 0.5 scale
 
     t = threading.Thread(target=recognition_loop, daemon=True)
     t.start()

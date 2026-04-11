@@ -19,8 +19,8 @@ import time
 # ── CONFIG ────────────────────────────────────────────────────────────────────
 
 FACES_DIR       = "faces"           # folder: faces/JohnDoe.jpg
-SCALE           = 0.25              # resize factor for recognition (0.25 = 4x faster)
-RECOGNITION_FPS = 8                 # how many times per second recognition runs
+SCALE           = 0.5               # 0.5 = larger input → detects smaller/farther faces
+RECOGNITION_FPS = 4                 # reduced: 0.5 scale is heavier, 4fps keeps it smooth
 CAMERA_SOURCE   = 0                 # 0 = webcam, or "rtsp://user:pass@ip:554/..." for IP cam
 FRAME_WIDTH     = 1280
 FRAME_HEIGHT    = 720
@@ -76,6 +76,7 @@ class FaceRecognizer:
         self._face_locations = []            # scaled-up box coords
         self._face_names     = []            # matched names
         self._present_set    = set()         # names detected this session
+        self._scan_log       = {}           # {name: first_seen_unix_time}
 
         self._running        = False
         self._rec_thread     = None
@@ -102,6 +103,32 @@ class FaceRecognizer:
     def get_present_students(self):
         with self._lock:
             return list(self._present_set)
+
+    def get_scan_log(self):
+        """Returns {name: first_seen_unix_timestamp} for all scanned students."""
+        with self._lock:
+            return dict(self._scan_log)
+
+    def reset_attendance(self):
+        """Clears present set and scan log for a new session."""
+        with self._lock:
+            self._present_set = set()
+            self._scan_log    = {}
+
+    def stop_and_reset(self):
+        """Stops the camera capture and clears all session data."""
+        self._running = False
+        if hasattr(self, "cap"):
+            try:
+                self.cap.release()
+            except Exception:
+                pass
+        with self._lock:
+            self._present_set    = set()
+            self._scan_log       = {}
+            self._latest_frame   = None
+            self._face_locations = []
+            self._face_names     = []
 
     def generate_frames(self):
         """
@@ -166,9 +193,11 @@ class FaceRecognizer:
                 if name != "Unknown":
                     with self._lock:
                         self._present_set.add(name)
+                        if name not in self._scan_log:
+                            self._scan_log[name] = time.time()
 
             # Scale coordinates back to original frame size
-            inv = int(1 / SCALE)
+            inv = int(1 / SCALE)  # 2 — scales coords back to full frame
             scaled = [(t*inv, r*inv, b*inv, l*inv) for (t, r, b, l) in locations]
 
             with self._lock:

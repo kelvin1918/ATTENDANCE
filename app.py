@@ -16,6 +16,9 @@ Then open:
 
 import os
 import shutil
+import smtplib
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 from datetime import datetime
 from flask import (
     Flask, request,
@@ -90,6 +93,11 @@ db.init_db()
 # ════════════════════════════════════════════════════════════════════════════════
 
 @app.route("/")
+def portal():
+    return send_file("portal.html")
+
+
+@app.route("/home")
 def index():
     return send_file("index.html")
 
@@ -202,17 +210,23 @@ def api_add_student():
 
 @app.route("/api/edit_student/<int:student_id>", methods=["POST"])
 def api_edit_student(student_id):
-    form = request.form
-    db.edit_student(
-        student_id,
-        name    = form.get("name", ""),
-        address = form.get("address", ""),
-        number  = form.get("number", ""),
-        sr_code = form.get("sr_code", ""),
-        age     = int(form.get("age") or 0),
-        sex     = form.get("sex", ""),
-        email   = form.get("email", ""),
-    )
+    form   = request.form
+    status = form.get("status")
+    if status and len(form) == 1:
+        # Status-only update from folder view dropdown
+        db.edit_student(student_id, status=status)
+    else:
+        db.edit_student(
+            student_id,
+            name    = form.get("name", ""),
+            address = form.get("address", ""),
+            number  = form.get("number", ""),
+            sr_code = form.get("sr_code", ""),
+            age     = int(form.get("age") or 0),
+            sex     = form.get("sex", ""),
+            email   = form.get("email", ""),
+            status  = form.get("status", "Enrolled"),
+        )
     return jsonify({"status": "ok"})
 
 
@@ -225,6 +239,46 @@ def api_delete_student(student_id):
 # ════════════════════════════════════════════════════════════════════════════════
 # API — CAMERA / ATTENDANCE
 # ════════════════════════════════════════════════════════════════════════════════
+
+@app.route("/api/start_camera", methods=["POST"])
+def api_start_camera():
+    global _camera_started, recognizer, known_enc, known_names
+    try:
+        data   = request.get_json(silent=True) or {}
+        source = data.get("source", "0")
+
+        # Convert source: "0" / "1" → int, RTSP URL stays as string
+        if source in ("0", "1"):
+            source = int(source)
+
+        if not _camera_started:
+            recognizer = FaceRecognizer(known_enc, known_names)
+            recognizer.start(source)
+            _camera_started = True
+        else:
+            # Already running — stop, reinitialise with new source, restart
+            recognizer.stop_and_reset()
+            recognizer = FaceRecognizer(known_enc, known_names)
+            recognizer.start(source)
+            # _camera_started stays True
+        return jsonify({"status": "ok", "source": str(source)})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/api/stop_camera", methods=["POST"])
+def api_stop_camera():
+    global _camera_started
+    try:
+        scan_log = recognizer.get_scan_log()
+        recognizer.stop_and_reset(); _camera_started = False
+        return jsonify({"status": "ok", "scan_log": scan_log})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/api/scan_log")
+def api_scan_log():
+    try: return jsonify(recognizer.get_scan_log())
+    except: return jsonify({})
 
 @app.route("/video_feed")
 def video_feed():
@@ -261,11 +315,13 @@ def api_save_attendance():
     if not data:
         return jsonify({"error": "no data"}), 400
 
+    from datetime import datetime as _dt
     db.save_attendance(
-        class_code = data["class_code"],
-        section    = data["section"],
-        subject    = data["subject"],
-        records    = data["records"],
+        class_code   = data["class_code"],
+        section      = data["section"],
+        subject      = data["subject"],
+        records      = data["records"],
+        session_time = data.get("session_time", _dt.now().strftime("%H:%M:%S")),
     )
     recognizer.reset_attendance()
     return jsonify({"status": "ok"})
@@ -283,13 +339,15 @@ def api_reset_attendance():
 
 @app.route("/api/recent")
 def api_recent():
-    rows = db.get_recent_activity(limit=10)
+    instructor_id = get_current_instructor_id(request)
+    rows = db.get_recent_activity(limit=10, instructor_id=instructor_id)
     return jsonify([dict(r) for r in rows])
 
 
 @app.route("/api/absences")
 def api_absences():
-    return jsonify(db.get_absence_counts())
+    instructor_id = get_current_instructor_id(request)
+    return jsonify(db.get_absence_counts(instructor_id=instructor_id))
 
 
 # ════════════════════════════════════════════════════════════════════════════════
@@ -320,8 +378,18 @@ def api_add_schedule():
 @app.route("/api/schedules/<int:schedule_id>", methods=["POST"])
 def api_edit_schedule(schedule_id):
     data = request.json
-    db.edit_schedule(schedule_id, data["time"], data["subject"], data["room"])
+    old_subject = data.get("old_subject", "")
+    new_subject = data["subject"]
+    db.edit_schedule(schedule_id, data["time"], new_subject, data["room"], day=data.get("day"))
+    if old_subject and old_subject.strip().lower() != new_subject.strip().lower():
+        db.update_class_subject_by_schedule(schedule_id, old_subject, new_subject)
     return jsonify({"status": "ok"})
+
+
+@app.route("/api/schedules/<int:schedule_id>/check_usage", methods=["GET"])
+def api_check_schedule_usage(schedule_id):
+    rows = db.get_classes_using_schedule(schedule_id)
+    return jsonify([dict(r) for r in rows])
 
 
 @app.route("/api/schedules/<int:schedule_id>", methods=["DELETE"])
@@ -380,7 +448,14 @@ def api_get_classes():
 
 @app.route("/api/sessions", methods=["GET"])
 def api_get_sessions():
-    rows = db.get_all_sessions()
+    instructor_id = get_current_instructor_id(request)
+    rows = db.get_all_sessions(instructor_id=instructor_id)
+    return jsonify([dict(r) for r in rows])
+
+
+@app.route("/api/sessions/<class_code>", methods=["GET"])
+def api_get_sessions_by_class(class_code):
+    rows = db.get_sessions_by_class(class_code)
     return jsonify([dict(r) for r in rows])
 
 
@@ -390,7 +465,8 @@ def api_get_sessions():
 
 @app.route("/api/attendance/<class_code>/<date>", methods=["GET"])
 def api_get_attendance(class_code, date):
-    rows = db.get_attendance_session(class_code, date)
+    session_time = request.args.get("session_time")
+    rows = db.get_attendance_session(class_code, date, session_time)
     return jsonify([dict(r) for r in rows])
 
 
@@ -471,6 +547,65 @@ def admin_page():
 # ════════════════════════════════════════════════════════════════════════════════
 # RUN
 # ════════════════════════════════════════════════════════════════════════════════
+
+# ════════════════════════════════════════════════════════════════════════════════
+# API — SEND ATTENDANCE EMAIL
+# ════════════════════════════════════════════════════════════════════════════════
+#
+# SMTP CONFIG — fill these in with the instructor's Gmail credentials.
+# For Gmail: enable "App Passwords" in Google Account → Security,
+# then use the generated 16-char app password below (NOT your regular password).
+#
+SMTP_HOST     = "smtp.gmail.com"
+SMTP_PORT     = 587
+SMTP_USER     = "23-30218@g.batstate-u.edu.ph"          # ← instructor Gmail address e.g. "instructor@gmail.com"
+SMTP_PASSWORD = "rakwsroenohamics"          # ← Gmail App Password e.g. "xxxx xxxx xxxx xxxx"
+
+
+@app.route("/api/send_email", methods=["POST"])
+def api_send_email():
+    """
+    Body JSON:
+    {
+        "to":      "student@email.com",
+        "subject": "Attendance Update ...",
+        "html":    "<html>...</html>"   // full HTML email body
+    }
+    """
+    if not SMTP_USER or not SMTP_PASSWORD:
+        return jsonify({
+            "error": "SMTP not configured. Set SMTP_USER and SMTP_PASSWORD in app.py."
+        }), 503
+
+    data = request.json
+    if not data or not data.get("to"):
+        return jsonify({"error": "Missing recipient."}), 400
+
+    try:
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = data.get("subject", "Attendance Update")
+        msg["From"]    = SMTP_USER
+        msg["To"]      = data["to"]
+
+        # Attach both plain-text fallback and HTML version
+        plain = MIMEText(data.get("plain", "Please view this email in an HTML-capable client."), "plain")
+        html  = MIMEText(data.get("html", ""), "html")
+        msg.attach(plain)
+        msg.attach(html)
+
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
+            server.ehlo()
+            server.starttls()
+            server.login(SMTP_USER, SMTP_PASSWORD)
+            server.sendmail(SMTP_USER, data["to"], msg.as_string())
+
+        return jsonify({"status": "sent"})
+
+    except smtplib.SMTPAuthenticationError:
+        return jsonify({"error": "SMTP authentication failed. Check SMTP_USER and SMTP_PASSWORD."}), 401
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 
 if __name__ == "__main__":
     app.run(debug=True, threaded=True, port=5000)

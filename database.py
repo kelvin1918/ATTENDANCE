@@ -78,22 +78,35 @@ def init_db():
             email      VARCHAR(100),
             photo      TEXT,
             signature  TEXT,
+            status     VARCHAR(20) DEFAULT 'Enrolled',
             UNIQUE (class_code, sr_code)
         );
     """)
 
     cur.execute("""
         CREATE TABLE IF NOT EXISTS attendance (
-            id          INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-            class_code  VARCHAR(50)  NOT NULL REFERENCES classes(id) ON DELETE CASCADE,
-            sr_code     VARCHAR(50),
-            name        VARCHAR(50)  NOT NULL,
-            section     VARCHAR(50),
-            subject     VARCHAR(50),
-            status      VARCHAR(20)  NOT NULL,
-            timestamp   TIMESTAMP(0) DEFAULT NOW(),
-            date        DATE         NOT NULL
+            id           INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+            class_code   VARCHAR(50)  NOT NULL REFERENCES classes(id) ON DELETE CASCADE,
+            sr_code      VARCHAR(50),
+            name         VARCHAR(50)  NOT NULL,
+            section      VARCHAR(50),
+            subject      VARCHAR(50),
+            status       VARCHAR(20)  NOT NULL,
+            timestamp    TIMESTAMP(0) DEFAULT NOW(),
+            date         DATE         NOT NULL,
+            session_time VARCHAR(8)
         );
+    """)
+
+    # Add session_time column to existing databases that were created before this version
+    cur.execute("""
+        ALTER TABLE attendance ADD COLUMN IF NOT EXISTS session_time VARCHAR(8);
+    """)
+
+    # Add status column to students if it doesn't exist yet
+    # (databases created before this column was added to the schema)
+    cur.execute("""
+        ALTER TABLE students ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'Enrolled';
     """)
 
     cur.execute("""
@@ -245,17 +258,24 @@ def add_student(class_code, name, address, number,
     cur.close(); conn.close()
 
 
-def edit_student(student_db_id, name, address, number,
-                 sr_code, age, sex, email):
+def edit_student(student_db_id, name=None, address=None, number=None,
+                 sr_code=None, age=None, sex=None, email=None, status=None):
     conn = get_db()
     cur  = get_cursor(conn)
-    cur.execute(
-        """UPDATE students
-           SET name=%s, address=%s, number=%s,
-               sr_code=%s, age=%s, sex=%s, email=%s
-           WHERE id=%s""",
-        (name, address, number, sr_code, age, sex, email, student_db_id)
-    )
+    if status and name is None:
+        # Status-only update (from folder view dropdown)
+        cur.execute(
+            "UPDATE students SET status=%s WHERE id=%s",
+            (status, student_db_id)
+        )
+    else:
+        cur.execute(
+            """UPDATE students
+               SET name=%s, address=%s, number=%s,
+                   sr_code=%s, age=%s, sex=%s, email=%s, status=COALESCE(%s, status)
+               WHERE id=%s""",
+            (name, address, number, sr_code, age, sex, email, status, student_db_id)
+        )
     conn.commit()
     cur.close(); conn.close()
 
@@ -270,7 +290,8 @@ def delete_student(student_db_id):
 
 # ── ATTENDANCE ────────────────────────────────────────────────────────────────
 
-def save_attendance(class_code, section, subject, records, date=None):
+def save_attendance(class_code, section, subject, records,
+                    date=None, session_time=None):
     """
     records = list of dicts:
         [
@@ -278,31 +299,34 @@ def save_attendance(class_code, section, subject, records, date=None):
              "status": "Present", "timestamp": "07:02:34"},
             ...
         ]
-    Deletes existing records for this class+date before inserting
-    so the teacher can re-save without duplicates.
+    session_time = "HH:MM:SS" string — the camera-open time, used to group all
+    students from one scanning session. Stored on every row so sessions are never
+    mixed up even when students scan across different minutes.
     """
     if date is None:
         date = datetime.now().strftime("%Y-%m-%d")
+    if session_time is None:
+        session_time = datetime.now().strftime("%H:%M:%S")
 
     conn = get_db()
     cur  = get_cursor(conn)
 
-    # Remove existing records for this session (allow re-save)
+    # Delete existing records for this exact session (camera-open time HH:MM).
+    # This allows re-saving without duplicates while keeping other sessions intact.
     cur.execute(
-        "DELETE FROM attendance WHERE class_code = %s AND date = %s",
-        (class_code, date)
+        """DELETE FROM attendance
+           WHERE class_code = %s AND date = %s AND session_time = %s""",
+        (class_code, date, session_time[:5])
     )
 
     for r in records:
-        # Build full timestamp: combine date + scan time from camera
-        # e.g. date="2026-03-16", timestamp="07:02:34" → "2026-03-16 07:02:34"
         scan_time      = r.get("timestamp", "")
         full_timestamp = f"{date} {scan_time}" if scan_time else None
 
         cur.execute(
             """INSERT INTO attendance
-               (class_code, sr_code, name, section, subject, status, timestamp, date)
-               VALUES (%s, %s, %s, %s, %s, %s, %s, %s)""",
+               (class_code, sr_code, name, section, subject, status, timestamp, date, session_time)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)""",
             (
                 class_code,
                 r.get("sr_code", ""),
@@ -310,8 +334,9 @@ def save_attendance(class_code, section, subject, records, date=None):
                 section,
                 subject,
                 r["status"],
-                full_timestamp,   # "2026-03-16 07:02:34" — actual scan time
-                date
+                full_timestamp,
+                date,
+                session_time[:5]   # store HH:MM as the session key
             )
         )
 
@@ -319,86 +344,234 @@ def save_attendance(class_code, section, subject, records, date=None):
     cur.close(); conn.close()
 
 
-def get_attendance_session(class_code, date):
-    """All attendance rows for one class on one date, sorted Present→Late→Absent."""
+def get_attendance_session(class_code, date, session_time=None):
+    """All attendance rows for one class on one date (optionally one session),
+    sorted Present→Late→Absent. Returns timestamp and date as plain strings."""
     conn = get_db()
     cur  = get_cursor(conn)
-    cur.execute(
-        """SELECT * FROM attendance
-           WHERE class_code = %s AND date = %s
-           ORDER BY
-             CASE status
-               WHEN 'Present' THEN 1
-               WHEN 'Late'    THEN 2
-               WHEN 'Absent'  THEN 3
-             END,
-             name""",
-        (class_code, date)
-    )
+    if session_time:
+        cur.execute(
+            """SELECT
+                   id, class_code, sr_code, name, section, subject, status,
+                   TO_CHAR(timestamp, 'YYYY-MM-DD HH24:MI:SS') AS timestamp,
+                   TO_CHAR(date, 'YYYY-MM-DD')                 AS date,
+                   session_time
+               FROM attendance
+               WHERE class_code = %s AND date = %s AND session_time = %s
+               ORDER BY
+                 CASE status
+                   WHEN 'Present' THEN 1
+                   WHEN 'Late'    THEN 2
+                   WHEN 'Absent'  THEN 3
+                 END, name""",
+            (class_code, date, session_time[:5])
+        )
+    else:
+        cur.execute(
+            """SELECT
+                   id, class_code, sr_code, name, section, subject, status,
+                   TO_CHAR(timestamp, 'YYYY-MM-DD HH24:MI:SS') AS timestamp,
+                   TO_CHAR(date, 'YYYY-MM-DD')                 AS date,
+                   session_time
+               FROM attendance
+               WHERE class_code = %s AND date = %s
+               ORDER BY
+                 CASE status
+                   WHEN 'Present' THEN 1
+                   WHEN 'Late'    THEN 2
+                   WHEN 'Absent'  THEN 3
+                 END, name""",
+            (class_code, date)
+        )
     rows = cur.fetchall()
     cur.close(); conn.close()
     return rows
 
 
-def get_all_sessions():
+def get_all_sessions(instructor_id=None):
     """One row per (class_code, date) — for the History page list."""
+    conn = get_db()
+    cur  = get_cursor(conn)
+    if instructor_id:
+        cur.execute(
+            """SELECT
+                   a.class_code,
+                   TO_CHAR(a.date, 'YYYY-MM-DD')                      AS date,
+                   a.section,
+                   a.subject,
+                   COUNT(*)                                             AS total,
+                   SUM(CASE WHEN a.status='Present' THEN 1 ELSE 0 END) AS present,
+                   SUM(CASE WHEN a.status='Late'    THEN 1 ELSE 0 END) AS late,
+                   SUM(CASE WHEN a.status='Absent'  THEN 1 ELSE 0 END) AS absent
+               FROM attendance a
+               JOIN classes c ON c.id = a.class_code
+               WHERE c.instructor_id = %s
+               GROUP BY a.class_code, a.date, a.section, a.subject
+               ORDER BY a.date DESC""",
+            (instructor_id,)
+        )
+    else:
+        cur.execute(
+            """SELECT
+                   a.class_code,
+                   TO_CHAR(a.date, 'YYYY-MM-DD')                      AS date,
+                   a.section,
+                   a.subject,
+                   COUNT(*)                                             AS total,
+                   SUM(CASE WHEN a.status='Present' THEN 1 ELSE 0 END) AS present,
+                   SUM(CASE WHEN a.status='Late'    THEN 1 ELSE 0 END) AS late,
+                   SUM(CASE WHEN a.status='Absent'  THEN 1 ELSE 0 END) AS absent
+               FROM attendance a
+               GROUP BY a.class_code, a.date, a.section, a.subject
+               ORDER BY a.date DESC"""
+        )
+    rows = cur.fetchall()
+    cur.close(); conn.close()
+    return rows
+
+
+def get_sessions_by_class(class_code):
+    """
+    One row per (date, session_time) for a specific class.
+    Groups by the stored session_time column (camera-open HH:MM) so each
+    scanning session appears as exactly one file, regardless of how many
+    minutes students were scanned across.
+    """
     conn = get_db()
     cur  = get_cursor(conn)
     cur.execute(
         """SELECT
                a.class_code,
-               a.date,
+               TO_CHAR(a.date, 'YYYY-MM-DD')                              AS date,
                a.section,
                a.subject,
-               COUNT(*)                                          AS total,
-               SUM(CASE WHEN a.status='Present' THEN 1 ELSE 0 END) AS present,
-               SUM(CASE WHEN a.status='Late'    THEN 1 ELSE 0 END) AS late,
-               SUM(CASE WHEN a.status='Absent'  THEN 1 ELSE 0 END) AS absent
+               COALESCE(a.session_time, TO_CHAR(MIN(a.timestamp), 'HH24:MI')) AS session_time,
+               COUNT(*)                                                     AS total,
+               SUM(CASE WHEN a.status='Present' THEN 1 ELSE 0 END)         AS present,
+               SUM(CASE WHEN a.status='Late'    THEN 1 ELSE 0 END)         AS late,
+               SUM(CASE WHEN a.status='Absent'  THEN 1 ELSE 0 END)         AS absent
            FROM attendance a
-           GROUP BY a.class_code, a.date, a.section, a.subject
-           ORDER BY a.date DESC"""
+           WHERE a.class_code = %s
+           GROUP BY a.class_code, a.date, a.section, a.subject, a.session_time
+           ORDER BY a.date DESC, a.session_time DESC""",
+        (class_code,)
     )
     rows = cur.fetchall()
     cur.close(); conn.close()
     return rows
 
 
-def get_recent_activity(limit=10):
-    """Most recent sessions for the dashboard Recent Activities list."""
+def get_recent_activity(limit=10, instructor_id=None):
+    """Most recent sessions for the dashboard Recent Activities list.
+    Each camera session (identified by session_time) gets its own row,
+    ordered by the actual session datetime so the very latest always appears first."""
     conn = get_db()
     cur  = get_cursor(conn)
-    cur.execute(
-        """SELECT
-               class_code,
-               date,
-               section,
-               subject,
-               MIN(timestamp::text) AS time
-           FROM attendance
-           GROUP BY class_code, date, section, subject
-           ORDER BY date DESC, time DESC
-           LIMIT %s""",
-        (limit,)
-    )
+    if instructor_id:
+        cur.execute(
+            """SELECT
+                   a.class_code,
+                   TO_CHAR(a.date, 'YYYY-MM-DD')                            AS date,
+                   a.section,
+                   a.subject,
+                   COALESCE(a.session_time, TO_CHAR(MIN(a.timestamp), 'HH24:MI')) AS session_time,
+                   TO_CHAR(MIN(a.timestamp), 'HH24:MI:SS')                  AS time
+               FROM attendance a
+               JOIN classes c ON c.id = a.class_code
+               WHERE c.instructor_id = %s
+               GROUP BY a.class_code, a.date, a.section, a.subject, a.session_time
+               ORDER BY a.date DESC, a.session_time DESC
+               LIMIT %s""",
+            (instructor_id, limit)
+        )
+    else:
+        cur.execute(
+            """SELECT
+                   class_code,
+                   TO_CHAR(date, 'YYYY-MM-DD')                              AS date,
+                   section,
+                   subject,
+                   COALESCE(session_time, TO_CHAR(MIN(timestamp), 'HH24:MI')) AS session_time,
+                   TO_CHAR(MIN(timestamp), 'HH24:MI:SS')                    AS time
+               FROM attendance
+               GROUP BY class_code, date, section, subject, session_time
+               ORDER BY date DESC, session_time DESC
+               LIMIT %s""",
+            (limit,)
+        )
     rows = cur.fetchall()
     cur.close(); conn.close()
     return rows
 
 
-def get_absence_counts():
-    """Students with at least one absence — for the dashboard chart."""
+def get_absence_counts(instructor_id=None):
+    """
+    Per-class absence statistics for the dashboard chart.
+    Returns for each class:
+      - subject name (label)
+      - total_absent: total absent records across all sessions
+      - total_records: total attendance records across all sessions
+      - avg_absent: average absences per session (rounded to 2 decimal places)
+      - pct_absent: absence percentage = (total_absent / total_records) * 100
+    """
     conn = get_db()
     cur  = get_cursor(conn)
-    cur.execute(
-        """SELECT name, COUNT(*) AS count
-           FROM attendance
-           WHERE status = 'Absent'
-           GROUP BY name
-           ORDER BY count DESC"""
-    )
+    if instructor_id:
+        cur.execute(
+            """SELECT
+                   a.subject                                        AS name,
+                   COUNT(*) FILTER (WHERE a.status = 'Absent')     AS total_absent,
+                   COUNT(*)                                         AS total_records,
+                   COUNT(DISTINCT (a.date || '_' || COALESCE(a.session_time, '')))
+                                                                    AS total_sessions,
+                   ROUND(
+                       COUNT(*) FILTER (WHERE a.status = 'Absent')::numeric
+                       / NULLIF(COUNT(DISTINCT (a.date || '_' || COALESCE(a.session_time, ''))), 0)
+                   , 2)                                             AS avg_absent,
+                   ROUND(
+                       COUNT(*) FILTER (WHERE a.status = 'Absent')::numeric
+                       / NULLIF(COUNT(*), 0) * 100
+                   , 1)                                             AS pct_absent
+               FROM attendance a
+               JOIN classes c ON c.id = a.class_code
+               WHERE c.instructor_id = %s
+               GROUP BY a.subject
+               ORDER BY pct_absent DESC""",
+            (instructor_id,)
+        )
+    else:
+        cur.execute(
+            """SELECT
+                   a.subject                                        AS name,
+                   COUNT(*) FILTER (WHERE a.status = 'Absent')     AS total_absent,
+                   COUNT(*)                                         AS total_records,
+                   COUNT(DISTINCT (a.date || '_' || COALESCE(a.session_time, '')))
+                                                                    AS total_sessions,
+                   ROUND(
+                       COUNT(*) FILTER (WHERE a.status = 'Absent')::numeric
+                       / NULLIF(COUNT(DISTINCT (a.date || '_' || COALESCE(a.session_time, ''))), 0)
+                   , 2)                                             AS avg_absent,
+                   ROUND(
+                       COUNT(*) FILTER (WHERE a.status = 'Absent')::numeric
+                       / NULLIF(COUNT(*), 0) * 100
+                   , 1)                                             AS pct_absent
+               FROM attendance a
+               GROUP BY a.subject
+               ORDER BY pct_absent DESC"""
+        )
     rows = cur.fetchall()
     cur.close(); conn.close()
-    return [{"name": r["name"], "count": r["count"]} for r in rows]
+    return [
+        {
+            "name":          r["name"],
+            "total_absent":  r["total_absent"],
+            "total_records": r["total_records"],
+            "total_sessions":r["total_sessions"],
+            "avg_absent":    float(r["avg_absent"]  or 0),
+            "pct_absent":    float(r["pct_absent"]  or 0),
+        }
+        for r in rows
+    ]
 
 
 # ── SCHEDULES ─────────────────────────────────────────────────────────────────
@@ -436,12 +609,49 @@ def add_schedule(class_code, instructor_id, time, subject, room, day):
     cur.close(); conn.close()
 
 
-def edit_schedule(schedule_id, time, subject, room):
+def edit_schedule(schedule_id, time, subject, room, day=None):
+    conn = get_db()
+    cur  = get_cursor(conn)
+    if day:
+        cur.execute(
+            "UPDATE schedules SET time=%s, subject=%s, room=%s, day=%s WHERE id=%s",
+            (time, subject, room, day, schedule_id)
+        )
+    else:
+        cur.execute(
+            "UPDATE schedules SET time=%s, subject=%s, room=%s WHERE id=%s",
+            (time, subject, room, schedule_id)
+        )
+    conn.commit()
+    cur.close(); conn.close()
+
+
+def get_classes_using_schedule(schedule_id):
+    """Returns classes linked to a given schedule (used before editing/deleting)."""
     conn = get_db()
     cur  = get_cursor(conn)
     cur.execute(
-        "UPDATE schedules SET time=%s, subject=%s, room=%s WHERE id=%s",
-        (time, subject, room, schedule_id)
+        """SELECT c.id, c.subject, c.section
+           FROM classes c
+           JOIN schedules s ON s.class_code = c.id
+           WHERE s.id = %s""",
+        (schedule_id,)
+    )
+    rows = cur.fetchall()
+    cur.close(); conn.close()
+    return rows
+
+
+def update_class_subject_by_schedule(schedule_id, old_subject, new_subject):
+    """Updates the subject on classes linked to a schedule when the subject name changes."""
+    conn = get_db()
+    cur  = get_cursor(conn)
+    cur.execute(
+        """UPDATE classes
+           SET subject = %s
+           WHERE id IN (SELECT class_code FROM schedules WHERE id = %s)
+           AND subject = %s""",
+        (new_subject, schedule_id, old_subject)
     )
     conn.commit()
     cur.close(); conn.close()

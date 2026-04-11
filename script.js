@@ -24,11 +24,13 @@ let attendanceLogs  = {};
 let selectedDay     = "MON";
 let searchVal       = "";
 let currentType     = 'home';
-let editIdx         = -1;
-let editSchedId     = -1;
+let editIdx                 = -1;
+let editSchedId             = -1;
+let _editingSchedOldSubject = '';
 let selectedHistoryIdx  = 0;
 let showAllHistoryFiles = false;
 let currentOpenedFolder = "";   // stores class_code of the open folder
+let currentStatusFilter  = 'All'; // student list filter: All/Enrolled/Unenrolled/Dropped
 
 // ── ON LOAD ───────────────────────────────────────────────────────────────────
 
@@ -44,7 +46,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         document.getElementById('user-initials').textContent =
             session.email.substring(0, 2).toUpperCase();
     } else {
-        window.location.href = "login.html";
+        window.location.href = "/";
         return;
     }
 
@@ -110,8 +112,9 @@ async function renderDashboard() {
             <input type="text" placeholder="Search everything..." class="w-full bg-gray-50 border-none rounded-2xl py-4 pl-12 pr-4 text-sm font-bold outline-none ring-1 ring-gray-100 focus:ring-red-200 transition">
         </div>
         <div class="bg-white p-8 rounded-[3rem] border border-gray-100 shadow-sm mb-10 h-[450px]">
-             <h3 class="text-lg font-black text-gray-800 mb-6 flex items-center"><i data-lucide="bar-chart-3" class="w-5 h-5 mr-2 text-[#D32F2F]"></i> Analytics</h3>
-             <div class="h-[320px] w-full"><canvas id="absentChart"></canvas></div>
+             <h3 class="text-lg font-black text-gray-800 mb-1 flex items-center"><i data-lucide="bar-chart-3" class="w-5 h-5 mr-2 text-[#D32F2F]"></i> Absence Rate by Class</h3>
+             <p class="text-[10px] text-gray-400 font-bold uppercase tracking-widest mb-4">Average absences per session &amp; overall percentage</p>
+             <div class="h-[300px] w-full"><canvas id="absentChart"></canvas></div>
         </div>
         <div class="bg-white p-8 rounded-[3rem] border border-gray-100 shadow-sm">
             <h3 class="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-6">Recent Activity</h3>
@@ -139,7 +142,17 @@ async function renderDashboard() {
         if (records.length === 0) {
             list.innerHTML = '<p class="text-center text-gray-300 font-bold py-4">No recent history.</p>';
         } else {
-            list.innerHTML = records.map(r => `
+            list.innerHTML = records.map(r => {
+                // Format date as "Tue, 07 Apr 2026"
+                const dateObj  = new Date(r.date + 'T00:00:00');
+                const dateStr  = dateObj.toLocaleDateString('en-US', { weekday:'short', day:'2-digit', month:'short', year:'numeric' });
+                // Format session time as "HH:MM:SS AM/PM"
+                const timeRaw  = (r.time || '').substring(0, 8);   // "10:35:44"
+                const dispTime = timeRaw
+                    ? new Date('1970-01-01T' + timeRaw).toLocaleTimeString([], { hour:'2-digit', minute:'2-digit', second:'2-digit' })
+                    : '';
+                const filename = `${dateStr} ${dispTime}_Report.pdf`;
+                return `
                 <div class="flex items-center justify-between p-4 bg-gray-50 rounded-2xl cursor-pointer hover:bg-red-50 transition"
                      onclick="goToHistoryByClassDate('${r.class_code}', '${r.date}')">
                     <div class="flex items-center space-x-4">
@@ -147,12 +160,12 @@ async function renderDashboard() {
                             <i data-lucide="file-text" class="w-4 h-4"></i>
                         </div>
                         <div>
-                            <p class="text-sm font-black text-gray-900">${r.date}_Report.pdf</p>
+                            <p class="text-sm font-black text-gray-900">${filename}</p>
                             <p class="text-[9px] text-gray-400 font-bold uppercase">${r.section} | ${r.subject}</p>
                         </div>
                     </div>
-                    <p class="text-[9px] text-gray-400 font-bold">${r.time ? r.time.substring(0,5) : ''}</p>
-                </div>`).join('');
+                    <p class="text-[9px] text-gray-400 font-bold">${dispTime}</p>
+                </div>`; }).join('');
             lucide.createIcons();
         }
     } catch {
@@ -165,20 +178,80 @@ async function renderDashboard() {
 function initChart(data = []) {
     const ctx = document.getElementById('absentChart');
     if (!ctx) return;
-    const labels = data.map(d => d.name);
-    const values = data.map(d => d.count);
-    // Fallback dummy data if no absences yet
-    new Chart(ctx, {
+
+    // Destroy any existing chart instance to avoid canvas reuse error
+    if (window._absentChartInstance) {
+        window._absentChartInstance.destroy();
+    }
+
+    if (!data.length) {
+        new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: ['No data yet'],
+                datasets: [{ label: 'Absence %', data: [0], backgroundColor: '#D32F2F', borderRadius: 8 }]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                plugins: { legend: { display: false } }
+            }
+        });
+        return;
+    }
+
+    const labels  = data.map(d => d.name);
+    const pctVals = data.map(d => d.pct_absent);   // percentage for bar height
+    const avgVals = data.map(d => d.avg_absent);    // avg absences per session for tooltip
+    const totVals = data.map(d => d.total_absent);  // raw count for tooltip
+    const sesVals = data.map(d => d.total_sessions);
+
+    // Color bars: ≥50% red, 25–49% orange, <25% yellow-green
+    const barColors = pctVals.map(p =>
+        p >= 50 ? '#D32F2F' : p >= 25 ? '#E65100' : '#F9A825'
+    );
+
+    window._absentChartInstance = new Chart(ctx, {
         type: 'bar',
         data: {
-            labels: labels.length ? labels : ['No absences yet'],
-            datasets: [{ label: 'Absences', data: values.length ? values : [0], backgroundColor: '#D32F2F', borderRadius: 8 }]
+            labels,
+            datasets: [{
+                label: 'Absence Rate (%)',
+                data: pctVals,
+                backgroundColor: barColors,
+                borderRadius: 8,
+            }]
         },
         options: {
             responsive: true,
             maintainAspectRatio: false,
-            scales: { x: { ticks: { font: { size: 9, weight: 'bold' } } } },
-            plugins: { legend: { display: false } }
+            scales: {
+                x: { ticks: { font: { size: 9, weight: 'bold' } } },
+                y: {
+                    min: 0, max: 100,
+                    ticks: {
+                        callback: v => v + '%',
+                        font: { size: 9 }
+                    },
+                    title: { display: true, text: 'Absence Rate (%)', font: { size: 9 } }
+                }
+            },
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        title: items => items[0].label,
+                        label: item => {
+                            const i   = item.dataIndex;
+                            return [
+                                `Absence Rate : ${pctVals[i]}%`,
+                                `Avg / Session: ${avgVals[i]} students`,
+                                `Total Absences: ${totVals[i]}`,
+                                `Sessions : ${sesVals[i]}`
+                            ];
+                        }
+                    }
+                }
+            }
         }
     });
 }
@@ -230,122 +303,471 @@ async function renderFolderPage(type) {
 
 // ── HISTORY ───────────────────────────────────────────────────────────────────
 
+// History state
+let historySelectedClass   = null;
+let historySelectedSession = null;
+let historyClassSessions   = [];
+
 async function renderHistoryPage() {
     currentType = 'history';
 
     try {
-        const res = await authFetch('/api/sessions');
-        historyFolders = await res.json();
-    } catch {
-        historyFolders = [];
-    }
+        const res = await authFetch('/api/classes');
+        classFolders = await res.json();
+    } catch { classFolders = []; }
 
-    const filtered    = historyFolders.filter(f =>
-        (f.section + f.subject + f.date).toLowerCase().includes(searchVal.toLowerCase())
+    const filtered = classFolders.filter(f =>
+        (f.subject + f.section).toLowerCase().includes(searchVal.toLowerCase())
     );
-    const activeData  = filtered[selectedHistoryIdx] || null;
-    let dynamicTitle  = "Select a session";
-    if (showAllHistoryFiles) dynamicTitle = "ALL SESSIONS";
-    else if (activeData) dynamicTitle = `${activeData.section} — ${activeData.date}`;
 
     document.getElementById('content-area').innerHTML = `
         <div class="flex justify-between items-center mb-6">
             <h1 class="text-4xl font-black text-gray-900 tracking-tighter uppercase">History</h1>
-            <div class="flex space-x-2">
-                <button onclick="showAllHistoryFiles = true; renderHistoryPage()" class="bg-gray-100 text-gray-600 px-6 py-3 rounded-xl text-[10px] font-black uppercase hover:bg-black hover:text-white transition">Show All Files</button>
-            </div>
         </div>
-        <div class="relative mb-8">
+        <div class="relative mb-6">
             <i data-lucide="search" class="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-300"></i>
-            <input type="text" oninput="searchVal = this.value; renderHistoryPage()" value="${searchVal}" placeholder="Search archives..." class="w-full bg-gray-50 border-none rounded-2xl py-4 pl-12 pr-4 text-sm font-bold outline-none">
+            <input type="text" oninput="searchVal=this.value; renderHistoryPage()" value="${searchVal}"
+                placeholder="Search classes..." class="w-full bg-gray-50 border-none rounded-2xl py-4 pl-12 pr-4 text-sm font-bold outline-none">
         </div>
-        <div class="flex gap-10 h-[calc(100%-250px)]">
-            <div class="w-1/3 space-y-4 overflow-y-auto pr-4 border-r border-gray-50">
-                ${filtered.map((f, i) => `
-                    <div onclick="selectedHistoryIdx = ${i}; showAllHistoryFiles = false; renderHistoryPage()"
-                         class="p-6 rounded-[2rem] cursor-pointer transition flex items-center justify-between ${!showAllHistoryFiles && i === selectedHistoryIdx ? 'bg-red-50 border-2 border-red-100' : 'bg-white hover:bg-gray-50'}">
-                        <div class="flex items-center space-x-4 min-w-0">
-                            <div class="w-10 h-10 rounded-xl flex items-center justify-center ${!showAllHistoryFiles && i === selectedHistoryIdx ? 'bg-[#D32F2F] text-white' : 'bg-gray-100 text-gray-400'}">
-                                <i data-lucide="folder-archive" class="w-5 h-5"></i>
+        <div class="flex gap-6 h-[calc(100vh-280px)] min-h-[400px]">
+
+            <!-- Column 1: Class Folders -->
+            <div class="w-60 flex-shrink-0 space-y-3 overflow-y-auto pr-2 border-r border-gray-100">
+                <p class="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-3">Class Folders</p>
+                ${filtered.length === 0
+                    ? '<p class="text-[10px] text-gray-300 font-bold text-center py-8">No classes yet</p>'
+                    : filtered.map(f => `
+                        <div onclick="historySelectClass('${f.id}')"
+                             class="p-4 rounded-2xl cursor-pointer transition border ${historySelectedClass === '${f.id}' ? 'bg-red-50 border-[#D32F2F]' : 'bg-white border-gray-100 hover:border-red-200'}">
+                            <div class="flex items-center space-x-3">
+                                <div class="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${historySelectedClass === '${f.id}' ? 'bg-[#D32F2F] text-white' : 'bg-gray-100 text-[#D32F2F]'}">
+                                    <i data-lucide="folder" class="w-4 h-4"></i>
+                                </div>
+                                <div class="min-w-0">
+                                    <p class="font-black text-gray-900 text-sm truncate">${f.subject}</p>
+                                    <p class="text-[9px] text-gray-400 font-bold uppercase truncate">${f.section}</p>
+                                </div>
                             </div>
-                            <div class="min-w-0">
-                                <h4 class="font-black text-gray-900 truncate">${f.section}</h4>
-                                <p class="text-[9px] font-bold text-gray-400 uppercase">${f.subject} | ${f.date}</p>
-                            </div>
-                        </div>
-                    </div>`).join('')}
+                        </div>`).join('')}
             </div>
-            <div class="flex-1 bg-gray-50/50 border-2 border-dashed border-gray-200 rounded-[3rem] p-8 overflow-y-auto flex flex-col">
-                <div class="flex justify-between items-center mb-6">
-                    <h3 class="font-black text-[12px] text-gray-400 uppercase tracking-widest">${dynamicTitle}</h3>
-                    ${activeData ? `
-                    <button onclick="downloadPDF('${activeData.class_code}', '${activeData.date}')"
-                            class="flex items-center space-x-2 px-4 py-2 bg-red-50 text-[#D32F2F] rounded-xl font-bold text-xs hover:bg-red-100 transition">
-                        <i data-lucide="download" class="w-4 h-4"></i> <span>Download PDF</span>
-                    </button>` : ''}
+
+            <!-- Column 2: Attendance Files -->
+            <div class="w-60 flex-shrink-0 space-y-3 overflow-y-auto pr-2 border-r border-gray-100">
+                <p class="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-3">Attendance Files</p>
+                <div id="historyFilesList">
+                    <p class="text-[10px] text-gray-300 font-bold text-center py-8">Select a class folder</p>
                 </div>
-                ${activeData ? `
-                <div id="sessionDetail">
-                    <p class="text-center text-gray-300 font-bold py-4 text-xs">Loading records...</p>
-                </div>` : `
-                <div class="flex-1 flex items-center justify-center text-gray-300 font-bold text-xs uppercase">
-                    Select a session on the left
-                </div>`}
+            </div>
+
+            <!-- Column 3: Detail panel -->
+            <div class="flex-1 overflow-y-auto">
+                <div id="historyDetailPanel" class="h-full bg-gray-50/50 border-2 border-dashed border-gray-200 rounded-[2.5rem] p-8 flex flex-col">
+                    <div class="flex-1 flex items-center justify-center text-gray-300 font-bold text-xs uppercase">
+                        Select an attendance file
+                    </div>
+                </div>
             </div>
         </div>`;
     lucide.createIcons();
 
-    if (activeData) loadSessionDetail(activeData.class_code, activeData.date);
+    if (historySelectedClass) {
+        await historyLoadFiles(historySelectedClass);
+        if (historySelectedSession) {
+            await historyLoadDetail(
+                historySelectedSession.class_code,
+                historySelectedSession.date,
+                historySelectedSession.session_time
+            );
+        }
+    }
 }
 
-async function loadSessionDetail(class_code, date) {
+async function historySelectClass(class_code) {
+    historySelectedClass   = class_code;
+    historySelectedSession = null;
+    await renderHistoryPage();
+}
+
+async function historyLoadFiles(class_code) {
+    const listEl = document.getElementById('historyFilesList');
+    if (!listEl) return;
+    listEl.innerHTML = '<p class="text-[9px] text-gray-400 text-center py-4">Loading...</p>';
+
     try {
-        const res     = await authFetch(`/api/attendance/${class_code}/${date}`);
+        const res = await authFetch(`/api/sessions/${class_code}`);
+        historyClassSessions = await res.json();
+    } catch { historyClassSessions = []; }
+
+    if (historyClassSessions.length === 0) {
+        listEl.innerHTML = '<p class="text-[10px] text-gray-300 font-bold text-center py-8">No records yet</p>';
+        return;
+    }
+
+    listEl.innerHTML = historyClassSessions.map(s => {
+        const isActive = historySelectedSession &&
+                         historySelectedSession.date === s.date &&
+                         historySelectedSession.session_time === s.session_time;
+
+        // Parse date safely: PostgreSQL returns "YYYY-MM-DD" string
+        const [yr, mo, dy] = (s.date || '').split('-');
+        const shortDate = (mo && dy && yr) ? `${mo}-${dy}-${String(yr).slice(-2)}` : s.date;
+
+        // Parse session_time: "HH:MM:SS" → "HH-MM"
+        const timeSlug = s.session_time ? s.session_time.substring(0, 5).replace(':', '-') : '';
+        const fileLabel = `Log_${shortDate}${timeSlug ? '_' + timeSlug : ''}`;
+
+        // Display time in 12-hour format for subtitle
+        const dispTime = s.session_time
+            ? new Date('1970-01-01T' + s.session_time).toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' })
+            : '';
+        return `
+            <div onclick="historySelectSession('${s.class_code}','${s.date}','${s.session_time || ''}')"
+                 class="p-4 rounded-2xl cursor-pointer transition border ${isActive ? 'bg-red-50 border-[#D32F2F]' : 'bg-white border-gray-100 hover:border-red-200'}">
+                <div class="flex items-center space-x-3">
+                    <div class="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${isActive ? 'bg-[#D32F2F] text-white' : 'bg-gray-100 text-[#D32F2F]'}">
+                        <i data-lucide="file-text" class="w-4 h-4"></i>
+                    </div>
+                    <div class="min-w-0">
+                        <p class="font-black text-gray-900 text-xs truncate">${fileLabel}</p>
+                        <p class="text-[9px] text-gray-400 font-bold">${dispTime} · P:${s.present} L:${s.late} A:${s.absent}</p>
+                    </div>
+                </div>
+            </div>`;
+    }).join('');
+    lucide.createIcons();
+}
+
+async function historySelectSession(class_code, date, session_time) {
+    historySelectedSession = { class_code, date, session_time };
+    await historyLoadFiles(class_code);
+    await historyLoadDetail(class_code, date, session_time);
+}
+
+async function historyLoadDetail(class_code, date, session_time) {
+    const panel = document.getElementById('historyDetailPanel');
+    if (!panel) return;
+    panel.innerHTML = '<p class="text-[10px] text-gray-400 text-center py-8">Loading...</p>';
+
+    try {
+        const sp      = session_time ? `?session_time=${encodeURIComponent(session_time)}` : '';
+        const res     = await authFetch(`/api/attendance/${class_code}/${date}${sp}`);
         const records = await res.json();
         const present = records.filter(r => r.status === 'Present');
         const late    = records.filter(r => r.status === 'Late');
         const absent  = records.filter(r => r.status === 'Absent');
+        const cls     = classFolders.find(f => f.id === class_code) || {};
+        // Parse date safely — PostgreSQL returns "YYYY-MM-DD" plain string
+        const [dyr, dmo, ddy] = (date || '').split('-');
+        const dispDate = (dyr && dmo && ddy)
+            ? new Date(Number(dyr), Number(dmo)-1, Number(ddy)).toLocaleDateString('en-US',
+                { weekday:'long', year:'numeric', month:'long', day:'numeric' })
+            : date;
 
-        const renderRows = (list, color, label) => list.map(r => `
-            <div class="flex items-center justify-between p-4 bg-white rounded-2xl border border-gray-100 mb-2">
+        const renderRows = (list, color, label) => list.length === 0
+            ? '<p class="text-[10px] text-gray-300 font-bold py-2 pl-2">None</p>'
+            : list.map(r => `
+                <div class="flex items-center justify-between p-3 bg-white rounded-2xl border border-gray-100 mb-2">
+                    <div>
+                        <p class="text-sm font-black text-gray-900">${r.name}</p>
+                        <p class="text-[9px] text-gray-400 font-bold">${r.sr_code || ''}</p>
+                    </div>
+                    <div class="text-right">
+                        <span class="text-[10px] font-black ${color} uppercase">${label}</span>
+                        <p class="text-[9px] text-gray-400">${r.timestamp ? formatDisplayTime(r.timestamp) : '—'}</p>
+                    </div>
+                </div>`).join('');
+
+        panel.innerHTML = `
+            <div class="flex justify-between items-start mb-6">
                 <div>
-                    <p class="text-sm font-black text-gray-900">${r.name}</p>
-                    <p class="text-[9px] text-gray-400 font-bold">${r.sr_code || ''}</p>
+                    <h3 class="font-black text-gray-900 text-lg">${cls.subject || class_code}</h3>
+                    <p class="text-[10px] text-gray-400 font-bold uppercase">${cls.section || ''} · ${dispDate}</p>
                 </div>
-                <div class="text-right">
-                    <span class="text-[10px] font-black ${color} uppercase">${label}</span>
-                    <p class="text-[9px] text-gray-400">${r.timestamp ? r.timestamp.substring(11,16) : '—'}</p>
+                <button onclick="viewAndPrintPDF('${class_code}','${date}','${session_time || ''}')"
+                    class="flex items-center space-x-2 px-5 py-3 bg-[#D32F2F] text-white rounded-2xl font-bold text-xs hover:bg-[#B71C1C] transition shadow-lg">
+                    <i data-lucide="printer" class="w-4 h-4"></i> <span>View &amp; Print</span>
+                </button>
+            </div>
+            <div class="grid grid-cols-3 gap-4 mb-6">
+                <div class="bg-green-50 rounded-2xl p-4 text-center">
+                    <p class="text-2xl font-black text-green-600">${present.length}</p>
+                    <p class="text-[9px] font-black text-green-400 uppercase">Present</p>
                 </div>
-            </div>`).join('');
-
-        document.getElementById('sessionDetail').innerHTML = `
-            <p class="text-[10px] font-black text-gray-400 uppercase mb-3">Present (${present.length})</p>
-            ${renderRows(present, 'text-green-500', 'Present')}
-            <p class="text-[10px] font-black text-gray-400 uppercase mb-3 mt-4">Late (${late.length})</p>
-            ${renderRows(late, 'text-yellow-500', 'Late')}
-            <p class="text-[10px] font-black text-gray-400 uppercase mb-3 mt-4">Absent (${absent.length})</p>
-            ${renderRows(absent, 'text-red-500', 'Absent')}`;
-    } catch {
-        document.getElementById('sessionDetail').innerHTML =
-            '<p class="text-center text-gray-300 font-bold py-4 text-xs">Could not load records.</p>';
+                <div class="bg-yellow-50 rounded-2xl p-4 text-center">
+                    <p class="text-2xl font-black text-yellow-600">${late.length}</p>
+                    <p class="text-[9px] font-black text-yellow-400 uppercase">Late</p>
+                </div>
+                <div class="bg-red-50 rounded-2xl p-4 text-center">
+                    <p class="text-2xl font-black text-red-600">${absent.length}</p>
+                    <p class="text-[9px] font-black text-red-400 uppercase">Absent</p>
+                </div>
+            </div>
+            <p class="text-[10px] font-black text-gray-400 uppercase tracking-widest">Present (${present.length})</p>
+            ${renderRows(present,'text-green-500','Present')}
+            <p class="text-[10px] font-black text-gray-400 uppercase tracking-widest mt-4">Late (${late.length})</p>
+            ${renderRows(late,'text-yellow-500','Late')}
+            <p class="text-[10px] font-black text-gray-400 uppercase tracking-widest mt-4">Absent (${absent.length})</p>
+            ${renderRows(absent,'text-red-500','Absent')}`;
+        lucide.createIcons();
+    } catch(e) {
+        panel.innerHTML = '<p class="text-center text-gray-300 font-bold py-8 text-xs">Could not load records.</p>';
     }
 }
 
-function downloadPDF(class_code, date) {
-    window.open(`/api/download_pdf/${class_code}/${date}`, '_blank');
+function formatDisplayTime(ts) {
+    if (!ts) return '—';
+    try {
+        const s = String(ts).trim();
+        // PostgreSQL returns "YYYY-MM-DD HH:MM:SS" — extract the time part
+        let timePart = '';
+        if (s.includes(' ')) {
+            timePart = s.split(' ')[1];          // "HH:MM:SS"
+        } else if (s.includes('T')) {
+            timePart = s.split('T')[1].substring(0, 8);
+        } else {
+            timePart = s.substring(0, 8);
+        }
+        if (!timePart) return '—';
+        const d = new Date('1970-01-01T' + timePart);
+        if (isNaN(d.getTime())) return timePart.substring(0, 5);
+        return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    } catch { return String(ts).substring(11, 19) || String(ts); }
+}
+
+async function viewAndPrintPDF(class_code, date, session_time) {
+    const cls = classFolders.find(f => f.id === class_code) || {};
+    const sp  = session_time ? `?session_time=${encodeURIComponent(session_time)}` : '';
+
+    try {
+        const res     = await authFetch(`/api/attendance/${class_code}/${date}${sp}`);
+        const records = await res.json();
+
+        // ── Schedule info ────────────────────────────────────────────────────
+        const sched   = schedules.find(s =>
+            s.subject && cls.subject &&
+            s.subject.trim().toLowerCase() === cls.subject.trim().toLowerCase());
+        const timeVal = sched ? sched.time : '';
+        const roomVal = sched ? sched.room : '';
+
+        // ── Date (safe parse) ────────────────────────────────────────────────
+        const [pyr, pmo, pdy] = (date || '').split('-');
+        const dispDate = (pyr && pmo && pdy)
+            ? new Date(Number(pyr), Number(pmo)-1, Number(pdy))
+                .toLocaleDateString('en-US', { month:'numeric', day:'numeric', year:'numeric' })
+            : date;
+
+        // ── Faculty name ─────────────────────────────────────────────────────
+        const session = JSON.parse(localStorage.getItem('active_session') || '{}');
+        const faculty = (session.email || '').split('@')[0]
+                          .replace(/[._]/g,' ').replace(/\b\w/g, l => l.toUpperCase());
+
+        // ── University format: ALL students in the two-column roster ─────────
+        // The .doc format does NOT separate absent students into a separate section.
+        // Every student appears in the roster. Present/Late get their status in
+        // the Signature column; absent rows have an empty signature cell.
+        // Layout: rows 1–30 in the LEFT column, rows 31–60 in the RIGHT column.
+        // The roster always has a minimum of 30 rows (one full left column).
+
+        const ROWS_PER_COL = 30;   // university form is always 30 per column
+        const totalRows    = Math.max(records.length, ROWS_PER_COL);
+        // Pad to even columns if needed
+        const paddedTotal  = totalRows <= ROWS_PER_COL
+            ? ROWS_PER_COL                           // only left column needed
+            : Math.ceil(totalRows / ROWS_PER_COL) * ROWS_PER_COL; // e.g. 60 for 31–60 students
+
+        const statusColor = s =>
+            s === 'Present' ? 'green' : s === 'Late' ? '#E65100' : 'black';
+
+        // Build rows: each rendered row shows slot i (left) and slot i+ROWS_PER_COL (right)
+        const rosterRows = Array.from({ length: ROWS_PER_COL }).map((_, i) => {
+            const sL   = records[i];                        // rows 1–30
+            const sR   = records[i + ROWS_PER_COL];        // rows 31–60
+            const numL = i + 1;
+            const numR = i + ROWS_PER_COL + 1;
+
+            const sigL = sL
+                ? `<span style="font-weight:bold;color:${statusColor(sL.status)};">${sL.status}</span>`
+                : '';
+            const sigR = sR
+                ? `<span style="font-weight:bold;color:${statusColor(sR.status)};">${sR.status}</span>`
+                : '';
+
+            return `
+            <tr>
+                <td style="border:1px solid black;padding:3px 8px;height:25px;font-size:11px;font-family:'Times New Roman',serif;">
+                    ${numL}. ${sL ? sL.name : ''}
+                </td>
+                <td style="border:1px solid black;text-align:center;font-size:11px;padding:3px;">
+                    ${sigL}
+                </td>
+                <td style="border:1px solid black;padding:3px 8px;height:25px;font-size:11px;font-family:'Times New Roman',serif;">
+                    ${numR}.${sR ? ' ' + sR.name : ''}
+                </td>
+                <td style="border:1px solid black;text-align:center;font-size:11px;padding:3px;">
+                    ${sigR}
+                </td>
+            </tr>`;
+        }).join('');
+
+        // ── Short date for title bar ─────────────────────────────────────────
+        const [yr, mo, dy] = (date || '').split('-');
+        const shortDate = (mo && dy && yr) ? `${mo}-${dy}-${String(yr).slice(-2)}` : date;
+
+        // ── Full HTML matching BatStateU-REC-ATT-11 Rev.01 exactly ───────────
+        const html = `
+            <div style="font-family:'Times New Roman',Times,serif;color:black;background:white;
+                        width:100%;max-width:820px;margin:0 auto;padding:0;">
+
+                <!-- Header: Logo + Reference block -->
+                <table style="width:100%;border-collapse:collapse;font-size:10px;table-layout:fixed;">
+                    <tr>
+                        <td style="border:1px solid black;width:14%;text-align:center;padding:6px;">
+                            <img src="bsu_logo.png" alt="BSU"
+                                 style="height:48px;width:auto;display:block;margin:0 auto;">
+                        </td>
+                        <td style="border:1px solid black;width:29%;padding:5px 8px;">
+                            Reference No.: <b>BatStateU-REC-ATT-11</b>
+                        </td>
+                        <td style="border:1px solid black;width:32%;padding:5px 8px;">
+                            Effectivity Date: <b>May 18, 2022</b>
+                        </td>
+                        <td style="border:1px solid black;width:25%;padding:5px 8px;">
+                            Revision No.: <b>01</b>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td colspan="4"
+                            style="border:1px solid black;border-top:none;padding:10px 8px;
+                                   text-align:center;font-size:14px;font-weight:bold;
+                                   text-transform:uppercase;letter-spacing:1px;">
+                            Student Class Attendance
+                        </td>
+                    </tr>
+                </table>
+
+                <!-- Info block -->
+                <table style="width:100%;border-collapse:collapse;font-size:11px;table-layout:fixed;">
+                    <tr>
+                        <td style="border:1px solid black;border-top:none;padding:6px 10px;">
+                            Course Code and Title:&nbsp;&nbsp;<b>${cls.subject || ''}</b>&nbsp;(${cls.section || ''})
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="border:1px solid black;border-top:none;padding:6px 10px;">
+                            Assigned Faculty:&nbsp;&nbsp;<b>${faculty}</b>
+                        </td>
+                    </tr>
+                </table>
+                <table style="width:100%;border-collapse:collapse;font-size:11px;table-layout:fixed;">
+                    <tr>
+                        <td style="border:1px solid black;border-top:none;width:25%;padding:6px 10px;">
+                            Date:&nbsp;<b>${dispDate}</b>
+                        </td>
+                        <td style="border:1px solid black;border-top:none;width:30%;padding:6px 10px;">
+                            Time:&nbsp;<b>${timeVal}</b>
+                        </td>
+                        <td style="border:1px solid black;border-top:none;width:45%;padding:6px 10px;">
+                            Room/Venue:&nbsp;<b>${roomVal}</b>
+                        </td>
+                    </tr>
+                </table>
+
+                <!-- Gray shade divider — matches BSU reference format -->
+                <table style="width:100%;border-collapse:collapse;table-layout:fixed;">
+                    <tr>
+                        <td colspan="4"
+                            style="border:1px solid black;border-top:none;
+                                   background-color:#d9d9d9;
+                                   -webkit-print-color-adjust:exact;
+                                   print-color-adjust:exact;
+                                   height:10px;padding:0;font-size:1px;line-height:1px;">&nbsp;</td>
+                    </tr>
+                </table>
+
+                <!-- Two-column attendance roster — fixed 30 rows per column -->
+                <table style="width:100%;border-collapse:collapse;font-size:11px;table-layout:fixed;">
+                    <thead>
+                        <tr style="text-align:center;font-weight:bold;">
+                            <td style="border:1px solid black;border-top:none;width:35%;padding:5px;">NAME</td>
+                            <td style="border:1px solid black;border-top:none;width:15%;padding:5px;">SIGNATURE</td>
+                            <td style="border:1px solid black;border-top:none;width:35%;padding:5px;">NAME</td>
+                            <td style="border:1px solid black;border-top:none;width:15%;padding:5px;">SIGNATURE</td>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${rosterRows}
+                    </tbody>
+                </table>
+            </div>`;
+
+        document.getElementById('printArea').innerHTML = html;
+
+        // ── Download PDF button — opens clean print window ───────────────────
+        const dlBtn = document.getElementById('downloadBtn');
+        if (dlBtn) {
+            dlBtn.onclick = () => {
+                const win = window.open('', '_blank', 'width=950,height=750');
+                win.document.write(`<!DOCTYPE html><html><head>
+                    <title>Attendance_${cls.subject || class_code}_${shortDate}</title>
+                    <style>
+                        body { margin:0; padding:20px; background:white;
+                               font-family:'Times New Roman',Times,serif; }
+                        @media print {
+                            body { padding:0; margin:0; }
+                            * { -webkit-print-color-adjust: exact !important;
+                                print-color-adjust: exact !important; }
+                        }
+                        table { border-collapse:collapse; }
+                    </style>
+                    </head><body>${html}</body></html>`);
+                win.document.close();
+                win.focus();
+                setTimeout(() => { win.print(); }, 500);
+            };
+        }
+
+        // ── Update viewer title ──────────────────────────────────────────────
+        document.getElementById('docTitle').innerText =
+            `Attendance Sheet — ${cls.subject || class_code} | ${shortDate}`;
+        document.getElementById('docViewer').classList.remove('hidden');
+
+    } catch(e) {
+        alert('Could not load record: ' + e.message);
+    }
 }
 
 function goToHistoryByClassDate(class_code, date) {
+    historySelectedClass = class_code;
     showPage('history');
 }
+
+
 
 // ── FOLDER VIEW (inside a class) ──────────────────────────────────────────────
 
 async function openFolderView(class_code) {
     currentOpenedFolder = class_code;
-
-    // Get class info from already-loaded classFolders
+    currentStatusFilter  = 'All';   // reset filter on folder open
     const cls = classFolders.find(f => f.id === class_code) || {};
+
+    // Load students FIRST then render camera button based on count
+    let students = [];
+    try {
+        const res = await authFetch(`/api/students/${class_code}`);
+        students  = await res.json();
+    } catch {}
+
+    renderFolderView(cls, class_code, students);
+}
+
+function renderFolderView(cls, class_code, students) {
+    const hasStudents = students.length > 0;
+
+    // Apply status filter
+    const filtered = students.filter(s => {
+        if (currentStatusFilter === 'All') return true;
+        return (s.status || 'Enrolled') === currentStatusFilter;
+    });
 
     document.getElementById('content-area').innerHTML = `
         <div class="flex justify-between items-start mb-8">
@@ -353,48 +775,185 @@ async function openFolderView(class_code) {
                 <i data-lucide="arrow-left" class="w-4 h-4 mr-2"></i> Back
             </button>
             <div class="flex space-x-3">
-                <button onclick="openRegModal()" class="bg-gray-100 text-gray-600 px-8 py-4 rounded-2xl text-[10px] font-black uppercase">Registration</button>
-                <button onclick="openCamera()" class="bg-black text-white px-8 py-4 rounded-2xl text-[10px] font-black uppercase flex items-center space-x-2">
-                    <i data-lucide="camera" class="w-4 h-4"></i> <span>Open Camera</span>
-                </button>
+                <button onclick="openRegModal()" class="bg-gray-100 text-gray-600 px-8 py-4 rounded-2xl text-[10px] font-black uppercase hover:bg-gray-200 transition">Registration</button>
+                ${hasStudents
+                    ? `<button onclick="openCamera()" class="bg-black text-white px-8 py-4 rounded-2xl text-[10px] font-black uppercase flex items-center space-x-2 hover:bg-gray-800 transition"><i data-lucide="camera" class="w-4 h-4"></i> <span>Open Camera</span></button>`
+                    : `<button disabled title="Register at least one student before scanning" class="bg-gray-200 text-gray-400 px-8 py-4 rounded-2xl text-[10px] font-black uppercase flex items-center space-x-2 cursor-not-allowed opacity-60"><i data-lucide="camera" class="w-4 h-4"></i> <span>Open Camera</span></button>`}
             </div>
         </div>
         <h1 class="text-4xl font-black text-gray-900 tracking-tighter uppercase">${cls.subject || class_code}</h1>
         <p class="text-gray-400 font-bold text-sm uppercase tracking-widest mt-1">${cls.section || ''} • ${cls.course_code || ''}</p>
-        <div id="studentListArea" class="mt-10">
-            <p class="text-center text-gray-300 font-bold py-4 text-xs">Loading students...</p>
-        </div>`;
-    lucide.createIcons();
 
-    // Load students from backend
-    try {
-        const res      = await authFetch(`/api/students/${class_code}`);
-        const students = await res.json();
-        const area     = document.getElementById('studentListArea');
-        if (students.length === 0) {
-            area.innerHTML = `<div class="mt-10 text-center py-20 border-2 border-dashed border-gray-100 rounded-[3rem] text-gray-300 font-bold uppercase text-[10px]">No students yet. Click Registration to add.</div>`;
-        } else {
-            area.innerHTML = `
-                <div class="space-y-3">
-                    ${students.map(s => `
-                        <div class="flex items-center justify-between p-5 bg-white rounded-2xl border border-gray-100">
-                            <div class="flex items-center space-x-4">
-                                <div class="w-10 h-10 bg-red-50 rounded-full flex items-center justify-center text-[#D32F2F] font-black text-xs">
-                                    ${s.name.substring(0,2).toUpperCase()}
-                                </div>
-                                <div>
-                                    <p class="font-black text-gray-900 text-sm">${s.name}</p>
-                                    <p class="text-[9px] text-gray-400 font-bold uppercase">${s.sr_code || ''} • ${s.email || ''}</p>
-                                </div>
+        <!-- Status Filters -->
+        <div class="flex gap-2 mt-6 mb-4">
+            ${['All','Enrolled','Unenrolled','Dropped'].map(f => `
+                <button onclick="applyStudentFilter('${f}')"
+                    class="px-4 py-2 text-[10px] font-black border rounded-xl transition ${f === currentStatusFilter ? 'bg-[#D32F2F] text-white border-[#D32F2F]' : 'bg-white text-gray-400 border-gray-200 hover:border-red-300'}">
+                    ${f.toUpperCase()}
+                </button>`).join('')}
+        </div>
+
+        <div class="bg-white p-6 rounded-[2rem] border border-gray-100 shadow-sm">
+            <h3 class="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-4">Class List</h3>
+            <div id="studentListArea" class="space-y-4">
+                ${filtered.length === 0 && students.length === 0 ? `
+                    <div class="text-center py-20 border-2 border-dashed border-gray-100 rounded-[2rem]">
+                        <p class="text-gray-300 font-bold uppercase text-[10px]">No students yet.</p>
+                        <p class="text-gray-300 text-[9px] mt-1">Click <b>Registration</b> to add students.</p>
+                    </div>` :
+                filtered.length === 0 ? `
+                    <p class="text-center text-gray-300 font-bold py-4 text-xs">No students under this filter.</p>` :
+                filtered.map((s, idx) => `
+                    <div class="flex items-center justify-between p-4 bg-gray-50 rounded-2xl">
+                        <div class="flex items-center space-x-4">
+                            <div class="w-10 h-10 bg-white rounded-xl flex items-center justify-center ${(s.status||'Enrolled') === 'Enrolled' ? 'text-green-500' : 'text-gray-300'} shadow-sm">
+                                <i data-lucide="user" class="w-4 h-4"></i>
                             </div>
-                        </div>`).join('')}
-                </div>`;
+                            <div>
+                                <p class="text-sm font-black ${(s.status||'Enrolled') !== 'Enrolled' ? 'text-gray-400 line-through' : 'text-gray-900'}">${s.name}</p>
+                                <p class="text-[9px] text-gray-400 font-bold uppercase">${s.sr_code || ''} • <span class="${(s.status||'Enrolled') === 'Enrolled' ? 'text-green-500' : 'text-red-400'}">${s.status || 'Enrolled'}</span></p>
+                            </div>
+                        </div>
+                        <div class="flex items-center space-x-3">
+                            <select onchange="updateStudentStatus(${s.id}, this.value)"
+                                class="text-[10px] font-black uppercase bg-white border border-gray-100 rounded-lg p-2 focus:outline-none focus:ring-1 focus:ring-red-200">
+                                <option value="Enrolled"   ${(s.status||'Enrolled') === 'Enrolled'   ? 'selected' : ''}>Enrolled</option>
+                                <option value="Unenrolled" ${(s.status||'Enrolled') === 'Unenrolled' ? 'selected' : ''}>Unenrolled</option>
+                                <option value="Dropped"    ${(s.status||'Enrolled') === 'Dropped'    ? 'selected' : ''}>Dropped</option>
+                            </select>
+                            <button onclick="sendAttendanceEmail(${s.id}, '${encodeURIComponent(s.name)}', '${encodeURIComponent(s.email||'')}', '${encodeURIComponent(currentOpenedFolder)}')"
+                                class="p-2 bg-white text-gray-500 hover:text-[#D32F2F] rounded-lg border border-gray-100 shadow-sm transition flex items-center justify-center"
+                                title="Email student">
+                                <i data-lucide="mail" class="w-4 h-4"></i>
+                            </button>
+                        </div>
+                    </div>`).join('')}
+            </div>
+        </div>`;
+
+    // Cache students for filter re-renders
+    window._cachedStudents = students;
+    lucide.createIcons();
+}
+
+function applyStudentFilter(filter) {
+    currentStatusFilter = filter;
+    const cls = classFolders.find(f => f.id === currentOpenedFolder) || {};
+    renderFolderView(cls, currentOpenedFolder, window._cachedStudents || []);
+}
+
+async function updateStudentStatus(studentId, newStatus) {
+    try {
+        await authFetch(`/api/edit_student/${studentId}`, {
+            method: 'POST',
+            body: new URLSearchParams({ status: newStatus })
+        });
+        // Patch local cache instantly — no re-fetch needed
+        if (window._cachedStudents) {
+            const s = window._cachedStudents.find(s => s.id === studentId);
+            if (s) s.status = newStatus;
         }
-    } catch {
-        document.getElementById('studentListArea').innerHTML =
-            '<p class="text-center text-gray-300 font-bold py-4 text-xs">Could not load students.</p>';
+        const cls = classFolders.find(f => f.id === currentOpenedFolder) || {};
+        renderFolderView(cls, currentOpenedFolder, window._cachedStudents || []);
+    } catch(e) {
+        console.error('Failed to update status:', e);
+        showToast('Failed to update student status.', 'error');
     }
 }
+
+async function sendAttendanceEmail(studentId, encodedName, encodedEmail, encodedClassCode) {
+    const studentName  = decodeURIComponent(encodedName);
+    const studentEmail = decodeURIComponent(encodedEmail);
+    const classCode    = decodeURIComponent(encodedClassCode);
+
+    if (!studentEmail || !studentEmail.includes('@')) {
+        showToast('No valid email address for this student.', 'error');
+        return;
+    }
+
+    // ── Instructor info ───────────────────────────────────────────────────────
+    const session         = JSON.parse(localStorage.getItem('active_session') || '{}');
+    const instructorEmail = session.email || '';
+    const instructorName  = instructorEmail.split('@')[0]
+        .replace(/[._]/g, ' ')
+        .replace(/\b\w/g, l => l.toUpperCase());
+
+    // ── Class info ────────────────────────────────────────────────────────────
+    const cls         = classFolders.find(f => f.id === classCode) || {};
+    const subjectName = cls.subject || classCode;
+
+    showToast('Fetching attendance data…', 'success');
+
+    // ── Tally attendance across all sessions ──────────────────────────────────
+    let present = 0, late = 0, absent = 0, totalSessions = 0;
+    try {
+        const sessRes  = await authFetch(`/api/sessions/${classCode}`);
+        const sessions = await sessRes.json();
+        totalSessions  = sessions.length;
+
+        for (const sess of sessions) {
+            const sp   = sess.session_time
+                ? `?session_time=${encodeURIComponent(sess.session_time)}` : '';
+            const aRes = await authFetch(`/api/attendance/${classCode}/${sess.date}${sp}`);
+            const recs = await aRes.json();
+            const mine = recs.find(r =>
+                r.name.trim().toLowerCase() === studentName.trim().toLowerCase()
+            );
+            if (mine) {
+                if      (mine.status === 'Present') present++;
+                else if (mine.status === 'Late')    late++;
+                else                                absent++;
+            } else {
+                absent++;   // session exists but student not recorded
+            }
+        }
+    } catch(e) {
+        showToast('Could not fetch attendance data.', 'error');
+        return;
+    }
+
+    // ── Helpers ───────────────────────────────────────────────────────────────
+    const ordinal = n => {
+        const s = ['th','st','nd','rd'], v = n % 100;
+        return n + (s[(v-20)%10] || s[v] || s[0]);
+    };
+    const todayStr = new Date().toLocaleDateString('en-US', {
+        month: 'long', day: 'numeric', year: 'numeric'
+    });
+
+    // ── Subject & body ────────────────────────────────────────────────────────
+    const emailSubject =
+        `Attendance Update – ${subjectName}, as of the ${ordinal(totalSessions)} Day of the Semester`;
+
+    // Plain-text body for mailto: (Gmail will preserve line breaks)
+    const body =
+`Hi ${studentName},
+
+This is an update regarding your attendance in ${subjectName}, handled by ${instructorName}. As of ${todayStr} — the ${ordinal(totalSessions)} day of this semester — here is your attendance record:
+
+  • Presents  : ${present}
+  • Lates     : ${late}
+  • Absences  : ${absent}
+
+Please review these details and inform me if you believe there are discrepancies. Maintaining consistent attendance is important for keeping up with the course requirements, so make sure you continue to monitor your status.
+
+If you have questions or need clarification, feel free to reach out.
+
+Best regards,
+${instructorName}
+${instructorEmail}`;
+
+    // ── Open Gmail compose fully pre-filled ───────────────────────────────────
+    // Uses Gmail's web compose URL — to, subject, and body are all pre-filled.
+    // The instructor only needs to click Send.
+    const gmailUrl = 'https://mail.google.com/mail/?view=cm&fs=1'
+        + '&to='   + encodeURIComponent(studentEmail)
+        + '&su='   + encodeURIComponent(emailSubject)
+        + '&body=' + encodeURIComponent(body);
+
+    window.open(gmailUrl, '_blank');
+}
+
 
 // ── SCHEDULE ──────────────────────────────────────────────────────────────────
 
@@ -433,26 +992,26 @@ function renderDayFilters() {
 
 async function saveSubject() {
     const payload = {
-        class_code: currentOpenedFolder || null,
-        subject:    document.getElementById('modalSubName').value,
-        day:        document.getElementById('modalDaySelect').value,
-        room:       document.getElementById('modalRoom').value,
-        time:       document.getElementById('modalTimeFrom').value + ' - ' + document.getElementById('modalTimeTo').value,
+        class_code:  currentOpenedFolder || null,
+        subject:     document.getElementById('modalSubName').value,
+        day:         document.getElementById('modalDaySelect').value,
+        room:        document.getElementById('modalRoom').value,
+        time:        document.getElementById('modalTimeFrom').value + ' - ' + document.getElementById('modalTimeTo').value,
+        old_subject: _editingSchedOldSubject || '',
     };
-
     if (editSchedId > -1) {
         await authFetch(`/api/schedules/${editSchedId}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
         });
     } else {
-        await fetch('/api/schedules', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+        await authFetch('/api/schedules', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
         });
     }
+    _editingSchedOldSubject = '';
+    selectedDay = payload.day;
     await loadSchedules();
     renderDayFilters();
     closeTaskModal();
@@ -462,16 +1021,32 @@ function editSchedule(id) {
     const s = schedules.find(item => item.id === id);
     if (!s) return;
     editSchedId = s.id;
-    document.getElementById('modalSubName').value  = s.subject;
-    document.getElementById('modalDaySelect').value = s.day;
-    document.getElementById('modalRoom').value     = s.room;
+    _editingSchedOldSubject = s.subject;
+    document.getElementById('modalSubName').value   = s.subject;
+    document.getElementById('modalRoom').value      = s.room;
+    document.getElementById('taskModalTitle').textContent = 'Edit Schedule';
+    const daySelect = document.getElementById('modalDaySelect');
+    Array.from(daySelect.options).forEach(opt => { opt.selected = opt.value === s.day; });
+    const timeParts = (s.time || '').split(' - ');
+    if (timeParts.length === 2) {
+        Array.from(document.getElementById('modalTimeFrom').options).forEach(opt => { opt.selected = opt.value === timeParts[0].trim(); });
+        Array.from(document.getElementById('modalTimeTo').options).forEach(opt =>   { opt.selected = opt.value === timeParts[1].trim(); });
+    }
     document.getElementById('taskModal').classList.remove('hidden');
 }
 
 // ── FOLDER MODAL (Create/Edit Class) ─────────────────────────────────────────
 
 async function saveFolderModal() {
-    const subject = document.getElementById('modalSubject').value;
+    // Subject comes from the hidden field populated by autoFillClassModal
+    // Falls back to select value if no autofill happened
+    const subjectNameEl = document.getElementById('modalSubjectName');
+    const subject = (subjectNameEl && subjectNameEl.value)
+                    ? subjectNameEl.value
+                    : document.getElementById('modalSubject').options[
+                        document.getElementById('modalSubject').selectedIndex
+                      ]?.dataset?.subject
+                      || document.getElementById('modalSubject').value;
     const section = document.getElementById('modalSection').value;
     const year    = document.getElementById('modalYear').value;
 
@@ -516,114 +1091,653 @@ function editFolder(class_code) {
 
 async function submitStudentForm(formEl) {
     const formData = new FormData(formEl);
-    // Ensure class_code is set (backup in case hidden field is empty)
-    if (!formData.get('class_code')) {
-        formData.set('class_code', currentOpenedFolder);
-    }
+    if (!formData.get('class_code')) formData.set('class_code', currentOpenedFolder);
+    const name=( formData.get('name')||'').trim(), sr=(formData.get('sr_code')||'').trim(),
+          phone=(formData.get('number')||'').trim(), email=(formData.get('email')||'').trim(),
+          photo=formData.get('photo'), sig=formData.get('signature');
+    const errors=[];
+    if(!name) errors.push('Full name is required.');
+    if(!sr)   errors.push('SR Code is required.');
+    if(!email||!email.includes('@')) errors.push('A valid email address is required.');
+    const digits=phone.replace(/[\s\-]/g,'');
+    if(!phone) errors.push('Contact number is required.');
+    else if(!/^0\d{10}$/.test(digits)) errors.push('Contact number must be 11 digits starting with 0 (e.g. 09994408409).');
+    if(!photo||photo.size===0) errors.push('Student photo (ID picture) is required for face recognition.');
+    else if(!['image/jpeg','image/jpg','image/png'].includes(photo.type)) errors.push('Photo must be JPG or PNG.');
+    if(!sig||sig.size===0) errors.push('E-Signature image is required.');
+    else if(!['image/jpeg','image/jpg','image/png'].includes(sig.type)) errors.push('Signature must be JPG or PNG.');
+    if(errors.length>0){showRegError(errors);return;}
     try {
-        const session = JSON.parse(localStorage.getItem('active_session') || '{}');
-        const res  = await fetch('/api/add_student', {
-            method: 'POST',
-            body: formData,
-            headers: { 'X-Instructor-Email': session.email || '' }
-        });
-        const data = await res.json();
-        if (!res.ok) {
-            alert('Error: ' + (data.error || 'Failed to save student.'));
-            return;
+        const session=JSON.parse(localStorage.getItem('active_session')||'{}');
+        const res=await fetch('/api/add_student',{method:'POST',body:formData,headers:{'X-Instructor-Email':session.email||''}});
+        const data=await res.json();
+        if(!res.ok){showRegError([data.error||'Failed to save student.']);return;}
+        closeRegModal(); openFolderView(currentOpenedFolder);
+    } catch(e){showRegError(['Server error: '+e.message]);}
+}
+function showRegError(errors){
+    const old=document.getElementById('regErrorBox'); if(old) old.remove();
+    const box=document.createElement('div'); box.id='regErrorBox';
+    box.style.cssText='background:#FFF5F5;border:1px solid #FCA5A5;border-radius:12px;padding:12px 16px;margin-bottom:16px;font-size:12px;color:#B91C1C;';
+    box.innerHTML=`<p style="font-weight:800;margin:0 0 6px">Please fix the following:</p><ul style="margin:0;padding-left:16px;">${errors.map(e=>`<li style="margin-bottom:3px">${e}</li>`).join('')}</ul>`;
+    const form=document.getElementById('studentRegForm');
+    if(form){const first=form.querySelector('input,select');if(first)form.insertBefore(box,first);else form.prepend(box);box.scrollIntoView({behavior:'smooth',block:'center'});}
+}
+
+// ── CAMERA ───────────────────────────────────────────────────────────────────
+// Attendance windows (minutes after camera opens):
+//   0 – PRESENT_WINDOW  → Present
+//   PRESENT_WINDOW – LATE_WINDOW → Late
+//   > LATE_WINDOW OR never scanned → Absent
+
+const PRESENT_WINDOW = 5;   // minutes
+const LATE_WINDOW    = 15;  // minutes
+
+let _pollInterval    = null;
+let _cameraOpenTime  = null;   // unix ms when camera opened
+let _dismissTimer    = null;   // auto-close at class end
+let _scannedStudents = {};     // { normalizedName: { displayName, status, time } }
+let _customSchedule  = null;   // set when instructor picks make-up schedule
+
+// Normalize name: "Kelvin_Lloyd_Africa" → "Kelvin Lloyd Africa"
+function normalizeName(n) { return n.replace(/_/g, ' ').trim(); }
+
+function getStatusForScanTime(firstSeenUnix) {
+    if (!_cameraOpenTime) return 'Present';
+    const mins = (firstSeenUnix * 1000 - _cameraOpenTime) / 60000;
+    if (mins <= PRESENT_WINDOW) return 'Present';
+    if (mins <= LATE_WINDOW)    return 'Late';
+    return 'Absent';
+}
+
+// ── SCHEDULE CHECK MODAL ─────────────────────────────────────────────────────
+
+function openCamera() {
+    if (!currentOpenedFolder) return;
+
+    const cls = classFolders.find(f => f.id === currentOpenedFolder) || {};
+
+    // Find the schedule linked to this class subject
+    const classSchedule = schedules.find(s =>
+        s.subject && cls.subject &&
+        s.subject.trim().toLowerCase() === cls.subject.trim().toLowerCase()
+    );
+
+    if (!classSchedule) {
+        // No schedule set — go straight to make-up modal
+        showMakeupScheduleModal(cls, null, () => startCameraSession(cls, _customSchedule));
+        return;
+    }
+
+    // Check if today's day matches the schedule day
+    const days      = ['SUN','MON','TUE','WED','THU','FRI','SAT'];
+    const todayDay  = days[new Date().getDay()];
+    const schedDay  = classSchedule.day;
+
+    // Check if current time is within schedule window (+30 min buffer)
+    const now        = new Date();
+    const timeParts  = (classSchedule.time || '').split(' - ');
+    let withinTime   = false;
+    if (timeParts.length === 2) {
+        const start = parseTimeStr(timeParts[0]);
+        const end   = parseTimeStr(timeParts[1]);
+        if (start && end) {
+            const buffer = 30 * 60000;
+            withinTime   = now >= new Date(start.getTime() - buffer) && now <= new Date(end.getTime() + buffer);
         }
-        closeRegModal();
-        openFolderView(currentOpenedFolder);  // reload student list
-    } catch(e) {
-        alert('Failed to save student: ' + e.message);
+    }
+
+    const dayMatch  = todayDay === schedDay;
+    const onSchedule = dayMatch && withinTime;
+
+    if (onSchedule) {
+        // All good — open directly
+        _customSchedule = null;
+        startCameraSession(cls, classSchedule);
+    } else {
+        // Wrong day or time — show warning
+        showScheduleWarningModal(cls, classSchedule, todayDay);
     }
 }
 
-// ── CAMERA ────────────────────────────────────────────────────────────────────
-// Connects to Flask /video_feed (MJPEG stream from facerecog.py)
-// Polls /api/present_students every 2 seconds for the recognition panel
+function showScheduleWarningModal(cls, classSchedule, todayDay) {
+    // Remove existing modal if any
+    const existing = document.getElementById('scheduleWarningModal');
+    if (existing) existing.remove();
 
-let _pollInterval = null;
+    window._warningCls      = cls;
+    window._warningSchedule = classSchedule;
 
-function openCamera() {
-    document.getElementById('recognizedList').innerHTML = "";
+    const modal = document.createElement('div');
+    modal.id = 'scheduleWarningModal';
+    modal.className = 'fixed inset-0 bg-black/60 backdrop-blur-md z-[300] flex items-center justify-center p-4';
+    modal.innerHTML = `
+        <div class="bg-white rounded-[2rem] w-full max-w-md p-8 shadow-2xl">
+            <div class="flex items-center space-x-3 mb-4">
+                <div class="w-12 h-12 bg-red-100 rounded-2xl flex items-center justify-center text-[#D32F2F]">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+                    </svg>
+                </div>
+                <div>
+                    <h2 class="text-xl font-black text-gray-900">Wrong Schedule!</h2>
+                    <p class="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Schedule mismatch detected</p>
+                </div>
+            </div>
+            <div class="bg-red-50 rounded-2xl p-4 mb-6 text-sm">
+                <p class="font-black text-[#D32F2F] mb-1">${cls.subject || ''} — ${cls.section || ''}</p>
+                <p class="text-gray-600 text-xs">Scheduled: <b>${classSchedule.day}</b> | <b>${classSchedule.time}</b> | Room <b>${classSchedule.room || 'N/A'}</b></p>
+                <p class="text-gray-600 text-xs mt-1">Today is: <b>${todayDay}</b> | Current time: <b>${new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</b></p>
+            </div>
+            <p class="text-sm text-gray-500 mb-6">This class is not currently scheduled. Do you want to set a <b>make-up / customized schedule</b> and continue, or cancel?</p>
+            <div class="flex space-x-3">
+                <button onclick="document.getElementById('scheduleWarningModal').remove()"
+                    class="flex-1 py-4 text-gray-400 font-bold rounded-xl border border-gray-100 hover:bg-gray-50 transition">
+                    Cancel
+                </button>
+                <button onclick="_onMakeupConfirmed()"
+                    class="flex-1 py-3 bg-[#D32F2F] text-white font-bold rounded-xl shadow-lg hover:bg-[#B71C1C] transition text-xs leading-tight">
+                    Set Make-Up<br>Schedule
+                </button>
+            </div>
+        </div>`;
+    document.body.appendChild(modal);
+}
+
+function _onMakeupConfirmed() {
+    const existing = document.getElementById('scheduleWarningModal');
+    if (existing) existing.remove();
+    const cls      = window._warningCls      || {};
+    const schedule = window._warningSchedule || null;
+    showMakeupScheduleModal(cls, schedule, () => startCameraSession(cls, _customSchedule));
+}
+
+
+
+function showMakeupScheduleModal(cls, originalSchedule, onConfirm) {
+    const existing = document.getElementById('makeupModal');
+    if (existing) existing.remove();
+
+    // Today's day — fixed, not selectable
+    const days    = ['SUN','MON','TUE','WED','THU','FRI','SAT'];
+    const todayDay = days[new Date().getDay()];
+
+
+
+    // Build time options
+    let timeOpts = '';
+    for (let i = 7; i <= 21; i++) {
+        const h  = i > 12 ? i - 12 : i;
+        const ap = i >= 12 ? 'PM' : 'AM';
+        timeOpts += `<option value="${h}:00 ${ap}">${h}:00 ${ap}</option>`;
+        timeOpts += `<option value="${h}:30 ${ap}">${h}:30 ${ap}</option>`;
+    }
+
+    const modal = document.createElement('div');
+    modal.id =      'makeupModal';
+    modal.className = 'fixed inset-0 bg-black/60 backdrop-blur-md z-[300] flex items-center justify-center p-4';
+    modal.innerHTML = `
+        <div class="bg-white rounded-[2rem] w-full max-w-md p-8 shadow-2xl">
+            <h2 class="text-xl font-black text-[#D32F2F] mb-1">Make-Up / Custom Schedule</h2>
+            <p class="text-xs text-gray-400 font-bold mb-6 uppercase tracking-wider">${cls.subject || ''} — ${cls.section || ''}</p>
+            <div class="space-y-4">
+                <div>
+                    <label class="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 block">Day</label>
+                    <!-- Day is locked to today — cannot be changed -->
+                    <div class="reg-input bg-gray-100 text-gray-700 font-black cursor-not-allowed"
+                         style="pointer-events:none;">${todayDay} &nbsp;<span class="text-[9px] text-gray-400 font-normal">(Today — auto-set)</span>
+                    </div>
+
+                </div>
+                <div>
+                    <label class="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 block">Room</label>
+                    <input id="mkRoom" type="text" placeholder="Room (e.g. VMB 401)"
+                        value="${originalSchedule ? originalSchedule.room || '' : ''}" class="reg-input">
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 block">Start Time</label>
+                        <select id="mkFrom" class="reg-input">${timeOpts}</select>
+                    </div>
+                    <div>
+                        <label class="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 block">End Time</label>
+                        <select id="mkTo" class="reg-input">${timeOpts}</select>
+                    </div>
+                </div>
+            </div>
+            <div class="flex space-x-3 mt-8">
+                <button onclick="document.getElementById('makeupModal').remove()"
+                    class="flex-1 py-4 text-gray-400 font-bold rounded-xl border border-gray-100 hover:bg-gray-50 transition">
+                    Cancel
+                </button>
+                <button onclick="confirmMakeupSchedule('${todayDay}')"
+                    class="flex-1 py-4 bg-[#D32F2F] text-white font-bold rounded-xl shadow-lg hover:bg-[#B71C1C] transition">
+                    Start Scanning
+                </button>
+            </div>
+        </div>`;
+    document.body.appendChild(modal);
+
+    // Store callback for when confirmed
+    window._makeupOnConfirm = onConfirm;
+}
+
+function confirmMakeupSchedule(day) {
+    const room = document.getElementById('mkRoom').value;
+    const from = document.getElementById('mkFrom').value;
+    const to   = document.getElementById('mkTo').value;
+
+    _customSchedule = { day, room, time: `${from} - ${to}`, isMakeup: true };
+
+    document.getElementById('makeupModal').remove();
+
+    if (window._makeupOnConfirm) {
+        window._makeupOnConfirm();
+        window._makeupOnConfirm = null;
+    }
+}
+
+// ── CORE CAMERA SESSION ───────────────────────────────────────────────────────
+
+// ── CAMERA SOURCE HELPERS ────────────────────────────────────────────────────
+
+function getSelectedCameraSource() {
+    const sel = document.getElementById('cameraSourceSelect');
+    if (!sel) return '0';
+    const val = sel.value;
+    if (val === 'rtsp') {
+        const url = (document.getElementById('rtspUrlInput')?.value || '').trim();
+        return url || '"rtsp://admin:Sentinel_04@192.168.137.166:554/Streaming/Channels/101"';
+    }
+    return val; // "0" or "1"
+}
+
+// Show/hide RTSP URL input when dropdown changes
+document.addEventListener('change', function(e) {
+    if (e.target && e.target.id === 'cameraSourceSelect') {
+        const rtspInput = document.getElementById('rtspUrlInput');
+        if (rtspInput) {
+            rtspInput.classList.toggle('hidden', e.target.value !== 'rtsp');
+        }
+    }
+});
+
+async function refreshCameraFeed() {
+    const dummyFeed   = document.getElementById('dummyFeed');
+    const loadingEl   = document.getElementById('cameraLoading');
+    if (!dummyFeed) return;
+
+    // Show a brief spinner
+    dummyFeed.classList.add('hidden');
+    loadingEl.classList.remove('hidden');
+    loadingEl.innerHTML = `
+        <div class="w-16 h-16 border-4 border-t-[#D32F2F] border-gray-800 rounded-full animate-spin mb-4"></div>
+        <h3 class="text-white font-bold text-base mb-1">Restarting Camera...</h3>
+        <p class="text-gray-400 text-xs">Please wait a moment.</p>`;
+
+    try {
+        // Stop existing camera on backend then restart with selected source
+        await authFetch('/api/stop_camera', { method: 'POST' });
+        _camera_started_flag = false;
+    } catch {}
+
+    const source = getSelectedCameraSource();
+    try {
+        await authFetch('/api/start_camera', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ source })
+        });
+    } catch (e) {
+        loadingEl.innerHTML = `
+            <div class="flex flex-col items-center justify-center text-center px-8">
+                <h3 class="text-white font-bold text-lg mb-2">Camera Failed to Start</h3>
+                <p class="text-gray-400 text-xs">Check camera source and try again.</p>
+            </div>`;
+        return;
+    }
+
+    // Reload the video feed image with a cache-busting timestamp
+    setTimeout(() => {
+        loadingEl.classList.add('hidden');
+        dummyFeed.classList.remove('hidden');
+        dummyFeed.innerHTML = '';
+        const img = document.createElement('img');
+        img.style.cssText = 'width:100%; height:100%; object-fit:cover;';
+        img.src = `/video_feed?t=${Date.now()}`;
+        img.onerror = () => {
+            dummyFeed.innerHTML = `
+                <div class="flex flex-col items-center justify-center h-full text-center p-8">
+                    <h3 class="text-white font-bold text-lg mb-2">No Video Feed</h3>
+                    <p class="text-gray-400 text-xs">Could not connect to camera stream.</p>
+                </div>`;
+        };
+        dummyFeed.appendChild(img);
+    }, 1500);
+}
+
+let _camera_started_flag = false;
+
+async function startCameraSession(cls, activeSchedule) {
+    _scannedStudents     = {};
+    _cameraOpenTime      = Date.now();
+    _camera_started_flag = false;
+
+    document.getElementById('recognizedList').innerHTML = '';
     document.getElementById('cameraModal').classList.remove('hidden');
     document.getElementById('cameraLoading').classList.remove('hidden');
+    document.getElementById('cameraLoading').innerHTML = `
+        <div class="w-20 h-20 border-4 border-t-[#D32F2F] border-gray-800 rounded-full animate-spin mb-6"></div>
+        <h3 class="text-white font-bold text-lg mb-2">Initializing Camera...</h3>`;
     document.getElementById('dummyFeed').classList.add('hidden');
+    updateDetectionHeader();
+
+    // Get selected camera source from dropdown
+    const source = getSelectedCameraSource();
+
+    // Start camera on backend with selected source
+    try {
+        await authFetch('/api/start_camera', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ source })
+        });
+        _camera_started_flag = true;
+    } catch (e) {
+        document.getElementById('cameraLoading').innerHTML = `
+            <div class="flex flex-col items-center justify-center text-center px-8">
+                <h3 class="text-white font-bold text-lg mb-2">Camera Failed to Start</h3>
+                <p class="text-gray-400 text-xs">Check that your camera is connected and not in use.</p>
+                <button onclick="refreshCameraFeed()"
+                    class="mt-4 px-5 py-2 bg-[#D32F2F] text-white rounded-xl font-bold text-xs hover:bg-[#B71C1C] transition">
+                    Try Again
+                </button>
+            </div>`;
+        return;
+    }
 
     setTimeout(() => {
         document.getElementById('cameraLoading').classList.add('hidden');
-
-        // Replace dummyFeed content with real MJPEG stream
         const dummyFeed = document.getElementById('dummyFeed');
         dummyFeed.classList.remove('hidden');
-        dummyFeed.innerHTML = `<img src="/video_feed" style="width:100%; height:100%; object-fit:cover;">`;
+        dummyFeed.innerHTML = '';
 
-        // Poll present students every 2 seconds
+        const img = document.createElement('img');
+        img.style.cssText = 'width:100%; height:100%; object-fit:cover;';
+        img.src = `/video_feed?t=${Date.now()}`;
+        img.onerror = () => {
+            dummyFeed.innerHTML = `
+                <div class="flex flex-col items-center justify-center h-full text-center p-8">
+                    <h3 class="text-white font-bold text-lg mb-2">No Video Feed</h3>
+                    <p class="text-gray-400 text-xs">Could not connect to camera stream.</p>
+                    <button onclick="refreshCameraFeed()"
+                        class="mt-4 px-5 py-2 bg-[#D32F2F] text-white rounded-xl font-bold text-xs hover:bg-[#B71C1C] transition">
+                        Retry
+                    </button>
+                </div>`;
+        };
+        dummyFeed.appendChild(img);
+
+        // Poll scan log every 2 seconds
         _pollInterval = setInterval(async () => {
             try {
-                const res      = await authFetch('/api/present_students');
-                const students = await res.json();
-                const list     = document.getElementById('recognizedList');
-                list.innerHTML = students.map(name => `
-                    <div class="flex justify-between border-b pb-4">
-                        <div>
-                            <p class="text-sm font-black">${name}</p>
-                            <p class="text-[9px] font-bold text-gray-400">${new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</p>
-                        </div>
-                        <span class="text-[10px] font-black text-green-500 uppercase">Present</span>
-                    </div>`).join('');
+                const res     = await authFetch('/api/scan_log');
+                const scanLog = await res.json();
+
+                Object.entries(scanLog).forEach(([rawName, firstSeenUnix]) => {
+                    const displayName = normalizeName(rawName);
+                    const status      = getStatusForScanTime(firstSeenUnix);
+                    const time        = new Date(firstSeenUnix * 1000)
+                                          .toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                    _scannedStudents[displayName] = { displayName, status, time, rawName };
+                });
+
+                renderAttendancePanel();
+                updateDetectionHeader();
             } catch {}
         }, 2000);
-    }, 2000);
+
+        // Auto-dismiss at class end time
+        if (activeSchedule && activeSchedule.time) {
+            const parts = activeSchedule.time.split(' - ');
+            if (parts.length === 2) {
+                const endTime = parseTimeStr(parts[1].trim());
+                if (endTime) {
+                    const msUntilEnd = endTime.getTime() - Date.now();
+                    if (msUntilEnd > 0) {
+                        _dismissTimer = setTimeout(() => closeCamera(true), msUntilEnd);
+                    }
+                }
+            }
+        }
+    }, 1500);
 }
 
-function closeCamera() {
-    document.getElementById('cameraModal').classList.add('hidden');
+function parseTimeStr(timeStr) {
+    try {
+        const [time, ampm] = timeStr.trim().split(' ');
+        let [h, m] = time.split(':').map(Number);
+        if (ampm === 'PM' && h !== 12) h += 12;
+        if (ampm === 'AM' && h === 12) h = 0;
+        const d = new Date();
+        d.setHours(h, m, 0, 0);
+        return d;
+    } catch { return null; }
+}
+
+function renderAttendancePanel() {
+    const list = document.getElementById('recognizedList');
+    if (!list) return;
+    const entries = Object.values(_scannedStudents);
+    if (entries.length === 0) {
+        list.innerHTML = '<p class="text-[10px] text-gray-400 text-center py-4">No faces detected yet...</p>';
+        return;
+    }
+    const order = { Present: 0, Late: 1, Absent: 2 };
+    entries.sort((a, b) => order[a.status] - order[b.status]);
+    list.innerHTML = entries.map(e => {
+        const color = e.status === 'Present' ? 'text-green-500'
+                    : e.status === 'Late'    ? 'text-yellow-500' : 'text-red-500';
+        const bg    = e.status === 'Present' ? 'bg-green-50'
+                    : e.status === 'Late'    ? 'bg-yellow-50'   : 'bg-red-50';
+        return `
+            <div class="flex justify-between items-center ${bg} px-3 py-3 rounded-xl mb-2">
+                <div>
+                    <p class="text-sm font-black text-gray-900">${e.displayName}</p>
+                    <p class="text-[9px] font-bold text-gray-400">${e.time}</p>
+                </div>
+                <span class="text-[10px] font-black ${color} uppercase">${e.status}</span>
+            </div>`;
+    }).join('');
+}
+
+function updateDetectionHeader() {
+    const vals    = Object.values(_scannedStudents);
+    const present = vals.filter(e => e.status === 'Present').length;
+    const late    = vals.filter(e => e.status === 'Late').length;
+    const el      = document.querySelector('#cameraModal .flex.gap-2.mt-2');
+    if (!el) return;
+    el.innerHTML = `
+        <span class="bg-green-100 text-green-600 text-[9px] font-black px-2 py-1 rounded">PRESENT: ${present}</span>
+        <span class="bg-yellow-100 text-yellow-600 text-[9px] font-black px-2 py-1 rounded">LATE: ${late}</span>`;
+}
+
+async function closeCamera(autoDismiss = false) {
     if (_pollInterval) { clearInterval(_pollInterval); _pollInterval = null; }
+    if (_dismissTimer) { clearTimeout(_dismissTimer);  _dismissTimer = null; }
+
+    if (autoDismiss) {
+        // Auto-dismiss: save immediately without asking
+        await _doSaveAndClose();
+        showToast('Class dismissed! Attendance saved automatically.', 'success');
+        return;
+    }
+
+    // Show confirmation dialog before saving
+    const modal    = document.getElementById('customConfirm');
+    const descEl   = document.getElementById('confirmDesc');
+    const confirmBtn = document.getElementById('confirmBtn');
+
+    // Count how many students were scanned
+    const present = recognizer_present_count || 0;
+    descEl.innerText = `Save attendance and close the camera?`;
+
+    modal.classList.remove('hidden');
+    confirmBtn.onclick = async () => {
+        modal.classList.add('hidden');
+        await _doSaveAndClose();
+        showToast('Attendance saved successfully!', 'success');
+    };
+
+    // Update confirm button label
+    document.getElementById('confirmBtn').textContent = 'Save & Close';
+
+    // Override the No/Cancel button to close camera WITHOUT saving
+    const noBtn = document.querySelector('#customConfirm .flex button:first-child');
+    if (noBtn) {
+        const origOnclick = noBtn.getAttribute('onclick');
+        noBtn.onclick = async () => {
+            modal.classList.add('hidden');
+            document.getElementById('cameraModal').classList.add('hidden');
+            if (noBtn) noBtn.setAttribute('onclick', origOnclick || 'closeConfirm()');
+            document.getElementById('confirmBtn').textContent = 'Yes';
+            // Stop the camera on the backend so it is fully released
+            try { await authFetch('/api/stop_camera', { method: 'POST' }); } catch {}
+            _cameraOpenTime  = null;
+            _customSchedule  = null;
+            _scannedStudents = {};
+            showToast('Camera closed. Attendance was NOT saved.', 'error');
+        };
+    }
 }
 
-// Save attendance from camera panel
+async function _doSaveAndClose() {
+    await saveAttendanceFromCamera();
+    document.getElementById('cameraModal').classList.add('hidden');
+    _cameraOpenTime  = null;
+    _customSchedule  = null;
+    _scannedStudents = {};
+}
+
+// keep a rough count for the confirm message
+let recognizer_present_count = 0;
+
 async function saveAttendanceFromCamera() {
     if (!currentOpenedFolder) return;
     const cls = classFolders.find(f => f.id === currentOpenedFolder) || {};
 
-    try {
-        const res      = await authFetch('/api/present_students');
-        const present  = await res.json();
+    // Capture session time NOW before any async calls that might clear _cameraOpenTime
+    const sessionTime = _cameraOpenTime
+        ? new Date(_cameraOpenTime).toTimeString().substring(0, 8)
+        : new Date().toTimeString().substring(0, 8);
 
-        // Build all students list: present ones + mark rest as absent
+    try {
+        // Stop camera and get final scan log from backend
+        const stopRes  = await authFetch('/api/stop_camera', { method: 'POST' });
+        const stopData = await stopRes.json();
+        const scanLog  = stopData.scan_log || {};   // { rawName: unix_timestamp }
+
+        // Get all registered students
         const allRes  = await authFetch(`/api/students/${currentOpenedFolder}`);
         const allStud = await allRes.json();
 
-        const records = allStud.map(s => ({
-            name:      s.name,
-            sr_code:   s.sr_code || '',
-            status:    present.includes(s.name) ? 'Present' : 'Absent',
-            timestamp: present.includes(s.name) ? new Date().toTimeString().substring(0,8) : ''
-        }));
+        const records = allStud.map(s => {
+            // Try matching by normalized name (handles underscore vs space)
+            const normalizedStudentName = s.name.trim();
+            // Find matching key in scanLog (scanLog keys may have underscores)
+            const matchKey = Object.keys(scanLog).find(k =>
+                normalizeName(k).toLowerCase() === normalizedStudentName.toLowerCase()
+            );
 
-        await authFetch('/api/save_attendance', {
-            method: 'POST',
+            if (matchKey) {
+                const firstSeenUnix = scanLog[matchKey];
+                const status        = getStatusForScanTime(firstSeenUnix);
+                // Build full timestamp string: "YYYY-MM-DD HH:MM:SS"
+                const scannedAt     = new Date(firstSeenUnix * 1000);
+                const timestamp     = scannedAt.toTimeString().substring(0, 8);
+                return { name: s.name, sr_code: s.sr_code || '', status, timestamp };
+            }
+            // Not scanned → Absent
+            return { name: s.name, sr_code: s.sr_code || '', status: 'Absent', timestamp: '' };
+        });
+
+        // Use custom schedule info if makeup class
+        const activeSchedule = _customSchedule || schedules.find(s =>
+            s.subject && cls.subject &&
+            s.subject.trim().toLowerCase() === cls.subject.trim().toLowerCase()
+        );
+
+        const saveRes = await authFetch('/api/save_attendance', {
+            method:  'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                class_code: currentOpenedFolder,
-                section:    cls.section || '',
-                subject:    cls.subject || '',
-                records:    records
+                class_code:   currentOpenedFolder,
+                section:      cls.section  || '',
+                subject:      cls.subject  || '',
+                room:         activeSchedule ? activeSchedule.room || '' : '',
+                session_time: sessionTime,
+                records
             })
         });
 
-        closeCamera();
-        alert('Attendance saved!');
-    } catch {
-        alert('Failed to save attendance.');
+        if (!saveRes.ok) {
+            const err = await saveRes.json().catch(() => ({}));
+            throw new Error(err.error || `HTTP ${saveRes.status}`);
+        }
+
+        // Update present count for confirm dialog
+        recognizer_present_count = records.filter(r => r.status !== 'Absent').length;
+
+    } catch (e) {
+        console.error('Save attendance failed:', e);
+        showToast('Failed to save attendance.', 'error');
     }
 }
 
+function showToast(msg, type = 'success') {
+    let toast = document.getElementById('attendanceToast');
+    if (!toast) {
+        toast = document.createElement('div');
+        toast.id = 'attendanceToast';
+        toast.style.cssText = `position:fixed;bottom:30px;left:50%;transform:translateX(-50%);
+            padding:14px 28px;border-radius:12px;font-weight:700;font-size:13px;
+            z-index:9999;transition:opacity 0.4s;box-shadow:0 8px 24px rgba(0,0,0,0.15);`;
+        document.body.appendChild(toast);
+    }
+    toast.textContent    = msg;
+    toast.style.background = type === 'success' ? '#1B5E20' : '#B71C1C';
+    toast.style.color      = 'white';
+    toast.style.opacity    = '1';
+    setTimeout(() => { toast.style.opacity = '0'; }, 3500);
+}
+
+
 // ── CONFIRM DIALOG (unchanged logic, updated backend calls) ───────────────────
 
-function confirmAction(action, id) {
+async function confirmAction(action, id) {
+    // For deleteSubject: check usage FIRST before showing any modal
+    if (action === 'deleteSubject') {
+        try {
+            const uRes = await authFetch(`/api/schedules/${id}/check_usage`);
+            const used = await uRes.json();
+            if (used.length > 0) {
+                // Schedule is in use — show blocking "in use" modal, no delete option
+                showScheduleInUseModal();
+                return;
+            }
+        } catch {}
+        // Not in use — show normal confirm modal
+        const modal = document.getElementById('customConfirm');
+        modal.classList.remove('hidden');
+        document.getElementById('confirmDesc').innerText = "Proceed with this action?";
+        document.getElementById('confirmBtn').onclick = async () => {
+            await authFetch(`/api/schedules/${id}`, { method: 'DELETE' });
+            await loadSchedules(); renderDayFilters();
+            closeConfirm();
+        };
+        return;
+    }
+
     const modal = document.getElementById('customConfirm');
     modal.classList.remove('hidden');
     document.getElementById('confirmDesc').innerText = "Proceed with this action?";
@@ -632,19 +1746,38 @@ function confirmAction(action, id) {
         if (action === 'deleteFolder') {
             await fetch(`/api/delete_class/${id}`, { method: 'DELETE' });
             showPage('classes');
-        } else if (action === 'deleteSubject') {
-            await authFetch(`/api/schedules/${id}`, { method: 'DELETE' });
-            await loadSchedules();
-            renderDayFilters();
         } else if (action === 'logout') {
             localStorage.removeItem('active_session');
-            window.location.href = "login.html";
+            window.location.href = "/";
         }
         closeConfirm();
     };
 }
 
-function closeConfirm() { document.getElementById('customConfirm').classList.add('hidden'); }
+function showScheduleInUseModal() {
+    const ex = document.getElementById('scheduleInUseModal'); if (ex) ex.remove();
+    const modal = document.createElement('div');
+    modal.id = 'scheduleInUseModal';
+    modal.className = 'fixed inset-0 bg-black/60 backdrop-blur-md z-[300] flex items-center justify-center p-4';
+    modal.innerHTML = `
+        <div class="bg-white rounded-[2rem] w-full max-w-xs p-8 text-center shadow-2xl">
+            <h3 class="font-black text-xl mb-2">The schedule is in use.</h3>
+            <p class="text-gray-400 text-sm mb-8">This schedule is currently linked to a class folder and cannot be deleted.</p>
+            <button onclick="document.getElementById('scheduleInUseModal').remove()"
+                class="w-full py-3 bg-gray-100 text-gray-600 font-bold rounded-xl hover:bg-gray-200 transition">
+                Cancel
+            </button>
+        </div>`;
+    document.body.appendChild(modal);
+}
+
+
+function closeConfirm() {
+    document.getElementById('customConfirm').classList.add('hidden');
+    // Reset confirm button text to default
+    const btn = document.getElementById('confirmBtn');
+    if (btn) btn.textContent = 'Yes';
+}
 
 // ── MODAL HELPERS (unchanged) ─────────────────────────────────────────────────
 
@@ -660,9 +1793,45 @@ function closeRegModal()   { document.getElementById('regModal').classList.add('
 function closeClassModal() { document.getElementById('classModal').classList.add('hidden'); }
 function closeTaskModal()  { editSchedId = -1; document.getElementById('taskModal').classList.add('hidden'); }
 function openTaskModal()   { editSchedId = -1; document.getElementById('taskModal').classList.remove('hidden'); }
-function openFolderModal() { editIdx = -1; document.getElementById('classModal').classList.remove('hidden'); }
+function openFolderModal() {
+    editIdx = -1;
+    populateSubjectSuggestions();   // fill the schedule dropdown before showing
+    document.getElementById('modalSection').value = '';
+    document.getElementById('modalYear').value    = '';
+    document.getElementById('classModal').classList.remove('hidden');
+}
 
 // ── SIDEBAR TOGGLE (unchanged) ────────────────────────────────────────────────
+
+
+// ── SUBJECT SUGGESTIONS (from schedules → class folder modal) ─────────────────
+function populateSubjectSuggestions() {
+    const subjectSelect = document.getElementById('modalSubject');
+    if (!subjectSelect) return;
+
+    subjectSelect.innerHTML = '<option value="">Select Suggested Sched</option>';
+
+    schedules.forEach(sched => {
+        const option       = document.createElement('option');
+        option.value       = sched.id || sched.subject;   // use id for lookup
+        option.dataset.subject = sched.subject;
+        option.dataset.day     = sched.day || '';
+        option.dataset.time    = sched.time || '';
+        option.dataset.room    = sched.room || '';
+        option.textContent = `${sched.subject} (${sched.day || ''} | ${sched.time || ''})`;
+        subjectSelect.appendChild(option);
+    });
+}
+
+function autoFillClassModal(selectedValue) {
+    if (!selectedValue) return;
+    const select   = document.getElementById('modalSubject');
+    const selected = select.querySelector(`option[value="${selectedValue}"]`);
+    if (!selected) return;
+    // Store subject name separately so saveFolderModal can read it
+    document.getElementById('modalSubjectName').value = selected.dataset.subject || selectedValue;
+    console.log("Auto-filled from schedule:", selected.dataset.subject);
+}
 
 function toggleMiniSidebar() {
     const sidebar = document.getElementById('navSidebar');
@@ -674,6 +1843,65 @@ function toggleMiniSidebar() {
 
 // ── DOCUMENT VIEWER (unchanged — now uses real PDF) ───────────────────────────
 
-function openRealDoc(class_code, date) {
-    window.open(`/api/download_pdf/${class_code}/${date}`, '_blank');
+async function openRealDoc(class_code, date) {
+    // Load the session detail and show it in the docViewer panel
+    const cls = classFolders.find(f => f.id === class_code) || {};
+
+    try {
+        const res     = await authFetch(`/api/attendance/${class_code}/${date}`);
+        const records = await res.json();
+
+        // Find matching schedule for header info
+        const sched = schedules.find(s =>
+            s.subject && cls.subject &&
+            s.subject.toLowerCase() === cls.subject.toLowerCase()
+        );
+
+        let schedHeaderHtml = '';
+        if (sched) {
+            schedHeaderHtml = `
+                <div class="mb-6 p-4 bg-gray-50 rounded-xl text-xs border border-gray-100">
+                    <p class="font-black text-[#D32F2F] uppercase mb-1">Class Schedule Details</p>
+                    <div class="grid grid-cols-2 gap-2 text-gray-700 font-bold">
+                        <div><span class="text-gray-400">SUBJECT:</span> ${cls.subject || ''}</div>
+                        <div><span class="text-gray-400">SECTION:</span> ${cls.section || ''}</div>
+                        <div><span class="text-gray-400">ROOM:</span> ${sched.room || 'N/A'}</div>
+                        <div><span class="text-gray-400">DAY:</span> ${sched.day || 'N/A'}</div>
+                        <div class="col-span-2"><span class="text-gray-400">TIME:</span> ${sched.time || 'N/A'}</div>
+                    </div>
+                </div>`;
+        }
+
+        document.getElementById('docTitle').innerText = `Report: ${date}`;
+        document.getElementById('printArea').innerHTML = `
+            <div class="max-w-2xl mx-auto bg-white shadow-sm border p-12 min-h-[800px]">
+                <h1 class="text-center font-bold text-xl mb-6 underline">ATTENDANCE LOG REPORT</h1>
+                ${schedHeaderHtml}
+                <table class="w-full text-left text-xs">
+                    <thead class="border-b-2 border-black">
+                        <tr>
+                            <th class="py-2">STUDENT NAME</th>
+                            <th class="py-2">TIME IN</th>
+                            <th class="py-2">STATUS</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${records.map(s => `
+                        <tr>
+                            <td class="py-3 font-bold">${s.name}</td>
+                            <td class="py-3">${s.timestamp ? s.timestamp.substring(11,16) : '—'}</td>
+                            <td class="py-3 font-bold text-xs uppercase
+                                ${s.status === 'Present' ? 'text-green-500' :
+                                  s.status === 'Late'    ? 'text-yellow-500' : 'text-red-500'}">
+                                ${s.status}
+                            </td>
+                        </tr>`).join('')}
+                    </tbody>
+                </table>
+            </div>`;
+
+        document.getElementById('docViewer').classList.remove('hidden');
+    } catch(e) {
+        alert('Could not load attendance record: ' + e.message);
+    }
 }

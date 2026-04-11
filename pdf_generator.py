@@ -1,235 +1,249 @@
 """
-pdf_generator.py
-=================
-Generates a downloadable PDF attendance report using ReportLab.
-
-PDF layout:
-    Header:  School name, Section, Subject, Room, Date, Time
-    Body:    Table of Present and Late students with signature column
-    Footer:  Total counts (Present / Late / Absent)
-
-Called by app.py when teacher clicks the download button.
+pdf_generator.py — BSU Attendance Sheet Format
+================================================
+Matches BatStateU-REC-ATT-11 layout:
+  Header:  University name, Reference No., Document Title
+  Info:    Course Code & Title, Faculty, Date, Time, Venue
+  Body:    Two-column numbered student list with Status + Signature
+  Footer:  Summary counts + Faculty signature line
 """
-
-import os
+import os, re
 from datetime import datetime
 from reportlab.lib.pagesizes import A4
 from reportlab.lib import colors
 from reportlab.lib.units import cm
-from reportlab.platypus import (
-    SimpleDocTemplate, Table, TableStyle,
-    Paragraph, Spacer
-)
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, HRFlowable
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.enums import TA_CENTER, TA_LEFT
-
 
 PDF_DIR = "pdf"
 os.makedirs(PDF_DIR, exist_ok=True)
 
-# Brand color matching your #D32F2F theme
 ACCENT = colors.HexColor("#D32F2F")
 LIGHT  = colors.HexColor("#FFEBEE")
 WHITE  = colors.white
 BLACK  = colors.black
 GRAY   = colors.HexColor("#757575")
+LGRAY  = colors.HexColor("#F5F5F5")
 
 
-def generate_attendance_pdf(
-    class_id: int,
-    subject:  str,
-    section:  str,
-    room:     str,
-    date:     str,
-    records:  list      # list of sqlite3.Row from get_attendance_session()
-) -> str:
-    """
-    Generates the PDF and saves it to pdf/ folder.
-    Returns the file path so Flask can serve it as a download.
+def _safe(s):
+    return re.sub(r'[\\/:*?"<>|,\s]', '_', str(s)).strip('_')
 
-    records = rows from attendance table, already sorted:
-        Present → Late → Absent
-    """
 
-    filename = f"{section.replace('-','').replace(' ','')}_{date}.pdf"
-    filepath = os.path.join(PDF_DIR, filename)
+def _fmt_time(ts):
+    if not ts:
+        return ""
+    try:
+        s = str(ts).split(".")[0]
+        if " " in s:
+            t = datetime.strptime(s, "%Y-%m-%d %H:%M:%S")
+        else:
+            t = datetime.strptime(s[:8], "%H:%M:%S")
+        return t.strftime("%I:%M %p")
+    except Exception:
+        return str(ts)[11:16] if len(str(ts)) > 10 else str(ts)
 
-    doc = SimpleDocTemplate(
-        filepath,
-        pagesize=A4,
-        rightMargin=1.5 * cm,
-        leftMargin=1.5 * cm,
-        topMargin=1.5 * cm,
-        bottomMargin=1.5 * cm,
-    )
 
-    styles  = getSampleStyleSheet()
-    story   = []
+def generate_attendance_pdf(class_id, subject, section, room, date,
+                             time_str="", faculty_name="Instructor",
+                             records=None, session_time=""):
+    if records is None:
+        records = []
 
-    # ── Header styles ─────────────────────────────────────────────────────────
-    title_style = ParagraphStyle(
-        "title",
-        parent=styles["Normal"],
-        fontSize=18,
-        fontName="Helvetica-Bold",
-        textColor=ACCENT,
-        alignment=TA_CENTER,
-        spaceAfter=4,
-    )
-    sub_style = ParagraphStyle(
-        "sub",
-        parent=styles["Normal"],
-        fontSize=10,
-        fontName="Helvetica",
-        textColor=GRAY,
-        alignment=TA_CENTER,
-        spaceAfter=2,
-    )
-    label_style = ParagraphStyle(
-        "label",
-        parent=styles["Normal"],
-        fontSize=11,
-        fontName="Helvetica-Bold",
-        textColor=BLACK,
-        alignment=TA_LEFT,
-    )
+    filename = f"Log_{_safe(date)}_{_safe(session_time or 'session')}_{_safe(section)}.pdf"
+    filepath  = os.path.join(PDF_DIR, filename)
 
-    # ── Title ─────────────────────────────────────────────────────────────────
-    story.append(Paragraph("Attendance Report", title_style))
-    story.append(Paragraph("Attendance Monitoring System", sub_style))
-    story.append(Spacer(1, 0.4 * cm))
+    doc = SimpleDocTemplate(filepath, pagesize=A4,
+                            rightMargin=1.5*cm, leftMargin=1.5*cm,
+                            topMargin=1.2*cm,   bottomMargin=1.5*cm)
 
-    # ── Info block ────────────────────────────────────────────────────────────
-    time_str = datetime.now().strftime("%I:%M %p")
-    info_data = [
-        ["Section:",  section,  "Date:",    date],
-        ["Subject:",  subject,  "Time:",    time_str],
-        ["Room:",     room,     "",         ""],
-    ]
-    info_table = Table(info_data, colWidths=[3*cm, 7*cm, 2.5*cm, 5*cm])
-    info_table.setStyle(TableStyle([
-        ("FONTNAME",  (0, 0), (-1, -1), "Helvetica"),
-        ("FONTNAME",  (0, 0), (0, -1), "Helvetica-Bold"),
-        ("FONTNAME",  (2, 0), (2, -1), "Helvetica-Bold"),
-        ("FONTSIZE",  (0, 0), (-1, -1), 10),
-        ("TEXTCOLOR", (0, 0), (0, -1), ACCENT),
-        ("TEXTCOLOR", (2, 0), (2, -1), ACCENT),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+    styles = getSampleStyleSheet()
+    def S(name, **kw):
+        return ParagraphStyle(name, parent=styles["Normal"], **kw)
+
+    hdr_cell = S("hc", fontSize=7.5, fontName="Helvetica-Bold",
+                 textColor=WHITE, alignment=TA_CENTER)
+    body_cell = S("bc", fontSize=8,  fontName="Helvetica", textColor=BLACK)
+    label_s   = S("lb", fontSize=8,  fontName="Helvetica-Bold", textColor=BLACK)
+    value_s   = S("vl", fontSize=9,  fontName="Helvetica",      textColor=BLACK)
+    foot_s    = S("ft", fontSize=7,  fontName="Helvetica",      textColor=GRAY, alignment=TA_CENTER)
+
+    story = []
+
+    # ── DOCUMENT HEADER ───────────────────────────────────────────────────────
+    uni_s = S("uni", fontSize=9, fontName="Helvetica-Bold", alignment=TA_CENTER)
+    doc_s = S("ds",  fontSize=10, fontName="Helvetica-Bold", textColor=ACCENT, alignment=TA_CENTER)
+    ref_s = S("rs",  fontSize=7,  fontName="Helvetica", textColor=GRAY)
+
+    ref_tbl = Table([
+        [Paragraph("Reference No.:", ref_s),  Paragraph("BatStateU-REC-ATT-11", ref_s)],
+        [Paragraph("Effectivity:",    ref_s),  Paragraph("January 3, 2017",       ref_s)],
+        [Paragraph("Revision No.:",   ref_s),  Paragraph("00",                    ref_s)],
+    ], colWidths=[2.4*cm, 2.8*cm])
+
+    hdr_tbl = Table([[
+        Paragraph("Batangas State University\nARASof-Nasugbu Campus", uni_s),
+        Paragraph("ATTENDANCE SHEET\nStudent Class Attendance", doc_s),
+        ref_tbl,
+    ]], colWidths=[4*cm, 8.5*cm, 5.5*cm])
+    hdr_tbl.setStyle(TableStyle([
+        ("BOX",    (0,0),(-1,-1), 1,   BLACK),
+        ("INNERGRID",(0,0),(-1,-1), 0.5, colors.HexColor("#CCCCCC")),
+        ("VALIGN", (0,0),(-1,-1), "MIDDLE"),
+        ("TOPPADDING",(0,0),(-1,-1), 6), ("BOTTOMPADDING",(0,0),(-1,-1), 6),
+        ("LEFTPADDING",(0,0),(-1,-1), 8),
     ]))
-    story.append(info_table)
-    story.append(Spacer(1, 0.6 * cm))
+    story.append(hdr_tbl)
+    story.append(Spacer(1, 0.3*cm))
 
-    # ── Split records ─────────────────────────────────────────────────────────
-    present = [r for r in records if r["status"] == "Present"]
-    late    = [r for r in records if r["status"] == "Late"]
-    absent  = [r for r in records if r["status"] == "Absent"]
+    # ── INFO BLOCK ────────────────────────────────────────────────────────────
+    try:
+        disp_date = datetime.strptime(date, "%Y-%m-%d").strftime("%B %d, %Y")
+    except Exception:
+        disp_date = date
 
-    # ── Attendance table (Present + Late only — they sign) ────────────────────
-    story.append(Paragraph("Attendance List", label_style))
-    story.append(Spacer(1, 0.2 * cm))
+    info = Table([
+        [Paragraph("Course Code and Title:", label_s), Paragraph(subject, value_s),
+         Paragraph("Section:", label_s), Paragraph(section, value_s)],
+        [Paragraph("Assigned Faculty:", label_s), Paragraph(faculty_name.upper(), value_s),
+         Paragraph("Date:", label_s), Paragraph(disp_date, value_s)],
+        [Paragraph("Venue / Room:", label_s), Paragraph(room, value_s),
+         Paragraph("Time:", label_s), Paragraph(time_str, value_s)],
+    ], colWidths=[3.5*cm, 6*cm, 2.5*cm, 6*cm])
+    info.setStyle(TableStyle([
+        ("BOX",    (0,0),(-1,-1), 1,   BLACK),
+        ("INNERGRID",(0,0),(-1,-1), 0.5, colors.HexColor("#CCCCCC")),
+        ("VALIGN", (0,0),(-1,-1), "MIDDLE"),
+        ("TOPPADDING",(0,0),(-1,-1), 5), ("BOTTOMPADDING",(0,0),(-1,-1), 5),
+        ("LEFTPADDING",(0,0),(-1,-1), 6),
+    ]))
+    story.append(info)
+    story.append(Spacer(1, 0.3*cm))
 
-    table_data = [["#", "Student ID", "Name", "Status", "Time In", "Signature"]]
+    # ── SPLIT RECORDS ─────────────────────────────────────────────────────────
+    present  = [r for r in records if r["status"] == "Present"]
+    late     = [r for r in records if r["status"] == "Late"]
+    absent   = [r for r in records if r["status"] == "Absent"]
+    attended = present + late
 
-    row_num = 1
-    for r in present + late:
-        table_data.append([
-            str(row_num),
-            r["student_id"] or "",
-            r["name"],
-            r["status"],
-            r["timestamp"] or "",
-            "",            # signature column — blank for handwriting
-        ])
-        row_num += 1
+    # ── TWO-COLUMN ATTENDANCE TABLE ───────────────────────────────────────────
+    col_size  = max(30, (len(attended) + 1) // 2)
+    left_rows = attended[:col_size]
+    right_rows= attended[col_size:]
+    while len(right_rows) < len(left_rows):
+        right_rows.append(None)
 
-    if len(table_data) == 1:
-        table_data.append(["", "", "No present or late students.", "", "", ""])
+    # Status colors
+    def sc(s):
+        return colors.HexColor("#388E3C") if s == "Present" else colors.HexColor("#E65100")
 
-    col_widths = [1*cm, 3*cm, 5.5*cm, 2.5*cm, 2.5*cm, 4*cm]
-    att_table  = Table(table_data, colWidths=col_widths, repeatRows=1)
-
-    # Row colors: header=accent, present=white, late=light yellow
-    row_styles = [
-        # Header row
-        ("BACKGROUND",   (0, 0), (-1, 0), ACCENT),
-        ("TEXTCOLOR",    (0, 0), (-1, 0), WHITE),
-        ("FONTNAME",     (0, 0), (-1, 0), "Helvetica-Bold"),
-        ("FONTSIZE",     (0, 0), (-1, 0), 10),
-        ("ALIGN",        (0, 0), (-1, 0), "CENTER"),
-        # All rows
-        ("FONTNAME",     (0, 1), (-1, -1), "Helvetica"),
-        ("FONTSIZE",     (0, 1), (-1, -1), 9),
-        ("ROWBACKGROUND",(0, 1), (-1, -1), [WHITE, colors.HexColor("#F9F9F9")]),
-        ("GRID",         (0, 0), (-1, -1), 0.5, colors.HexColor("#E2E8F0")),
-        ("VALIGN",       (0, 0), (-1, -1), "MIDDLE"),
-        ("BOTTOMPADDING",(0, 0), (-1, -1), 6),
-        ("TOPPADDING",   (0, 0), (-1, -1), 6),
-    ]
-
-    # Highlight Late rows in light amber
-    for i, r in enumerate(present + late, start=1):
-        if r["status"] == "Late":
-            row_styles.append(
-                ("BACKGROUND", (0, i), (-1, i), colors.HexColor("#FFF8E1"))
-            )
-
-    att_table.setStyle(TableStyle(row_styles))
-    story.append(att_table)
-    story.append(Spacer(1, 0.6 * cm))
-
-    # ── Absent list ───────────────────────────────────────────────────────────
-    if absent:
-        story.append(Paragraph("Absent Students", label_style))
-        story.append(Spacer(1, 0.2 * cm))
-
-        abs_data = [["#", "Student ID", "Name"]]
-        for i, r in enumerate(absent, start=1):
-            abs_data.append([str(i), r["student_id"] or "", r["name"]])
-
-        abs_table = Table(abs_data, colWidths=[1*cm, 3*cm, 10*cm])
-        abs_table.setStyle(TableStyle([
-            ("BACKGROUND",   (0, 0), (-1, 0), colors.HexColor("#757575")),
-            ("TEXTCOLOR",    (0, 0), (-1, 0), WHITE),
-            ("FONTNAME",     (0, 0), (-1, 0), "Helvetica-Bold"),
-            ("FONTSIZE",     (0, 0), (-1, -1), 9),
-            ("FONTNAME",     (0, 1), (-1, -1), "Helvetica"),
-            ("GRID",         (0, 0), (-1, -1), 0.5, colors.HexColor("#E2E8F0")),
-            ("ROWBACKGROUND",(0, 1), (-1, -1), [WHITE, colors.HexColor("#F9F9F9")]),
-            ("BOTTOMPADDING",(0, 0), (-1, -1), 6),
-            ("TOPPADDING",   (0, 0), (-1, -1), 6),
-        ]))
-        story.append(abs_table)
-        story.append(Spacer(1, 0.6 * cm))
-
-    # ── Summary footer ────────────────────────────────────────────────────────
-    summary_data = [[
-        f"Total: {len(records)}",
-        f"Present: {len(present)}",
-        f"Late: {len(late)}",
-        f"Absent: {len(absent)}",
+    att_data   = [[
+        Paragraph("#",         hdr_cell), Paragraph("NAME",      hdr_cell),
+        Paragraph("TIME IN",   hdr_cell), Paragraph("STATUS",    hdr_cell),
+        Paragraph("SIGNATURE", hdr_cell),
+        Paragraph("#",         hdr_cell), Paragraph("NAME",      hdr_cell),
+        Paragraph("TIME IN",   hdr_cell), Paragraph("STATUS",    hdr_cell),
+        Paragraph("SIGNATURE", hdr_cell),
     ]]
-    summary_table = Table(summary_data, colWidths=[4*cm, 4*cm, 4*cm, 4*cm])
-    summary_table.setStyle(TableStyle([
-        ("BACKGROUND",   (0, 0), (-1, -1), LIGHT),
-        ("TEXTCOLOR",    (0, 0), (-1, -1), ACCENT),
-        ("FONTNAME",     (0, 0), (-1, -1), "Helvetica-Bold"),
-        ("FONTSIZE",     (0, 0), (-1, -1), 11),
-        ("ALIGN",        (0, 0), (-1, -1), "CENTER"),
-        ("BOX",          (0, 0), (-1, -1), 1, ACCENT),
-        ("INNERGRID",    (0, 0), (-1, -1), 0.5, ACCENT),
-        ("BOTTOMPADDING",(0, 0), (-1, -1), 8),
-        ("TOPPADDING",   (0, 0), (-1, -1), 8),
-    ]))
-    story.append(summary_table)
-    story.append(Spacer(1, 1 * cm))
+    row_styles = [
+        ("BACKGROUND",    (0,0),(-1,0),  ACCENT),
+        ("TEXTCOLOR",     (0,0),(-1,0),  WHITE),
+        ("FONTSIZE",      (0,0),(-1,-1), 7.5),
+        ("GRID",          (0,0),(-1,-1), 0.5, colors.HexColor("#CCCCCC")),
+        ("LINEAFTER",     (4,0),(4,-1),  1.5, BLACK),
+        ("VALIGN",        (0,0),(-1,-1), "MIDDLE"),
+        ("TOPPADDING",    (0,0),(-1,-1), 4), ("BOTTOMPADDING",(0,0),(-1,-1), 4),
+        ("ALIGN",         (0,0),(0,-1),  "CENTER"),
+        ("ALIGN",         (5,0),(5,-1),  "CENTER"),
+    ]
 
-    # ── Generated timestamp ───────────────────────────────────────────────────
+    for i, (lr, rr) in enumerate(zip(left_rows, right_rows), start=1):
+        ri = len(att_data)
+        row = []
+        if lr:
+            row += [str(i), lr["name"], _fmt_time(lr.get("timestamp","")), lr["status"], ""]
+            row_styles += [("TEXTCOLOR",(3,ri),(3,ri), sc(lr["status"])),
+                           ("FONTNAME", (3,ri),(3,ri), "Helvetica-Bold")]
+        else:
+            row += ["","","","",""]
+        rn = i + col_size
+        if rr:
+            row += [str(rn), rr["name"], _fmt_time(rr.get("timestamp","")), rr["status"], ""]
+            row_styles += [("TEXTCOLOR",(8,ri),(8,ri), sc(rr["status"])),
+                           ("FONTNAME", (8,ri),(8,ri), "Helvetica-Bold")]
+        else:
+            row += ["","","","",""]
+        att_data.append(row)
+
+    if len(att_data) == 1:
+        att_data.append(["","No students attended.","","","","","","","",""])
+
+    att_tbl = Table(att_data,
+                    colWidths=[0.7*cm,4.5*cm,1.8*cm,1.8*cm,2.5*cm,
+                               0.7*cm,4.5*cm,1.8*cm,1.8*cm,2.5*cm],
+                    repeatRows=1)
+    att_tbl.setStyle(TableStyle(row_styles))
+    story.append(Paragraph("Attendance Log",
+        S("al", fontSize=9, fontName="Helvetica-Bold", textColor=ACCENT, spaceAfter=4)))
+    story.append(att_tbl)
+    story.append(Spacer(1, 0.4*cm))
+
+    # ── ABSENT TABLE ──────────────────────────────────────────────────────────
+    if absent:
+        abs_data = [[Paragraph("#", hdr_cell), Paragraph("NAME", hdr_cell),
+                     Paragraph("SR CODE", hdr_cell), Paragraph("REMARKS", hdr_cell)]]
+        for i, r in enumerate(absent, 1):
+            abs_data.append([str(i), r["name"], r.get("sr_code","") or "", "ABSENT"])
+        abs_tbl = Table(abs_data, colWidths=[1*cm,7*cm,4*cm,6*cm], repeatRows=1)
+        abs_tbl.setStyle(TableStyle([
+            ("BACKGROUND",    (0,0),(-1,0),  GRAY),
+            ("TEXTCOLOR",     (0,0),(-1,0),  WHITE),
+            ("FONTNAME",      (0,0),(-1,0),  "Helvetica-Bold"),
+            ("FONTSIZE",      (0,0),(-1,-1), 8),
+            ("FONTNAME",      (0,1),(-1,-1), "Helvetica"),
+            ("GRID",          (0,0),(-1,-1), 0.5, colors.HexColor("#CCCCCC")),
+            ("ROWBACKGROUND", (0,1),(-1,-1), [WHITE, LGRAY]),
+            ("TOPPADDING",    (0,0),(-1,-1), 4), ("BOTTOMPADDING",(0,0),(-1,-1), 4),
+            ("LEFTPADDING",   (0,0),(-1,-1), 6),
+        ]))
+        story.append(Paragraph("Absent Students",
+            S("ab", fontSize=9, fontName="Helvetica-Bold", textColor=GRAY, spaceAfter=4)))
+        story.append(abs_tbl)
+        story.append(Spacer(1, 0.4*cm))
+
+    # ── SUMMARY ───────────────────────────────────────────────────────────────
+    summary = Table([[
+        Paragraph(f"Total: <b>{len(records)}</b>",   S("s1", fontSize=9, fontName="Helvetica")),
+        Paragraph(f"Present: <b>{len(present)}</b>", S("s2", fontSize=9, fontName="Helvetica", textColor=colors.HexColor("#388E3C"))),
+        Paragraph(f"Late: <b>{len(late)}</b>",       S("s3", fontSize=9, fontName="Helvetica", textColor=colors.HexColor("#E65100"))),
+        Paragraph(f"Absent: <b>{len(absent)}</b>",   S("s4", fontSize=9, fontName="Helvetica", textColor=ACCENT)),
+    ]], colWidths=[4*cm,4*cm,4*cm,6*cm])
+    summary.setStyle(TableStyle([
+        ("BACKGROUND",    (0,0),(-1,-1), LIGHT),
+        ("BOX",           (0,0),(-1,-1), 1,   ACCENT),
+        ("INNERGRID",     (0,0),(-1,-1), 0.5, ACCENT),
+        ("TOPPADDING",    (0,0),(-1,-1), 8), ("BOTTOMPADDING",(0,0),(-1,-1), 8),
+        ("LEFTPADDING",   (0,0),(-1,-1), 10), ("VALIGN",(0,0),(-1,-1), "MIDDLE"),
+    ]))
+    story.append(summary)
+    story.append(Spacer(1, 0.8*cm))
+
+    # ── SIGNATURE ─────────────────────────────────────────────────────────────
+    story.append(Paragraph("Prepared by:", S("pb", fontSize=8, fontName="Helvetica", textColor=GRAY)))
+    story.append(Spacer(1, 0.8*cm))
+    story.append(HRFlowable(width="40%", thickness=0.5, color=BLACK))
+    story.append(Paragraph(f"<b>{faculty_name.upper()}</b>",
+                            S("fn", fontSize=9, fontName="Helvetica-Bold")))
+    story.append(Paragraph("Faculty / Instructor",
+                            S("ft2", fontSize=7, fontName="Helvetica", textColor=GRAY)))
+    story.append(Spacer(1, 0.4*cm))
+    story.append(HRFlowable(width="100%", thickness=0.5, color=colors.HexColor("#CCCCCC")))
     story.append(Paragraph(
-        f"Generated: {datetime.now().strftime('%B %d, %Y at %I:%M %p')}",
-        ParagraphStyle("footer", parent=styles["Normal"],
-                       fontSize=8, textColor=GRAY, alignment=TA_CENTER)
-    ))
+        f"Generated: {datetime.now().strftime('%B %d, %Y at %I:%M %p')}  |  "
+        f"Attendance Monitoring System  |  BatStateU-REC-ATT-11",
+        foot_s))
 
     doc.build(story)
-    print(f"[PDF] Generated: {filepath}")
+    print(f"[PDF] Saved: {filepath}")
     return filepath

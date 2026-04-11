@@ -213,7 +213,7 @@
                 if(!res.ok)           return showAlert(data.error || "Invalid email or password.", "error");
                 localStorage.setItem('active_session', JSON.stringify({ email: data.email }));
                 showAlert("Login Success! Redirecting...", "success");
-                setTimeout(() => { window.location.href = "index.html"; }, 1000);
+                setTimeout(() => { window.location.href = "/home"; }, 1000);
             } catch { showAlert("Server error.", "error"); }
         }
     </script>

@@ -1,8 +1,12 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
 
-<link rel="stylesheet" href="/Static/css/style.css">
+<title>Dashboard - Attendance System</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<link rel="stylesheet" href="/static/css/style.css">
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
 </head>
@@ -32,7 +36,7 @@
 <nav>
 
 <a href="/">🏠 Home</a>
-<a href="/classes">📚 Classes</a>
+<a href="Templates\classes.html">📚 Classes</a>
 <a href="/history">🕒 History</a>
 
 </nav>
@@ -174,10 +178,10 @@
 <input name="email" placeholder="Email">
 
 <label>Upload Photo</label>
-<input type="file" name="photo">
+<input type="file" name="photo" title="Upload a photo file">
 
 <label>Upload Signature</label>
-<input type="file" name="signature">
+<input type="file" name="signature" title="Upload a signature file">
 
 <button type="submit">Save Student</button>
 
@@ -191,7 +195,7 @@
 
 <!-- FLOATING ACTION MENU -->
 
-<div id="floatingMenu" class="floating-menu" style="display:none">
+<div id="floatingMenu" class="floating-menu">
 
 <button>Edit</button>
 
@@ -199,7 +203,7 @@
 
 </div>
 
-<script src="/Static/js/dashboard.js"></script>
+<script src="/static/js/dashboard.js"></script>
 
 </body>
 </html>
