@@ -24,11 +24,12 @@ import os
 # Change these to match your PostgreSQL / pgAdmin setup
 
 DB_CONFIG = {
-    "host":     "localhost",
-    "port":     5432,
-    "database": "attendance_fr",   # create this in pgAdmin first
-    "user":     "postgres",
-    "password": "kelvin123",    # your pgAdmin password
+    "host":     os.environ.get("DB_HOST",     "ep-shy-cherry-a4q6g98y-pooler.us-east-1.aws.neon.tech"),
+    "port":     int(os.environ.get("DB_PORT", 5432)),
+    "database": os.environ.get("DB_NAME",     "neondb"),
+    "user":     os.environ.get("DB_USER",     "neondb_owner"),
+    "password": os.environ.get("DB_PASSWORD", ""),
+    "sslmode":  "require"
 }
 
 
