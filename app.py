@@ -33,7 +33,7 @@ try:
     CAMERA_ENABLED = True
 except ImportError:
     CAMERA_ENABLED = False
-    print("[INFO] face_recognition not available — camera features disabled (cloud mode)")
+    print("[INFO] Camera features disabled — running in cloud/dashboard mode.")
 
 # ── APP SETUP ─────────────────────────────────────────────────────────────────
 
@@ -51,6 +51,7 @@ if CAMERA_ENABLED:
     known_enc, known_names = load_known_faces("faces")
     recognizer = FaceRecognizer(known_enc, known_names)
 else:
+    known_enc, known_names = [], []
     recognizer = None
 _camera_started = False
 
@@ -64,6 +65,8 @@ def start_camera(source=0):
 
 def reload_recognizer():
     global known_enc, known_names, recognizer, _camera_started
+    if not CAMERA_ENABLED:
+        return
     known_enc, known_names = load_known_faces("faces")
     recognizer             = FaceRecognizer(known_enc, known_names)
     _camera_started        = False
@@ -250,9 +253,9 @@ def api_delete_student(student_id):
 
 @app.route("/api/start_camera", methods=["POST"])
 def api_start_camera():
-    if not CAMERA_ENABLED or recognizer is None:
-        return jsonify({"error": "Camera not available in cloud mode."}), 503
     global _camera_started, recognizer, known_enc, known_names
+    if not CAMERA_ENABLED:
+        return jsonify({"error": "Camera not available in cloud mode."}), 503
     try:
         data   = request.get_json(silent=True) or {}
         source = data.get("source", "0")
@@ -277,9 +280,9 @@ def api_start_camera():
 
 @app.route("/api/stop_camera", methods=["POST"])
 def api_stop_camera():
+    global _camera_started
     if not CAMERA_ENABLED or recognizer is None:
         return jsonify({"error": "Camera not available in cloud mode."}), 503
-    global _camera_started
     try:
         scan_log = recognizer.get_scan_log()
         recognizer.stop_and_reset(); _camera_started = False
@@ -290,29 +293,27 @@ def api_stop_camera():
 @app.route("/api/scan_log")
 def api_scan_log():
     if not CAMERA_ENABLED or recognizer is None:
-        return jsonify({"error": "Camera not available in cloud mode."}), 503
+        return jsonify({})
     try: return jsonify(recognizer.get_scan_log())
     except: return jsonify({})
 
 @app.route("/video_feed")
 def video_feed():
-    if not CAMERA_ENABLED or recognizer is None:
-        return jsonify({"error": "Camera not available in cloud mode."}), 503
     return Response(
-        recognizer.generate_frames(),
+        recognizer.generate_frames() if recognizer else iter([]),
         mimetype="multipart/x-mixed-replace; boundary=frame"
     )
+
 
 @app.route("/api/present_students")
 def api_present_students():
     if not CAMERA_ENABLED or recognizer is None:
-        return jsonify({"error": "Camera not available in cloud mode."}), 503
+        return jsonify([])
     return jsonify(recognizer.get_present_students())
+
 
 @app.route("/api/save_attendance", methods=["POST"])
 def api_save_attendance():
-    if not CAMERA_ENABLED or recognizer is None:
-        return jsonify({"error": "Camera not available in cloud mode."}), 503
     """
     Body JSON:
     {
@@ -344,12 +345,12 @@ def api_save_attendance():
     recognizer.reset_attendance()
     return jsonify({"status": "ok"})
 
+
 @app.route("/api/reset_attendance", methods=["POST"])
 def api_reset_attendance():
-    if not CAMERA_ENABLED or recognizer is None:
-        return jsonify({"error": "Camera not available in cloud mode."}), 503
     recognizer.reset_attendance()
     return jsonify({"status": "ok"})
+
 
 
 
