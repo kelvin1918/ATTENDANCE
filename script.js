@@ -39,12 +39,28 @@ document.addEventListener('DOMContentLoaded', async () => {
     setInterval(updateTime, 1000);
     generateTimeOptions();
 
-    // Check session — same logic as before, session still stored in localStorage
+    const days = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+    const today = new Date();
+    selectedDay = days[today.getDay()];
+
+    renderDayFilters();
+    showPage('home');
+
     const session = JSON.parse(localStorage.getItem('active_session'));
     if (session && session.email) {
-        document.getElementById('user-display-email').textContent = session.email;
-        document.getElementById('user-initials').textContent =
-            session.email.substring(0, 2).toUpperCase();
+        const userName  = session.name || "Instructor";
+        const userEmail = session.email;
+        const userPhoto = session.profilePic;
+
+        // Sidebar: large name, small "Instructor" role label, then email
+        const nameDispEl  = document.getElementById('user-display-name');
+        const emailDispEl = document.getElementById('user-display-email');
+        if (nameDispEl)  nameDispEl.textContent = userName;
+        if (emailDispEl) emailDispEl.textContent = userEmail;
+
+        // Profile photo or initials in the circle
+        const photoEl = document.getElementById('user-display-photo');
+        if (photoEl && userPhoto) photoEl.src = userPhoto;
     } else {
         window.location.href = "/";
         return;
@@ -53,7 +69,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Load schedules from backend on startup
     await loadSchedules();
     renderDayFilters();
-    showPage('home');
+
+    lucide.createIcons();
 });
 
 // ── CLOCK ─────────────────────────────────────────────────────────────────────
@@ -86,16 +103,89 @@ function generateTimeOptions() {
 
 // ── NAVIGATION (unchanged) ────────────────────────────────────────────────────
 
-function showPage(page, btn = null) {
-    if (btn) {
-        document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('sidebar-active'));
-        btn.classList.add('sidebar-active');
+let isProfileEditing = false;
+
+function showPage(pageId, btn) {
+    const contentArea = document.getElementById('content-area');
+    const profilePage = document.getElementById('profilePage');
+
+    const session = JSON.parse(localStorage.getItem('active_session'));
+    if (session && session.profilePic) {
+        const sidebarPhoto = document.getElementById('user-display-photo');
+        if (sidebarPhoto) sidebarPhoto.src = session.profilePic;
     }
+
+    if (contentArea) contentArea.classList.add('hidden');
+    if (profilePage) profilePage.classList.add('hidden');
+
+    document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('sidebar-active'));
+    if (btn) btn.classList.add('sidebar-active');
+
     searchVal   = "";
-    currentType = page;
-    if (page === 'home')    renderDashboard();
-    else if (page === 'history') renderHistoryPage();
-    else if (page === 'classes') renderFolderPage('classes');
+    currentType = pageId;
+
+    if (pageId === 'profile') {
+        if (profilePage) profilePage.classList.remove('hidden');
+        loadProfileData();
+        setTimeout(() => { lucide.createIcons(); }, 100);
+    } else {
+        if (contentArea) contentArea.classList.remove('hidden');
+        if (pageId === 'home')         renderDashboard();
+        else if (pageId === 'classes') renderFolderPage('classes');
+        else if (pageId === 'history') renderHistoryPage();
+    }
+
+    lucide.createIcons();
+}
+
+// ── ADD: loadProfileData ──────────────────────────────────────────────────────
+
+async function loadProfileData() {
+    const session = JSON.parse(localStorage.getItem('active_session'));
+    if (session) {
+        const nameEl    = document.getElementById('prof-name');
+        const fullNmEl  = document.getElementById('modal-user-full-name');
+        const emailEl   = document.getElementById('prof-email');
+        const numberEl  = document.getElementById('prof-number');
+        const photoEl   = document.getElementById('modal-user-photo');
+        if (nameEl)   nameEl.value       = session.name   || "";
+        if (fullNmEl) fullNmEl.innerText  = session.name   || "";
+        if (emailEl)  emailEl.value       = session.email  || "";
+        if (numberEl) numberEl.value      = session.number || "";
+        if (photoEl && session.profilePic) photoEl.src = session.profilePic;
+    }
+
+    // Load mail config + grace periods from DB
+    try {
+        const res = await authFetch('/api/mail_config');
+        const cfg = await res.json();
+        const gmailEl   = document.getElementById('mail-gmail');
+        const appPassEl = document.getElementById('mail-app-pass');
+        const presentEl = document.getElementById('time-present');
+        const lateEl    = document.getElementById('time-late');
+        if (gmailEl)   gmailEl.value   = cfg.gmail         || "";
+        if (appPassEl) appPassEl.value = cfg.app_pass       || "";
+        if (presentEl) presentEl.value = cfg.present_grace  ?? 15;
+        if (lateEl)    lateEl.value    = cfg.late_grace     ?? 30;
+        // Mirror to localStorage so camera session reads grace periods instantly
+        localStorage.setItem('mail_config', JSON.stringify({
+            gmail:        cfg.gmail        || "",
+            appPass:      cfg.app_pass     || "",
+            presentGrace: cfg.present_grace ?? 15,
+            lateGrace:    cfg.late_grace   ?? 30,
+        }));
+    } catch {
+        // Fallback to localStorage if offline
+        const mailData  = JSON.parse(localStorage.getItem('mail_config') || '{}');
+        const gmailEl   = document.getElementById('mail-gmail');
+        const appPassEl = document.getElementById('mail-app-pass');
+        const presentEl = document.getElementById('time-present');
+        const lateEl    = document.getElementById('time-late');
+        if (gmailEl)   gmailEl.value   = mailData.gmail        || "";
+        if (appPassEl) appPassEl.value = mailData.appPass      || "";
+        if (presentEl) presentEl.value = mailData.presentGrace || "15";
+        if (lateEl)    lateEl.value    = mailData.lateGrace    || "30";
+    }
 }
 
 // ── DASHBOARD ─────────────────────────────────────────────────────────────────
@@ -561,29 +651,40 @@ async function viewAndPrintPDF(class_code, date, session_time) {
         const faculty = (session.email || '').split('@')[0]
                           .replace(/[._]/g,' ').replace(/\b\w/g, l => l.toUpperCase());
 
-        // ── University format: ALL students in the two-column roster ─────────
-        // The .doc format does NOT separate absent students into a separate section.
-        // Every student appears in the roster. Present/Late get their status in
-        // the Signature column; absent rows have an empty signature cell.
-        // Layout: rows 1–30 in the LEFT column, rows 31–60 in the RIGHT column.
-        // The roster always has a minimum of 30 rows (one full left column).
+        /// ── fixing part absent showing  ─────────────────────────────────
 
-        const ROWS_PER_COL = 30;   // university form is always 30 per column
-        const totalRows    = Math.max(records.length, ROWS_PER_COL);
-        // Pad to even columns if needed
+        // ── University format: ONLY Present and Late students in the roster ──
+        // Absent students are NOT included — the dean monitors only those who
+        // physically attended. The roster is renumbered sequentially starting
+        // from 1 based on who actually attended.
+
+        // Layout: rows 1–30 in the LEFT column, rows 31–60 in the RIGHT column.
+        // The roster always has a minimum of 30 blank rows (one full left column).
+
+
+        const attended     = records.filter(r => r.status !== 'Absent');
+        const ROWS_PER_COL = 30;
+        const totalRows    = Math.max(attended.length, ROWS_PER_COL);
+
         const paddedTotal  = totalRows <= ROWS_PER_COL
-            ? ROWS_PER_COL                           // only left column needed
-            : Math.ceil(totalRows / ROWS_PER_COL) * ROWS_PER_COL; // e.g. 60 for 31–60 students
+            ? ROWS_PER_COL
+            : Math.ceil(totalRows / ROWS_PER_COL) * ROWS_PER_COL;
+
 
         const statusColor = s =>
-            s === 'Present' ? 'green' : s === 'Late' ? '#E65100' : 'black';
+            s === 'Present' ? 'green' : '#E65100';   // Present=green, Late=orange
 
-        // Build rows: each rendered row shows slot i (left) and slot i+ROWS_PER_COL (right)
+
+        // Build rows: slot i = left col (1–30), slot i+30 = right col (31–60)
+
         const rosterRows = Array.from({ length: ROWS_PER_COL }).map((_, i) => {
-            const sL   = records[i];                        // rows 1–30
-            const sR   = records[i + ROWS_PER_COL];        // rows 31–60
+            const sL   = attended[i];
+            const sR   = attended[i + ROWS_PER_COL];
+
             const numL = i + 1;
             const numR = i + ROWS_PER_COL + 1;
+
+        // Show Present/Late status in signature column; empty if no student in slot
 
             const sigL = sL
                 ? `<span style="font-weight:bold;color:${statusColor(sL.status)};">${sL.status}</span>`
@@ -702,27 +803,60 @@ async function viewAndPrintPDF(class_code, date, session_time) {
 
         document.getElementById('printArea').innerHTML = html;
 
-        // ── Download PDF button — opens clean print window ───────────────────
+        // ── Print button — clean isolated window, auto-triggers print dialog ──
+        window.printSheet = () => {
+            const win = window.open('', '_blank', 'width=950,height=750');
+            win.document.write(`<!DOCTYPE html><html><head>
+                <meta charset="UTF-8">
+                <style>
+                    * { box-sizing:border-box; margin:0; padding:0; }
+                    body { background:white; font-family:'Times New Roman',Times,serif; padding:16px; }
+                    table { border-collapse:collapse; width:100%; }
+                    @media print {
+                        body { padding:0; margin:0; }
+                        * { -webkit-print-color-adjust:exact !important;
+                            print-color-adjust:exact !important; }
+                    }
+                </style>
+                </head><body>${html}</body></html>`);
+            win.document.close();
+            win.focus();
+            setTimeout(() => { win.print(); }, 400);
+        };
+
+        // ── Download PDF — uses Flask backend (reportlab) for reliable PDF ───
+        // html2pdf/html2canvas produces blank PDFs due to canvas rendering bugs.
+        // The backend generates a proper PDF using reportlab and streams it back.
         const dlBtn = document.getElementById('downloadBtn');
         if (dlBtn) {
-            dlBtn.onclick = () => {
-                const win = window.open('', '_blank', 'width=950,height=750');
-                win.document.write(`<!DOCTYPE html><html><head>
-                    <title>Attendance_${cls.subject || class_code}_${shortDate}</title>
-                    <style>
-                        body { margin:0; padding:20px; background:white;
-                               font-family:'Times New Roman',Times,serif; }
-                        @media print {
-                            body { padding:0; margin:0; }
-                            * { -webkit-print-color-adjust: exact !important;
-                                print-color-adjust: exact !important; }
-                        }
-                        table { border-collapse:collapse; }
-                    </style>
-                    </head><body>${html}</body></html>`);
-                win.document.close();
-                win.focus();
-                setTimeout(() => { win.print(); }, 500);
+            dlBtn.onclick = async () => {
+                const origHTML = dlBtn.innerHTML;
+                dlBtn.innerHTML = '<span>Downloading...</span>';
+                dlBtn.disabled  = true;
+
+                try {
+                    const sp  = session_time ? `?session_time=${encodeURIComponent(session_time)}` : '';
+                    const res = await authFetch(`/api/download_pdf/${class_code}/${date}${sp}`);
+
+                    if (!res.ok) throw new Error(`Server error ${res.status}`);
+
+                    const blob = await res.blob();
+                    const url  = URL.createObjectURL(blob);
+                    const a    = document.createElement('a');
+                    a.href     = url;
+                    a.download = `Attendance_${cls.subject || class_code}_${shortDate}.pdf`;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                } catch (err) {
+                    console.error('Download failed:', err);
+                    alert('PDF download failed: ' + err.message);
+                } finally {
+                    dlBtn.innerHTML = origHTML;
+                    dlBtn.disabled  = false;
+                    if (window.lucide) lucide.createIcons();
+                }
             };
         }
 
@@ -921,12 +1055,40 @@ async function sendAttendanceEmail(studentId, encodedName, encodedEmail, encoded
         month: 'long', day: 'numeric', year: 'numeric'
     });
 
-    // ── Subject & body ────────────────────────────────────────────────────────
+    // ── fixing part of emailing  ────────────────────────────────────────────────────────
+
+    
     const emailSubject =
         `Attendance Update – ${subjectName}, as of the ${ordinal(totalSessions)} Day of the Semester`;
 
-    // Plain-text body for mailto: (Gmail will preserve line breaks)
-    const body =
+        // ── HTML email body (bold + colored, matches image 1 format) ─────────────
+    const htmlBody = `
+<div style="font-family:Arial,sans-serif;font-size:15px;color:#222;max-width:620px;line-height:1.7;">
+    <p>Hi <b>${studentName},</b></p>
+
+    <p>This is an update regarding your attendance in <b>${subjectName}</b>, handled by
+    <b>${instructorName}</b>. As of <b>${todayStr}</b> — the
+    <b>${ordinal(totalSessions)} day</b> of this semester — here is your attendance record:</p>
+
+    <ul style="list-style:disc;padding-left:24px;margin:12px 0;">
+        <li><b style="color:green;">Presents</b> : <b>${present}</b></li>
+        <li><b style="color:#b8860b;">Lates</b>&nbsp;&nbsp;&nbsp;: <b>${late}</b></li>
+        <li><b style="color:red;">Absences</b> : <b>${absent}</b></li>
+    </ul>
+
+    <p>Please review these details and inform me if you believe there are discrepancies.
+    Maintaining consistent attendance is important for keeping up with the course requirements,
+    so make sure you continue to monitor your status.</p>
+
+    <p>If you have questions or need clarification, feel free to reach out.</p>
+
+    <p><b>Best regards,</b><br>${instructorName}<br>
+    <span style="color:#888;font-size:13px;">${instructorEmail}</span></p>
+</div>`;
+
+    // Plain-text fallback
+    const plainBody =
+
 `Hi ${studentName},
 
 This is an update regarding your attendance in ${subjectName}, handled by ${instructorName}. As of ${todayStr} — the ${ordinal(totalSessions)} day of this semester — here is your attendance record:
@@ -940,16 +1102,45 @@ Please review these details and inform me if you believe there are discrepancies
 If you have questions or need clarification, feel free to reach out.
 
 Best regards,
-${instructorName}
-${instructorEmail}`;
+${instructorName}`;
 
-    // ── Open Gmail compose fully pre-filled ───────────────────────────────────
-    // Uses Gmail's web compose URL — to, subject, and body are all pre-filled.
-    // The instructor only needs to click Send.
+    // ── Try backend auto-send first ───────────────────────────────────────────
+    try {
+        const sendRes = await authFetch('/api/send_email', {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                to:      studentEmail,
+                subject: emailSubject,
+                html:    htmlBody,
+                plain:   plainBody
+            })
+        });
+        const sendData = await sendRes.json();
+
+        if (sendRes.ok) {
+            showToast(`Email sent to ${studentName} successfully!`, 'success');
+            return;
+        }
+
+        // SMTP not configured — fall back to Gmail compose
+        if (sendRes.status === 503) {
+            console.warn('SMTP not configured, falling back to Gmail compose.');
+        } else {
+            showToast(`Send failed: ${sendData.error}`, 'error');
+            return;
+        }
+    } catch(e) {
+        console.warn('Backend send failed, falling back to Gmail compose:', e);
+    }
+
+
+    // ── Fallback: open Gmail compose pre-filled ───────────────────────────────
+
     const gmailUrl = 'https://mail.google.com/mail/?view=cm&fs=1'
         + '&to='   + encodeURIComponent(studentEmail)
         + '&su='   + encodeURIComponent(emailSubject)
-        + '&body=' + encodeURIComponent(body);
+        + '&body=' + encodeURIComponent(plainBody);
 
     window.open(gmailUrl, '_blank');
 }
@@ -1130,8 +1321,13 @@ function showRegError(errors){
 //   PRESENT_WINDOW – LATE_WINDOW → Late
 //   > LATE_WINDOW OR never scanned → Absent
 
-const PRESENT_WINDOW = 5;   // minutes
-const LATE_WINDOW    = 15;  // minutes
+// Grace periods read dynamically from localStorage (synced from DB on profile load)
+function getPresentWindow() {
+    return parseInt((JSON.parse(localStorage.getItem('mail_config') || '{}')).presentGrace) || 15;
+}
+function getLateWindow() {
+    return parseInt((JSON.parse(localStorage.getItem('mail_config') || '{}')).lateGrace) || 30;
+}
 
 let _pollInterval    = null;
 let _cameraOpenTime  = null;   // unix ms when camera opened
@@ -1145,8 +1341,8 @@ function normalizeName(n) { return n.replace(/_/g, ' ').trim(); }
 function getStatusForScanTime(firstSeenUnix) {
     if (!_cameraOpenTime) return 'Present';
     const mins = (firstSeenUnix * 1000 - _cameraOpenTime) / 60000;
-    if (mins <= PRESENT_WINDOW) return 'Present';
-    if (mins <= LATE_WINDOW)    return 'Late';
+    if (mins <= getPresentWindow()) return 'Present';
+    if (mins <= getLateWindow())    return 'Late';
     return 'Absent';
 }
 
@@ -1835,10 +2031,136 @@ function autoFillClassModal(selectedValue) {
 
 function toggleMiniSidebar() {
     const sidebar = document.getElementById('navSidebar');
-    const icon    = document.getElementById('toggleIcon');
-    sidebar.classList.toggle('nav-collapsed');
-    icon.setAttribute('data-lucide', sidebar.classList.contains('nav-collapsed') ? 'chevron-right' : 'chevron-left');
+    const labels  = document.querySelectorAll('.nav-label');
+    const chevron = document.querySelector('[data-lucide="chevron-left"], [data-lucide="chevron-right"]');
+
+    sidebar.classList.toggle('w-64');
+    sidebar.classList.toggle('w-20');
+    labels.forEach(label => label.classList.toggle('hidden'));
+
+    if (chevron) {
+        chevron.setAttribute('data-lucide',
+            sidebar.classList.contains('w-20') ? 'chevron-right' : 'chevron-left');
+    }
     lucide.createIcons();
+}
+
+async function saveProfileChanges() {
+    const nameEl    = document.getElementById('prof-name');
+    const numberEl  = document.getElementById('prof-number');
+    const photoEl   = document.getElementById('modal-user-photo');
+    const updatedName   = nameEl   ? nameEl.value.trim()   : '';
+    const updatedNumber = numberEl ? numberEl.value.trim() : '';
+    const currentPhoto  = photoEl  ? photoEl.src           : '';
+
+    // Save name + number to DB so PDF uses the real name
+    try {
+        await authFetch('/api/profile', {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({ name: updatedName, number: updatedNumber })
+        });
+    } catch { /* non-blocking */ }
+
+    // Update localStorage session + sidebar display
+    const session = JSON.parse(localStorage.getItem('active_session'));
+    if (session) {
+        session.name       = updatedName;
+        session.number     = updatedNumber;
+        session.profilePic = currentPhoto;
+        localStorage.setItem('active_session', JSON.stringify(session));
+        const nameDispEl  = document.getElementById('user-display-name');
+        const photoDispEl = document.getElementById('user-display-photo');
+        const fullNmDisp  = document.getElementById('modal-user-full-name');
+        if (nameDispEl)  nameDispEl.textContent  = updatedName;
+        if (photoDispEl && currentPhoto) photoDispEl.src = currentPhoto;
+        if (fullNmDisp)  fullNmDisp.textContent  = updatedName;
+    }
+
+    // Save mail config + grace periods to DB
+    const gmail        = document.getElementById('mail-gmail')?.value    || '';
+    const appPass      = document.getElementById('mail-app-pass')?.value || '';
+    const presentGrace = parseInt(document.getElementById('time-present')?.value || '15');
+    const lateGrace    = parseInt(document.getElementById('time-late')?.value    || '30');
+
+    try {
+        await authFetch('/api/mail_config', {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({ gmail, app_pass: appPass, present_grace: presentGrace, late_grace: lateGrace })
+        });
+    } catch { /* non-blocking */ }
+
+    // Mirror to localStorage so camera session reads grace periods immediately
+    localStorage.setItem('mail_config', JSON.stringify({ gmail, appPass, presentGrace, lateGrace }));
+    showSaveModal();
+}
+
+function showSaveModal() {
+    const modal   = document.getElementById('saveModal');
+    const content = document.getElementById('modalContent');
+    if (!modal) return;
+    modal.classList.remove('hidden');
+    setTimeout(() => {
+        content.classList.remove('scale-90', 'opacity-0');
+        content.classList.add('scale-100', 'opacity-100');
+    }, 10);
+    lucide.createIcons();
+}
+
+function closeSaveModal() {
+    const modal   = document.getElementById('saveModal');
+    const content = document.getElementById('modalContent');
+    if (!modal) return;
+    content.classList.remove('scale-100', 'opacity-100');
+    content.classList.add('scale-90', 'opacity-0');
+    setTimeout(() => { modal.classList.add('hidden'); }, 300);
+}
+
+function toggleProfileEdit() {
+    const editBtn = document.getElementById('profileEditBtn');
+    isProfileEditing = !isProfileEditing;
+    if (isProfileEditing) {
+        editBtn.innerHTML = '<i data-lucide="check" class="w-4 h-4"></i><span>Save Changes</span>';
+        editBtn.classList.remove('bg-gray-900');
+        editBtn.classList.add('bg-green-600');
+    } else {
+        saveProfileChanges();
+        editBtn.innerHTML = '<i data-lucide="edit-3" class="w-4 h-4"></i><span>Edit Profile</span>';
+        editBtn.classList.remove('bg-green-600');
+        editBtn.classList.add('bg-gray-900');
+    }
+    updateProfileFieldsState();
+    lucide.createIcons();
+}
+
+function updateProfileFieldsState() {
+    document.querySelectorAll('.prof-field').forEach(f => f.readOnly = !isProfileEditing);
+    document.querySelectorAll('.mail-field').forEach(f => f.readOnly = !isProfileEditing);
+    const picOverlay = document.getElementById('profilePicOverlay');
+    if (picOverlay) {
+        isProfileEditing
+            ? picOverlay.classList.remove('hidden')
+            : picOverlay.classList.add('hidden');
+    }
+}
+
+function previewProfilePic(input) {
+    if (input.files && input.files[0]) {
+        const reader = new FileReader();
+        reader.onload = e => {
+            const photoEl = document.getElementById('modal-user-photo');
+            if (photoEl) photoEl.src = e.target.result;
+        };
+        reader.readAsDataURL(input.files[0]);
+    }
+}
+
+function saveToStorage() {
+    localStorage.setItem('attendace_sched_v3',   JSON.stringify(schedules));
+    localStorage.setItem('attendace_classes_v3',  JSON.stringify(classFolders));
+    localStorage.setItem('attendace_history_v3',  JSON.stringify(historyFolders));
+    localStorage.setItem('attendace_logs_v3',     JSON.stringify(attendanceLogs));
 }
 
 // ── DOCUMENT VIEWER (unchanged — now uses real PDF) ───────────────────────────

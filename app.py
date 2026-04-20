@@ -404,29 +404,45 @@ def api_delete_schedule(schedule_id):
 
 @app.route("/api/download_pdf/<class_code>/<date>")
 def api_download_pdf(class_code, date):
-    cls     = db.get_class(class_code)
-    records = db.get_attendance_session(class_code, date)
+    cls          = db.get_class(class_code)
+    session_time = request.args.get("session_time")
+    records      = db.get_attendance_session(class_code, date, session_time)
 
     if not cls:
         return jsonify({"error": "class not found"}), 404
 
-    schedules = db.get_schedules(class_code)
-    room      = schedules[0]["room"] if schedules else "TBA"
+    schedules    = db.get_schedules(class_code)
+    room         = schedules[0]["room"] if schedules else "TBA"
+    time_str     = schedules[0]["time"] if schedules else ""
+
+    # Get faculty name — use stored name, fall back to email parse only if name is blank
+    instructor   = db.get_instructor_by_id(cls["instructor_id"]) if cls.get("instructor_id") else None
+    if instructor:
+        faculty_name = instructor["name"].strip() if instructor["name"].strip() \
+                       else instructor["email"].split("@")[0].replace(".", " ").replace("_", " ").title()
+    else:
+        faculty_name = "Instructor"
+
+    # Filter to only Present and Late (university format excludes absences)
+    attended = [r for r in records if r["status"] != "Absent"]
 
     filepath = generate_attendance_pdf(
-        class_id = class_code,
-        subject  = cls["subject"],
-        section  = cls["section"],
-        room     = room,
-        date     = date,
-        records  = records,
+        class_id     = class_code,
+        subject      = cls["subject"],
+        section      = cls["section"],
+        room         = room,
+        date         = date,
+        time_str     = time_str,
+        faculty_name = faculty_name,
+        records      = attended,
+        session_time = session_time or "",
     )
 
     return send_file(
         filepath,
-        as_attachment=True,
-        download_name=os.path.basename(filepath),
-        mimetype="application/pdf"
+        as_attachment = True,
+        download_name = os.path.basename(filepath),
+        mimetype      = "application/pdf"
     )
 
 
@@ -496,7 +512,7 @@ def api_login():
         return jsonify({"error": "Invalid email or password."}), 401
     if user["status"] == "pending":
         return jsonify({"error": "pending"}), 403
-    return jsonify({"status": "ok", "email": user["email"]})
+    return jsonify({"status": "ok", "email": user["email"], "name": user["name"]})
 
 
 @app.route("/api/register", methods=["POST"])
@@ -504,12 +520,13 @@ def api_register():
     data  = request.json
     email = data.get("email", "").strip()
     pwd   = data.get("password", "").strip()
-    if not email or not pwd:
+    name  = data.get("name", "").strip()
+    if not email or not pwd or not name:
         return jsonify({"error": "Fill all fields."}), 400
     existing = db.get_instructor_by_email(email)
     if existing:
         return jsonify({"error": "Email already registered."}), 409
-    db.register_instructor(email, pwd)
+    db.register_instructor(email, pwd, name)
     return jsonify({"status": "ok"})
 
 
@@ -556,25 +573,79 @@ def admin_page():
 # For Gmail: enable "App Passwords" in Google Account → Security,
 # then use the generated 16-char app password below (NOT your regular password).
 #
-SMTP_HOST     = "smtp.gmail.com"
-SMTP_PORT     = 587
-SMTP_USER     = "23-30218@g.batstate-u.edu.ph"          # ← instructor Gmail address e.g. "instructor@gmail.com"
-SMTP_PASSWORD = "rakwsroenohamics"          # ← Gmail App Password e.g. "xxxx xxxx xxxx xxxx"
+SMTP_HOST = "smtp.gmail.com"
+SMTP_PORT = 587
+
+
+@app.route("/api/profile", methods=["POST"])
+def api_update_profile():
+    """Save instructor display name and contact number to DB."""
+    instructor_id = get_current_instructor_id(request)
+    if not instructor_id:
+        return jsonify({"error": "unauthorized"}), 401
+    data   = request.json or {}
+    name   = data.get("name",   "").strip()
+    number = data.get("number", "").strip()
+    db.update_instructor_profile(instructor_id, name=name, number=number)
+    instructor = db.get_instructor_by_id(instructor_id)
+    return jsonify({"status": "ok", "name": instructor["name"], "number": instructor.get("number", "")})
+
+
+@app.route("/api/mail_config", methods=["GET"])
+def api_get_mail_config():
+    """Return stored mail config (gmail, grace periods) for the current instructor."""
+    instructor_id = get_current_instructor_id(request)
+    if not instructor_id:
+        return jsonify({"error": "unauthorized"}), 401
+    cfg = db.get_mail_config(instructor_id)
+    if cfg:
+        return jsonify({
+            "gmail":         cfg["gmail"]         or "",
+            "app_pass":      cfg["app_pass"]      or "",
+            "present_grace": cfg["present_grace"] or 15,
+            "late_grace":    cfg["late_grace"]    or 30,
+        })
+    return jsonify({"gmail": "", "app_pass": "", "present_grace": 15, "late_grace": 30})
+
+
+@app.route("/api/mail_config", methods=["POST"])
+def api_save_mail_config():
+    """Save mail config (gmail, app_pass, grace periods) for the current instructor."""
+    instructor_id = get_current_instructor_id(request)
+    if not instructor_id:
+        return jsonify({"error": "unauthorized"}), 401
+    data = request.json or {}
+    db.save_mail_config(
+        instructor_id = instructor_id,
+        gmail         = data.get("gmail",         ""),
+        app_pass      = data.get("app_pass",      ""),
+        present_grace = int(data.get("present_grace", 15)),
+        late_grace    = int(data.get("late_grace",    30)),
+    )
+    return jsonify({"status": "ok"})
 
 
 @app.route("/api/send_email", methods=["POST"])
 def api_send_email():
     """
+    Sends email using the instructor's stored Gmail + App Password from DB.
     Body JSON:
     {
         "to":      "student@email.com",
         "subject": "Attendance Update ...",
-        "html":    "<html>...</html>"   // full HTML email body
+        "html":    "<html>...</html>",
+        "plain":   "plain text fallback"
     }
     """
-    if not SMTP_USER or not SMTP_PASSWORD:
+    instructor_id = get_current_instructor_id(request)
+    cfg = db.get_mail_config(instructor_id) if instructor_id else None
+
+    smtp_user     = cfg["gmail"]    if cfg and cfg["gmail"]    else None
+    smtp_password = cfg["app_pass"] if cfg and cfg["app_pass"] else None
+
+    if not smtp_user or not smtp_password:
         return jsonify({
-            "error": "SMTP not configured. Set SMTP_USER and SMTP_PASSWORD in app.py."
+            "error": "SMTP not configured. Please set your Gmail address and App Password in Profile → Mailing Setup."
         }), 503
 
     data = request.json
@@ -584,10 +655,9 @@ def api_send_email():
     try:
         msg = MIMEMultipart("alternative")
         msg["Subject"] = data.get("subject", "Attendance Update")
-        msg["From"]    = SMTP_USER
+        msg["From"]    = smtp_user
         msg["To"]      = data["to"]
 
-        # Attach both plain-text fallback and HTML version
         plain = MIMEText(data.get("plain", "Please view this email in an HTML-capable client."), "plain")
         html  = MIMEText(data.get("html", ""), "html")
         msg.attach(plain)
@@ -596,13 +666,13 @@ def api_send_email():
         with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
             server.ehlo()
             server.starttls()
-            server.login(SMTP_USER, SMTP_PASSWORD)
-            server.sendmail(SMTP_USER, data["to"], msg.as_string())
+            server.login(smtp_user, smtp_password)
+            server.sendmail(smtp_user, data["to"], msg.as_string())
 
         return jsonify({"status": "sent"})
 
     except smtplib.SMTPAuthenticationError:
-        return jsonify({"error": "SMTP authentication failed. Check SMTP_USER and SMTP_PASSWORD."}), 401
+        return jsonify({"error": "SMTP authentication failed. Check your Gmail and App Password in Profile → Mailing Setup."}), 401
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 

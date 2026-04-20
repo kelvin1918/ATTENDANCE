@@ -14,22 +14,32 @@
         }
         
         body { 
-            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; 
-            background: var(--bg); 
+            font-family: 'Segoe UI', sans-serif; 
+            background: url('red.png') no-repeat center center fixed; 
+            background-size: cover;
             margin: 0; 
-            padding: 0; 
-            min-height: 100vh; 
-            color: var(--text-dark);
+            display: flex; 
+            justify-content: flex-end; 
+            align-items: center; 
+            min-height: 100vh;
+            padding-right: 18%;
+        }
+
+        body:has(#login-overlay.hidden) {
+            display: block; 
+            padding-right: 0; 
+            background: #f4f7f6; 
         }
 
         /* --- LOADING OVERLAY --- */
         #loading-overlay {
             position: fixed; inset: 0;
-            background: var(--bg);
+            background: rgba(244, 247, 246, 0.8); 
             display: flex; flex-direction: column; 
             justify-content: center; 
             align-items: center;
             z-index: 1500;
+            backdrop-filter: blur(5px); 
         }
         .spinner {
             width: 40px; height: 40px;
@@ -44,21 +54,23 @@
 
         /* --- LOGIN OVERLAY --- */
         #login-overlay { 
-            position: fixed; inset: 0; 
-            background: var(--bg); 
+            position: fixed; 
+            inset: 0; 
             display: flex; 
-            justify-content: center; 
+            justify-content: flex-end; 
             align-items: center; 
+            padding-right: 18%; 
             z-index: 1000; 
         }
 
         .login-card { 
             background: white; 
-            padding: 40px; 
-            border-radius: 20px; 
-            width: 380px; 
-            text-align: center; 
-            box-shadow: 0 10px 30px rgba(0,0,0,0.1); 
+            padding: 45px; 
+            border-radius: 24px; 
+            width: 460px; 
+            text-align: center;
+            box-sizing: border-box;
+            box-shadow: 0 30px 60px rgba(0, 0, 0, 0.4); 
         }
 
         .login-card h2 { 
@@ -107,8 +119,12 @@
         /* --- DASHBOARD LAYOUT --- */
         .container { 
             max-width: 1100px; 
-            margin: 0 auto; 
-            padding: 40px 20px; 
+            margin: 40px auto; 
+            padding: 20px;
+            display: block; 
+            text-align: left; 
+            background: transparent; 
+            box-shadow: none; 
         }
 
         .header { 
@@ -405,23 +421,11 @@
         window.addEventListener('keydown', (e) => {
             const modal = document.getElementById('modal-container');
             if (!modal.classList.contains('hidden')) {
-                // Remove Escape functionality as requested
-                
-                // Arrow navigation logic
                 if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
                     const confirmBtn = document.getElementById('modal-confirm-btn');
-                    const cancelBtn = document.getElementById('modal-cancel-btn');
-                    
-                    if (document.activeElement === confirmBtn) {
-                        cancelBtn.focus();
-                    } else {
-                        confirmBtn.focus();
-                    }
-                }
-
-                // Enter key to trigger the focused button
-                if (e.key === 'Enter') {
-                    // Default behavior of focused button will trigger click
+                    const cancelBtn  = document.getElementById('modal-cancel-btn');
+                    if (document.activeElement === confirmBtn) cancelBtn.focus();
+                    else confirmBtn.focus();
                 }
             }
         });
@@ -435,16 +439,10 @@
 
         function openModal(title, msg, onConfirm) {
             document.getElementById('modal-title').innerText = title;
-            document.getElementById('modal-msg').innerText = msg;
+            document.getElementById('modal-msg').innerText   = msg;
             document.getElementById('modal-container').classList.remove('hidden');
-            
-            // Set the confirm action
             const confirmBtn = document.getElementById('modal-confirm-btn');
-            confirmBtn.onclick = () => {
-                onConfirm();
-                closeModal();
-            };
-            
+            confirmBtn.onclick = () => { onConfirm(); closeModal(); };
             currentConfirmAction = onConfirm;
             setTimeout(() => confirmBtn.focus(), 50);
         }
@@ -454,31 +452,29 @@
             currentConfirmAction = null;
         }
 
-        // SIGN OUT WITH MODAL
         function handleSignOut() {
-            openModal(
-                "Sign Out", 
-                "Are you sure you want to end your session, Ian?", 
-                () => { location.reload(); }
-            );
+            openModal("Sign Out", "Are you sure you want to end your session?", () => {
+                document.body.style.background = "url('red.png') no-repeat center center fixed";
+                location.reload();
+            });
         }
 
         function adminLogin() {
             const email = document.getElementById('adm-email').value;
-            const pass = document.getElementById('adm-pass').value;
-            if(email === "Ian@gmail.com" && pass === "admin123") {
-                // Show Loading first
+            const pass  = document.getElementById('adm-pass').value;
+            if (email === "Ian@gmail.com" && pass === "admin123") {
+                document.body.style.display      = "block";
+                document.body.style.paddingRight  = "0";
+                document.body.style.background    = "#f4f7f6";
                 document.getElementById('login-overlay').classList.add('hidden');
                 document.getElementById('loading-overlay').classList.remove('hidden');
-
                 setTimeout(() => {
                     document.getElementById('loading-overlay').classList.add('hidden');
                     document.getElementById('main-content').classList.remove('hidden');
-                    showToast("Welcome back, Admin Ian!");
                     renderAdmin();
-                }, 1500); // 1.5 seconds loading delay
-            } else { 
-                showToast("Invalid Credentials!"); 
+                }, 1500);
+            } else {
+                showToast("Invalid Credentials!");
             }
         }
 
@@ -487,11 +483,11 @@
                 const res   = await fetch('/api/instructors');
                 const users = await res.json();
                 const tbody = document.getElementById('instructor-list');
-                document.getElementById('stat-total').innerText    = users.length;
-                document.getElementById('stat-pending').innerText   = users.filter(u => u.status === 'pending').length;
-                document.getElementById('stat-approved').innerText  = users.filter(u => u.status === 'approved').length;
+                document.getElementById('stat-total').innerText   = users.length;
+                document.getElementById('stat-pending').innerText  = users.filter(u => u.status === 'pending').length;
+                document.getElementById('stat-approved').innerText = users.filter(u => u.status === 'approved').length;
                 tbody.innerHTML = '';
-                if(users.length === 0) {
+                if (users.length === 0) {
                     tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;padding:30px;color:#999;">No instructors yet.</td></tr>';
                     return;
                 }
@@ -510,7 +506,7 @@
         }
 
         function handleAction(id, type) {
-            if(type === 'delete') {
+            if (type === 'delete') {
                 openModal("Remove Instructor?", "Permanently delete this account? (Arrows to navigate, Enter to confirm)", async () => {
                     await fetch(`/api/instructors/${id}`, { method: 'DELETE' });
                     showToast("Account deleted.");

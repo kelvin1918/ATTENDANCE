@@ -45,23 +45,138 @@
             </nav>
         </div>
         
-        <div class="mt-auto p-6 border-t border-gray-50 bg-gray-50/50">
-            <div class="flex items-center space-x-3 mb-6">
-                <div id="user-initials" class="w-10 h-10 flex-shrink-0 bg-[#D32F2F] rounded-full flex items-center justify-center text-white font-bold text-xs shadow-lg">JP</div>
-                <div class="nav-label min-w-0">
-                    <p id="user-display-email" class="text-xs font-bold truncate"><a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="690319290e04080005470a0604">[email&#160;protected]</a></p>
-                    <p class="text-[9px] text-gray-400 truncate uppercase font-black tracking-widest">Instructor</p>
+        <div class="mt-auto border-t border-gray-50 pt-4 flex flex-col items-center">
+            <div onclick="showPage('profile')" class="flex items-center space-x-3 cursor-pointer hover:bg-red-50 p-3 rounded-xl transition group mb-2 mx-4 w-[90%] justify-center lg:justify-start">
+                <div class="relative flex-shrink-0">
+                    <img id="user-display-photo" src="face.png" class="w-10 h-10 rounded-full border-2 border-red-500 p-0.5 object-cover">
+                </div>
+                <div class="flex flex-col overflow-hidden nav-label transition-all duration-300">
+                    <p id="user-display-name" class="font-black text-[12px] text-gray-800 leading-tight truncate"></p>
+                    <p class="text-[9px] text-[#D32F2F] font-black uppercase tracking-widest leading-tight">Instructor</p>
+                    <p id="user-display-email" class="text-[10px] text-gray-400 leading-tight truncate"></p>
                 </div>
             </div>
-            <button onclick="confirmAction('logout')" class="w-full flex items-center space-x-3 p-2 text-gray-400 hover:text-red-600 transition text-xs font-bold">
-                <i data-lucide="log-out" class="w-4 h-4 flex-shrink-0"></i> 
-                <span class="nav-label">Sign Out</span>
-            </button>
+            <div class="px-4 mb-6 w-full flex justify-center">
+                <button onclick="confirmAction('logout')" class="w-[90%] flex items-center justify-center space-x-2 p-3 bg-gray-50 hover:bg-red-50 text-gray-400 hover:text-red-600 rounded-xl transition font-bold text-xs">
+                    <i data-lucide="log-out" class="w-4 h-4"></i>
+                    <span class="nav-label">SIGN OUT</span>
+                </button>
+            </div>
         </div>
     </aside>
 
     <main class="flex-1 flex flex-col min-w-0 bg-white shadow-2xl overflow-y-auto">
-        <div id="content-area" class="p-12 h-full"></div>
+        <div id="content-area" class="p-12 w-full"></div>
+
+        <div id="profilePage" class="hidden pt-20 pb-12 px-12 w-full max-w-7xl mx-auto relative">
+            <button onclick="toggleProfileEdit()" id="profileEditBtn" class="absolute top-20 right-12 flex items-center space-x-2 px-6 py-3 bg-gray-900 text-white rounded-xl font-bold text-[10px] hover:bg-gray-700 transition shadow-lg tracking-widest uppercase z-10">
+                <i data-lucide="edit-3" class="w-4 h-4"></i>
+                <span>Edit Profile</span>
+            </button>
+            <div class="mb-12">
+                <h1 class="font-black text-4xl text-gray-800 tracking-tighter uppercase">Instructor Account</h1>
+                <p class="text-[11px] font-bold text-gray-400 uppercase tracking-[0.3em] mt-2">Personalize your faculty presence</p>
+            </div>
+            <div class="space-y-12">
+                <section class="space-y-8">
+                    <h3 class="font-black text-xs text-red-600 uppercase tracking-widest border-l-4 border-red-600 pl-3">Profile Information</h3>
+                    <div class="flex items-center space-x-8 pb-10 border-b border-gray-100">
+                        <div class="relative group">
+                            <img id="modal-user-photo" src="face.png" class="w-32 h-32 rounded-3xl border-4 border-white shadow-xl object-cover">
+                            <input type="file" id="profilePicInput" accept="image/*" class="hidden" onchange="previewProfilePic(this)">
+                            <label id="profilePicOverlay" for="profilePicInput" class="absolute inset-0 bg-black/50 rounded-3xl flex items-center justify-center cursor-pointer opacity-0 transition group-hover:opacity-100 hidden">
+                                <i data-lucide="camera" class="w-8 h-8 text-white"></i>
+                            </label>
+                        </div>
+                        <div>
+                            <h2 id="modal-user-full-name" class="font-black text-2xl text-gray-800 uppercase"></h2>
+                            <p class="text-xs font-bold text-red-600 uppercase tracking-widest mt-1">Verified Personnel</p>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-2 gap-x-8 gap-y-6">
+                        <div class="space-y-1">
+                            <label class="text-[10px] font-black text-gray-400 uppercase ml-1">Full Name</label>
+                            <input type="text" id="prof-name" class="reg-input prof-field" placeholder="Juan Dela Cruz" readonly>
+                        </div>
+                        <div class="space-y-1">
+                            <label class="text-[10px] font-black text-gray-400 uppercase ml-1">Contact Number</label>
+                            <input type="text" id="prof-number" class="reg-input prof-field" placeholder="09123456789" readonly>
+                        </div>
+                        <div class="space-y-1">
+                            <label class="text-[10px] font-black text-gray-400 uppercase ml-1">Email Address (Read-only)</label>
+                            <input type="email" id="prof-email" readonly class="reg-input bg-gray-50 opacity-60 cursor-not-allowed border-none">
+                        </div>
+                        <div class="space-y-1">
+                            <label class="text-[10px] font-black text-gray-400 uppercase ml-1">Password (Read-only)</label>
+                            <input type="password" value="********" readonly class="reg-input bg-gray-50 opacity-60 cursor-not-allowed border-none">
+                        </div>
+                    </div>
+                </section>
+                <section class="space-y-8 pt-8 border-t border-gray-100">
+                    <h3 class="font-black text-xs text-red-600 uppercase tracking-widest border-l-4 border-red-600 pl-3">Mailing Setup</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-8">
+                        <div class="bg-gray-50 rounded-2xl p-6 border border-gray-100 space-y-2">
+                            <div class="flex items-center space-x-2 text-gray-900 mb-2">
+                                <i data-lucide="mail" class="w-5 h-5 text-red-600"></i>
+                                <span class="text-xs font-black uppercase tracking-widest">Gmail Address</span>
+                            </div>
+                            <input type="text" id="mail-gmail" class="reg-input mail-field" placeholder="your-email@gmail.com" readonly>
+                        </div>
+                        <div class="bg-gray-50 rounded-2xl p-6 border border-gray-100 space-y-2 relative">
+                            <div class="flex items-center space-x-2 text-gray-900 mb-2">
+                                <i data-lucide="key-round" class="w-5 h-5 text-red-600"></i>
+                                <span class="text-xs font-black uppercase tracking-widest">App Password</span>
+                                <div class="relative group">
+                                    <div class="w-4 h-4 rounded-full bg-gray-200 flex items-center justify-center text-[10px] font-black text-gray-500 cursor-help transition hover:bg-red-100 hover:text-red-700">?</div>
+                                    <div class="absolute top-full left-1/2 -translate-x-1/2 mt-3 w-80 p-7 bg-gray-900 rounded-3xl shadow-2xl transition-all duration-300 transform scale-95 opacity-0 group-hover:flex group-hover:scale-100 group-hover:opacity-100 flex-col items-center text-center text-white hidden z-30 border border-gray-700">
+                                        <h4 class="font-black text-xs uppercase tracking-widest mb-3">Generate Google App Password</h4>
+                                        <p class="text-[9px] font-bold text-gray-400 uppercase tracking-[0.1em] mb-4 border-b border-gray-700 pb-3">Follow these instructions immediately:</p>
+                                        <ol class="text-[10px] font-medium text-left space-y-2.5 list-decimal list-inside">
+                                            <li>Tap "<span class="font-bold">Manage Account</span>" on google profile.</li>
+                                            <li>Click "<span class="font-bold">Security & Sign in</span>".</li>
+                                            <li>Turn-on "<span class="font-bold">2-step verification</span>".</li>
+                                            <li>After turning on, search "<span class="font-bold">App Password</span>" in search bar.</li>
+                                            <li>Copy "<span class="font-bold">16-char password</span>" immediately.</li>
+                                        </ol>
+                                    </div>
+                                </div>
+                            </div>
+                            <input type="password" id="mail-app-pass" class="reg-input mail-field" placeholder="xxxx xxxx xxxx xxxx" readonly>
+                        </div>
+                        <div class="bg-gray-50 rounded-2xl p-6 border border-gray-100 space-y-4 md:col-span-2">
+                            <div class="flex items-center space-x-2 text-gray-900 mb-2">
+                                <i data-lucide="clock" class="w-5 h-5 text-red-600"></i>
+                                <span class="text-xs font-black uppercase tracking-widest">Attendance Time Setup (Grace Period)</span>
+                            </div>
+                            <div class="grid grid-cols-2 gap-8">
+                                <div class="space-y-2">
+                                    <div class="flex justify-between items-center">
+                                        <label class="text-[10px] font-black text-gray-400 uppercase tracking-widest">Present Until</label>
+                                        <span class="text-[9px] font-bold text-green-600 bg-green-50 px-2 py-0.5 rounded-md uppercase">On Time</span>
+                                    </div>
+                                    <div class="relative">
+                                        <input type="number" id="time-present" class="reg-input mail-field pr-12" placeholder="15" readonly>
+                                        <span class="absolute right-4 top-1/2 -translate-y-1/2 text-[10px] font-bold text-gray-400">MINS</span>
+                                    </div>
+                                    <p class="text-[8px] text-gray-400 italic">Students arriving within these minutes of start time are marked Present.</p>
+                                </div>
+                                <div class="space-y-2">
+                                    <div class="flex justify-between items-center">
+                                        <label class="text-[10px] font-black text-gray-400 uppercase tracking-widest">Late Until</label>
+                                        <span class="text-[9px] font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded-md uppercase">Considered Late</span>
+                                    </div>
+                                    <div class="relative">
+                                        <input type="number" id="time-late" class="reg-input mail-field pr-12" placeholder="30" readonly>
+                                        <span class="absolute right-4 top-1/2 -translate-y-1/2 text-[10px] font-bold text-gray-400">MINS</span>
+                                    </div>
+                                    <p class="text-[8px] text-gray-400 italic">After this limit, students will be automatically marked as Absent.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </div>
     </main>
 
     <aside class="w-80 p-8 flex flex-col bg-[#FDFDFD] border-l border-gray-50"> 
@@ -224,7 +339,7 @@
             <div class="p-6 border-b flex justify-between items-center bg-white print-hide">
                 <h3 id="docTitle" class="font-black text-[#D32F2F] uppercase tracking-tighter">Document View</h3>
                 <div class="flex items-center space-x-2">
-                    <button onclick="document.getElementById('downloadBtn').click()" class="flex items-center space-x-2 px-4 py-2 bg-red-50 text-[#D32F2F] rounded-xl font-bold text-xs hover:bg-red-100 transition">
+                    <button onclick="printSheet()" class="flex items-center space-x-2 px-4 py-2 bg-red-50 text-[#D32F2F] rounded-xl font-bold text-xs hover:bg-red-100 transition">
                         <i data-lucide="printer" class="w-4 h-4"></i> <span>Print</span>
                     </button>
                     <button id="downloadBtn" class="flex items-center space-x-2 px-4 py-2 bg-green-50 text-green-600 rounded-xl font-bold text-xs hover:bg-green-100 transition">
@@ -244,6 +359,21 @@
                     </table>
                 </div>
             </div>
+        </div>
+    </div>
+
+    <div id="saveModal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-[999] hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-[2rem] p-10 max-w-sm w-full shadow-2xl transform transition-all duration-300 scale-90 opacity-0 flex flex-col items-center text-center border border-gray-100" id="modalContent">
+            <div class="w-20 h-20 bg-red-50 rounded-full flex items-center justify-center mb-6">
+                <i data-lucide="shield-check" class="w-10 h-10 text-red-600"></i>
+            </div>
+            <h2 class="font-black text-2xl text-gray-800 uppercase tracking-tighter mb-2">System Update</h2>
+            <p class="text-[11px] font-bold text-gray-400 uppercase tracking-[0.1em] leading-relaxed">
+                Your instructor profile and mailing configuration have been saved successfully.
+            </p>
+            <button onclick="closeSaveModal()" class="mt-8 w-full py-4 bg-gray-900 text-white rounded-2xl font-black text-[10px] tracking-[0.2em] hover:bg-red-600 transition shadow-lg shadow-red-100 uppercase">
+                Acknowledge
+            </button>
         </div>
     </div>
 

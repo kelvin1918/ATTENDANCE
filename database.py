@@ -17,6 +17,7 @@ Update DB_CONFIG below to match your PostgreSQL setup.
 import psycopg2
 import psycopg2.extras
 from datetime import datetime
+import os
 
 
 # ── CONNECTION CONFIG ─────────────────────────────────────────────────────────
@@ -29,6 +30,8 @@ DB_CONFIG = {
     "user":     "postgres",
     "password": "kelvin123",    # your pgAdmin password
 }
+
+
 
 
 # ── CONNECTION ────────────────────────────────────────────────────────────────
@@ -54,6 +57,31 @@ def init_db():
     conn = get_db()
     cur  = conn.cursor()
 
+    # ── 1. instructors first — other tables reference it ─────────────────────
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS instructors (
+            id       INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+            name     VARCHAR(100) NOT NULL DEFAULT '',
+            email    VARCHAR(100) UNIQUE NOT NULL,
+            password VARCHAR(100) NOT NULL,
+            status   VARCHAR(20)  DEFAULT 'pending'
+        );
+    """)
+    cur.execute("ALTER TABLE instructors ADD COLUMN IF NOT EXISTS name   VARCHAR(100) NOT NULL DEFAULT '';")
+    cur.execute("ALTER TABLE instructors ADD COLUMN IF NOT EXISTS number VARCHAR(30)  NOT NULL DEFAULT '';")
+
+    # ── 2. mail_config — references instructors ───────────────────────────────
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS mail_config (
+            instructor_id  INTEGER PRIMARY KEY REFERENCES instructors(id) ON DELETE CASCADE,
+            gmail          VARCHAR(200) DEFAULT '',
+            app_pass       VARCHAR(200) DEFAULT '',
+            present_grace  INTEGER DEFAULT 15,
+            late_grace     INTEGER DEFAULT 30
+        );
+    """)
+
+    # ── 3. classes — references instructors ───────────────────────────────────
     cur.execute("""
         CREATE TABLE IF NOT EXISTS classes (
             id            VARCHAR(50)  PRIMARY KEY,
@@ -65,6 +93,7 @@ def init_db():
         );
     """)
 
+    # ── 4. students — references classes ──────────────────────────────────────
     cur.execute("""
         CREATE TABLE IF NOT EXISTS students (
             id         INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -82,7 +111,9 @@ def init_db():
             UNIQUE (class_code, sr_code)
         );
     """)
+    cur.execute("ALTER TABLE students ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'Enrolled';")
 
+    # ── 5. attendance — references classes ────────────────────────────────────
     cur.execute("""
         CREATE TABLE IF NOT EXISTS attendance (
             id           INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -97,36 +128,18 @@ def init_db():
             session_time VARCHAR(8)
         );
     """)
+    cur.execute("ALTER TABLE attendance ADD COLUMN IF NOT EXISTS session_time VARCHAR(8);")
 
-    # Add session_time column to existing databases that were created before this version
-    cur.execute("""
-        ALTER TABLE attendance ADD COLUMN IF NOT EXISTS session_time VARCHAR(8);
-    """)
-
-    # Add status column to students if it doesn't exist yet
-    # (databases created before this column was added to the schema)
-    cur.execute("""
-        ALTER TABLE students ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'Enrolled';
-    """)
-
+    # ── 6. schedules — references classes + instructors ───────────────────────
     cur.execute("""
         CREATE TABLE IF NOT EXISTS schedules (
             id            INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
             class_code    VARCHAR(50)  REFERENCES classes(id) ON DELETE CASCADE,
-            instructor_id INTEGER REFERENCES instructors(id) ON DELETE CASCADE,
+            instructor_id INTEGER      REFERENCES instructors(id) ON DELETE CASCADE,
             time          VARCHAR(50),
             subject       VARCHAR(50),
             room          VARCHAR(50),
             day           VARCHAR(10)
-        );
-    """)
-
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS instructors (
-            id       INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-            email    VARCHAR(100) UNIQUE NOT NULL,
-            password VARCHAR(100) NOT NULL,
-            status   VARCHAR(20) DEFAULT 'pending'
         );
     """)
 
@@ -679,11 +692,17 @@ def get_instructor_by_email(email):
     row = cur.fetchone(); cur.close(); conn.close()
     return row
 
-def register_instructor(email, password):
+def get_instructor_by_id(instructor_id):
+    conn = get_db(); cur = get_cursor(conn)
+    cur.execute("SELECT * FROM instructors WHERE id = %s", (instructor_id,))
+    row = cur.fetchone(); cur.close(); conn.close()
+    return row
+
+def register_instructor(email, password, name=''):
     conn = get_db(); cur = get_cursor(conn)
     cur.execute(
-        "INSERT INTO instructors (email, password, status) VALUES (%s, %s, %s)",
-        (email, password, 'pending')
+        "INSERT INTO instructors (name, email, password, status) VALUES (%s, %s, %s, %s)",
+        (name, email, password, 'pending')
     )
     conn.commit(); cur.close(); conn.close()
 
@@ -696,3 +715,33 @@ def delete_instructor(instructor_id):
     conn = get_db(); cur = get_cursor(conn)
     cur.execute("DELETE FROM instructors WHERE id=%s", (instructor_id,))
     conn.commit(); cur.close(); conn.close()
+
+def update_instructor_profile(instructor_id, name=None, number=None):
+    """Update instructor display name and contact number in DB."""
+    conn = get_db(); cur = get_cursor(conn)
+    if name is not None:
+        cur.execute("UPDATE instructors SET name=%s WHERE id=%s", (name, instructor_id))
+    if number is not None:
+        cur.execute("UPDATE instructors SET number=%s WHERE id=%s", (number, instructor_id))
+    conn.commit(); cur.close(); conn.close()
+
+def save_mail_config(instructor_id, gmail='', app_pass='', present_grace=15, late_grace=30):
+    """Upsert mail config (gmail, app password, grace periods) for an instructor."""
+    conn = get_db(); cur = get_cursor(conn)
+    cur.execute("""
+        INSERT INTO mail_config (instructor_id, gmail, app_pass, present_grace, late_grace)
+        VALUES (%s, %s, %s, %s, %s)
+        ON CONFLICT (instructor_id) DO UPDATE
+            SET gmail         = EXCLUDED.gmail,
+                app_pass      = EXCLUDED.app_pass,
+                present_grace = EXCLUDED.present_grace,
+                late_grace    = EXCLUDED.late_grace
+    """, (instructor_id, gmail, app_pass, present_grace, late_grace))
+    conn.commit(); cur.close(); conn.close()
+
+def get_mail_config(instructor_id):
+    """Return mail config row for an instructor, or None."""
+    conn = get_db(); cur = get_cursor(conn)
+    cur.execute("SELECT * FROM mail_config WHERE instructor_id=%s", (instructor_id,))
+    row = cur.fetchone(); cur.close(); conn.close()
+    return row

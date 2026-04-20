@@ -1,7 +1,6 @@
 flask
 psycopg2-binary
-face-recognition
-opencv-python
 numpy
 reportlab
 werkzeug
+gunicorn

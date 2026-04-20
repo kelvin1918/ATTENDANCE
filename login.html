@@ -4,52 +4,31 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Instructor Portal</title>
+    <link rel="icon" type="image/png" href="face.png">
     <style>
-        :root { --red: #d32f2f; --bg: #f4f7f6; }
-        
+        :root { --red: #d32f2f; }
+
         body { 
             font-family: 'Segoe UI', sans-serif; 
-            background: var(--bg); 
-            margin:0; 
+            background: url('red.png') no-repeat center center fixed; 
+            background-size: cover;
+            margin: 0; 
             display: flex; 
-            justify-content: center; 
+            justify-content: flex-end; 
             align-items: center; 
-            min-height: 100vh; 
-            overflow: hidden;
-        }
-        
-        /* Custom Popup/Toast Style */
-        #custom-alert {
-            position: fixed;
-            top: -100px;
-            left: 50%;
-            transform: translateX(-50%);
-            background: #333;
-            color: white;
-            padding: 15px 30px;
-            border-radius: 12px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
-            z-index: 2000;
-            transition: 0.5s ease-in-out;
-            font-weight: 500;
-            display: flex;
-            align-items: center;
-            gap: 10px;
+            min-height: 100vh;
+            padding-right: 18%;
         }
 
-        #custom-alert.show { top: 30px; }
-        #custom-alert.error { border-left: 5px solid #ff5252; }
-        #custom-alert.success { border-left: 5px solid #4caf50; }
-
-        /* Modal Style */
+        /* Modal Card */
         .modal-card { 
             background: white; 
             padding: 45px; 
             border-radius: 24px; 
-            width: 380px; 
-            box-shadow: 0 10px 40px rgba(0,0,0,0.1); 
-            text-align: center;
-            position: relative;
+            width: 460px;
+            text-align: center; 
+            box-sizing: border-box;
+            box-shadow: 0 30px 60px rgba(0, 0, 0, 0.4); 
         }
 
         .logo { 
@@ -68,7 +47,7 @@
             text-transform: uppercase;
             letter-spacing: 1px;
         }
-        
+
         input { 
             width: 100%; 
             padding: 14px; 
@@ -102,10 +81,7 @@
             transition: 0.3s;
         }
 
-        .btn-red:hover {
-            background: #b71c1c;
-            transform: translateY(-2px);
-        }
+        .btn-red:hover { background: #b71c1c; transform: translateY(-2px); }
 
         .btn-link { 
             width: 100%; 
@@ -123,81 +99,236 @@
         .fade-in { animation: fadeIn 0.4s ease-out; }
         @keyframes fadeIn {
             from { opacity: 0; transform: scale(0.95); }
-            to { opacity: 1; transform: scale(1); }
+            to   { opacity: 1; transform: scale(1); }
         }
+
+        /* Forgot Password link */
+        .forgot-link {
+            display: block;
+            margin-top: 10px;
+            font-size: 0.8rem;
+            color: #888;
+            cursor: pointer;
+            text-decoration: underline;
+        }
+
+        /* Floating Alert */
+        #custom-alert {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%) translateY(-100px);
+            background: #333;
+            color: white;
+            padding: 12px 25px;
+            border-radius: 10px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+            z-index: 9999;
+            transition: transform 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-weight: 500;
+        }
+        #custom-alert.show { transform: translateX(-50%) translateY(0); }
+        .alert-success { border-left: 5px solid #4caf50; }
+        .alert-error   { border-left: 5px solid #f44336; }
+        .alert-info    { border-left: 5px solid #2196f3; }
+
+        /* OTP Boxes */
+        .otp-in {
+            width: 45px; 
+            height: 50px; 
+            text-align: center; 
+            font-size: 1.2rem; 
+            font-weight: bold;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            outline: none;
+            transition: border-color 0.3s;
+        }
+        .otp-in:focus { border-color: var(--red); }
     </style>
 </head>
 <body>
 
     <div id="custom-alert">
+        <span id="alert-icon"></span>
         <span id="alert-msg"></span>
     </div>
 
-    <div id="login-modal" class="modal-card fade-in">
-        <div class="logo">LOG IN</div>
-        <h2>Instructor</h2>
-        <input type="email" id="ins-email" placeholder="Email Address">
-        <input type="password" id="ins-pass" placeholder="Password">
-        <button class="btn-red" onclick="handleLogin()">Sign In</button>
-        <button class="btn-link" onclick="toggleView('reg')">Don't have an account? <b>Register</b></button>
-    </div>
+    <!-- ALL VIEWS ARE INSIDE THE CARD -->
+    <div class="modal-card fade-in" id="main-card">
 
-    <div id="reg-modal" class="modal-card fade-in hidden">
-        <div class="logo">REGISTER</div>
-        <h2>New Instructor</h2>
-        <p style="font-size: 0.8rem; color: #888; margin-bottom: 15px;">Admin approval required.</p>
-        <input type="email" id="reg-email" placeholder="Email Address">
-        <input type="password" id="reg-pass" placeholder="Password">
-        <button class="btn-red" onclick="handleRegister()">Create Account</button>
-        <button class="btn-link" onclick="toggleView('login')">Already have an account? <b>Login</b></button>
+        <!-- LOGIN VIEW -->
+        <div id="view-login">
+            <div class="logo">LOG IN</div>
+            <h2>Instructor</h2>
+            <input type="email" id="ins-email" placeholder="Email Address"
+                autocomplete="off" spellcheck="false">
+            <input type="password" id="ins-pass" placeholder="Password"
+                autocomplete="new-password">
+            <button class="btn-red" onclick="handleLogin()">Sign In</button>
+            <button class="btn-link" onclick="toggleMainView('reg')">Don't have an account? <b>Register</b></button>
+            <a class="forgot-link" onclick="toggleMainView('forgot-email')">Forgot Password?</a>
+        </div>
+
+        <!-- REGISTER VIEW -->
+        <div id="view-reg" class="hidden">
+            <div class="logo">REGISTER</div>
+            <h2>New Instructor</h2>
+            <p style="font-size: 0.8rem; color: #888; margin-bottom: 15px;">Admin approval required.</p>
+            <input type="text"  id="reg-name"  placeholder="Full Name">
+            <input type="email" id="reg-email" placeholder="Email Address">
+            <input type="password" id="reg-pass" placeholder="Password">
+            <button class="btn-red" onclick="handleRegister()">Register</button>
+            <button class="btn-link" onclick="toggleMainView('login')">Already have an account? <b>Login</b></button>
+        </div>
+
+        <!-- FORGOT PASSWORD — EMAIL -->
+        <div id="view-forgot-email" class="hidden">
+            <div class="logo" style="font-size:1.4rem;">FORGOT?</div>
+            <h2 style="margin-bottom:10px;">Reset via Email</h2>
+            <input type="email" id="reset-email-input" placeholder="Enter Email Address">
+            <button class="btn-red" style="margin-top:10px;" onclick="triggerOTP('email')">RESET PASSWORD</button>
+            <div style="display:flex; justify-content:space-between; margin-top:20px;">
+                <a onclick="toggleMainView('login')" style="cursor:pointer; font-size:0.8rem; color:#888;">⬅ Back to Login</a>
+                <a onclick="toggleMainView('forgot-phone')" style="cursor:pointer; font-size:0.8rem; color:var(--red); text-decoration:underline;">Use Number Instead</a>
+            </div>
+        </div>
+
+        <!-- FORGOT PASSWORD — PHONE -->
+        <div id="view-forgot-phone" class="hidden">
+            <div class="logo" style="font-size:1.4rem;">FORGOT?</div>
+            <h2 style="margin-bottom:10px;">Reset via Phone</h2>
+            <input type="text" id="reset-phone-input" placeholder="Enter Phone Number">
+            <button class="btn-red" style="margin-top:10px;" onclick="triggerOTP('phone')">RESET PASSWORD</button>
+            <div style="display:flex; justify-content:space-between; margin-top:20px;">
+                <a onclick="toggleMainView('login')" style="cursor:pointer; font-size:0.8rem; color:#888;">⬅ Back to Login</a>
+                <a onclick="toggleMainView('forgot-email')" style="cursor:pointer; font-size:0.8rem; color:var(--red); text-decoration:underline;">Use Email Instead</a>
+            </div>
+        </div>
+
+        <!-- OTP VIEW -->
+        <div id="view-otp" class="hidden">
+            <div class="logo" style="font-size:1.4rem;">OTP</div>
+            <h2>Password Reset</h2>
+            <p style="font-size:0.8rem; margin-bottom:15px; color:#888;">Code sent to: <b id="target-display"></b></p>
+            <div style="display:flex; gap:8px; justify-content:center; margin-bottom:20px;">
+                <input type="text" class="otp-in" maxlength="1" oninput="moveNext(this, 0)">
+                <input type="text" class="otp-in" maxlength="1" oninput="moveNext(this, 1)">
+                <input type="text" class="otp-in" maxlength="1" oninput="moveNext(this, 2)">
+                <input type="text" class="otp-in" maxlength="1" oninput="moveNext(this, 3)">
+                <input type="text" class="otp-in" maxlength="1" oninput="moveNext(this, 4)">
+            </div>
+            <button class="btn-red" onclick="validateOTP()">CONTINUE</button>
+            <p style="font-size:0.75rem; margin-top:15px; color:#888;">
+                Didn't receive the code? <span onclick="resendOTP()" style="text-decoration:underline; cursor:pointer; color:var(--red); font-weight:bold;">Resend</span>
+            </p>
+        </div>
+
+        <!-- NEW PASSWORD VIEW -->
+        <div id="view-new-pass" class="hidden">
+            <div class="logo" style="font-size:1.4rem;">NEW PASS</div>
+            <h2>Set New Password</h2>
+            <p style="font-size:0.75rem; color:#888; margin-bottom:5px;">Enter at least 4 characters</p>
+            <input type="password" id="new-p-val"     placeholder="New Password">
+            <input type="password" id="confirm-p-val" placeholder="Confirm Password">
+            <button class="btn-red" onclick="finalizeReset()">RESET PASSWORD</button>
+        </div>
+
     </div>
 
     <script>
-        // Custom Alert Function
-        function showAlert(msg, type = 'success') {
-            const alertBox = document.getElementById('custom-alert');
-            const alertMsg = document.getElementById('alert-msg');
-            
-            alertMsg.innerText = msg;
-            alertBox.className = ''; 
-            alertBox.classList.add('show');
-            alertBox.classList.add(type);
-
-            setTimeout(() => {
-                alertBox.classList.remove('show');
-            }, 3000);
+        // ── VIEW SWITCHER ────────────────────────────────────────────────────
+        function toggleMainView(viewName) {
+            ['login','reg','forgot-email','forgot-phone','otp','new-pass'].forEach(v => {
+                document.getElementById('view-' + v).classList.add('hidden');
+            });
+            document.getElementById('view-' + viewName).classList.remove('hidden');
         }
 
-        // Enter Key Support
-        document.addEventListener('keypress', function (e) {
+        // ── FLOATING ALERT ───────────────────────────────────────────────────
+        function showAlert(msg, type = 'info') {
+            const box = document.getElementById('custom-alert');
+            const txt = document.getElementById('alert-msg');
+            box.className = `alert-${type} show`;
+            txt.innerText = msg;
+            setTimeout(() => box.classList.remove('show'), 3000);
+        }
+
+        // ── OTP HELPERS ──────────────────────────────────────────────────────
+        let generatedOTP = '';
+        let resetTarget  = '';
+
+        function moveNext(current, index) {
+            const inputs = document.querySelectorAll('.otp-in');
+            if (current.value.length >= 1 && index < inputs.length - 1)
+                inputs[index + 1].focus();
+        }
+
+        document.querySelectorAll('.otp-in').forEach((input, index) => {
+            input.addEventListener('keydown', (e) => {
+                if (e.key === 'Backspace' && input.value === '' && index > 0)
+                    document.querySelectorAll('.otp-in')[index - 1].focus();
+            });
+        });
+
+        function triggerOTP(type) {
+            const val = type === 'email'
+                ? document.getElementById('reset-email-input').value
+                : document.getElementById('reset-phone-input').value;
+            if (!val) return showAlert('Please enter your details!', 'error');
+            resetTarget  = val;
+            generatedOTP = Math.floor(10000 + Math.random() * 90000).toString();
+            document.getElementById('target-display').innerText = resetTarget;
+            showAlert(`OTP Sent! (Demo Code: ${generatedOTP})`, 'success');
+            toggleMainView('otp');
+        }
+
+        function resendOTP() {
+            generatedOTP = Math.floor(10000 + Math.random() * 90000).toString();
+            showAlert(`New OTP Sent: ${generatedOTP}`, 'info');
+        }
+
+        function validateOTP() {
+            const inputs = document.querySelectorAll('.otp-in');
+            let entered  = '';
+            inputs.forEach(i => entered += i.value);
+            if (entered === generatedOTP) {
+                showAlert('OTP Verified!', 'success');
+                toggleMainView('new-pass');
+            } else {
+                showAlert('Invalid Code! Try again.', 'error');
+                inputs.forEach(i => i.value = '');
+                inputs[0].focus();
+            }
+        }
+
+        function finalizeReset() {
+            const p1 = document.getElementById('new-p-val').value;
+            const p2 = document.getElementById('confirm-p-val').value;
+            if (!p1 || p1.length < 4) return showAlert('Password too short!', 'error');
+            if (p1 !== p2)            return showAlert('Passwords do not match!', 'error');
+            // NOTE: Password reset is frontend-only (OTP demo).
+            // Full server-side reset requires a separate /api/reset-password endpoint.
+            showAlert('Password updated! (Demo Mode)', 'success');
+            toggleMainView('login');
+        }
+
+        // ── LOGIN — uses Flask /api/login ────────────────────────────────────
+        document.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') {
-                if (!document.getElementById('login-modal').classList.contains('hidden')) handleLogin();
-                else handleRegister();
+                if (!document.getElementById('view-login').classList.contains('hidden')) handleLogin();
+                else if (!document.getElementById('view-reg').classList.contains('hidden')) handleRegister();
             }
         });
 
-        function toggleView(view) {
-            document.getElementById('login-modal').classList.toggle('hidden', view === 'reg');
-            document.getElementById('reg-modal').classList.toggle('hidden', view === 'login');
-        }
-
-        async function handleRegister() {
-            const e = document.getElementById('reg-email').value.trim();
-            const p = document.getElementById('reg-pass').value.trim();
-            if(!e || !p) return showAlert("Fill up mo lahat beshy!", "error");
-            if(!e.includes('@')) return showAlert("Invalid email format!", "error");
-            try {
-                const res  = await fetch('/api/register', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ email: e, password: p })
-                });
-                const data = await res.json();
-                if(!res.ok) return showAlert(data.error || "Registration failed.", "error");
-                showAlert("Success! Wait for Admin approval.", "success");
-                setTimeout(() => toggleView('login'), 2000);
-            } catch { showAlert("Server error.", "error"); }
-        }
+        // Clear any stale mail_config from previous sessions on login page load
+        // This prevents old Gmail/app-password from autofilling the email field
+        window.addEventListener('load', () => {
+            localStorage.removeItem('mail_config');
+        });
 
         async function handleLogin() {
             const e = document.getElementById('ins-email').value;
@@ -209,12 +340,36 @@
                     body: JSON.stringify({ email: e, password: p })
                 });
                 const data = await res.json();
-                if(res.status === 403) return showAlert("Your account is still pending approval.", "error");
-                if(!res.ok)           return showAlert(data.error || "Invalid email or password.", "error");
-                localStorage.setItem('active_session', JSON.stringify({ email: data.email }));
-                showAlert("Login Success! Redirecting...", "success");
-                setTimeout(() => { window.location.href = "/home"; }, 1000);
-            } catch { showAlert("Server error.", "error"); }
+                if (res.status === 403) return showAlert('Your account is still pending approval.', 'error');
+                if (!res.ok)           return showAlert(data.error || 'Invalid email or password.', 'error');
+                // Save full session including name for use in index.html
+                localStorage.setItem('active_session', JSON.stringify({
+                    email: data.email,
+                    name:  data.name || ''
+                }));
+                showAlert('Login Success! Redirecting...', 'success');
+                setTimeout(() => { window.location.href = '/home'; }, 1000);
+            } catch { showAlert('Server error.', 'error'); }
+        }
+
+        // ── REGISTER — uses Flask /api/register ──────────────────────────────
+        async function handleRegister() {
+            const n = document.getElementById('reg-name').value.trim();
+            const e = document.getElementById('reg-email').value.trim();
+            const p = document.getElementById('reg-pass').value.trim();
+            if (!n || !e || !p)   return showAlert('Fill all fields!', 'error');
+            if (!e.includes('@')) return showAlert('Invalid email format!', 'error');
+            try {
+                const res  = await fetch('/api/register', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name: n, email: e, password: p })
+                });
+                const data = await res.json();
+                if (!res.ok) return showAlert(data.error || 'Registration failed.', 'error');
+                showAlert('Success! Wait for Admin approval.', 'success');
+                setTimeout(() => toggleMainView('login'), 2000);
+            } catch { showAlert('Server error.', 'error'); }
         }
     </script>
 </body>
