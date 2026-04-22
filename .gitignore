@@ -1,0 +1,16 @@
+__pycache__/
+*.pyc
+*.pyo
+.env
+.vscode/
+pdf/
+uploads/
+faces/
+*.db
+
+# Personal notes and test files
+bug encountered.md
+Debugs.md
+format.md
+camera_test.py
+test.py
