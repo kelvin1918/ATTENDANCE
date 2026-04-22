@@ -357,26 +357,37 @@ def api_live_checkin():
     today = _date.today().isoformat()
 
     try:
-        # Check if this student was already checked in today for this session
+        # Look up SR code from students table by matching name + class
+        sr_code = ""
+        try:
+            students = db.get_students(class_code)
+            for s in students:
+                if s["name"].strip().lower() == name.strip().lower():
+                    sr_code = s.get("sr_code", "") or ""
+                    break
+        except Exception:
+            pass  # sr_code stays empty if lookup fails
+
+        # Check if already checked in today
         existing = db.get_attendance_for_student(class_code, name, today)
         if existing:
             return jsonify({"status": "already_recorded", "name": name}), 200
 
-        # Save the live check-in record
+        # Save the live check-in record with SR code
         db.save_attendance(
             class_code   = class_code,
             section      = section,
             subject      = subject,
             records      = [{
                 "name":      name,
-                "sr_code":   "",
+                "sr_code":   sr_code,
                 "status":    status,
                 "timestamp": timestamp,
             }],
             session_time = timestamp,
         )
-        print(f"[LIVE] ✓ Checked in: {name} → {class_code} at {timestamp}")
-        return jsonify({"status": "ok", "name": name})
+        print(f"[LIVE] ✓ Checked in: {name} (SR: {sr_code or 'N/A'}) → {class_code} at {timestamp}")
+        return jsonify({"status": "ok", "name": name, "sr_code": sr_code})
 
     except Exception as e:
         print(f"[LIVE] ✗ Error saving {name}: {e}")
