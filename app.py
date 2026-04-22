@@ -264,14 +264,24 @@ def api_start_camera():
         if source in ("0", "1"):
             source = int(source)
 
+        # Get session info to link recognition to a class
+        class_code = data.get("class_code", "")
+        section    = data.get("section",    "")
+        subject    = data.get("subject",    "")
+        instructor = get_current_instructor_id(request)
+        instr_obj  = db.get_instructor_by_id(instructor) if instructor else None
+        instr_email= instr_obj["email"] if instr_obj else ""
+
         if not _camera_started:
             recognizer = FaceRecognizer(known_enc, known_names)
+            recognizer.set_session(instr_email, class_code, section, subject)
             recognizer.start(source)
             _camera_started = True
         else:
             # Already running — stop, reinitialise with new source, restart
             recognizer.stop_and_reset()
             recognizer = FaceRecognizer(known_enc, known_names)
+            recognizer.set_session(instr_email, class_code, section, subject)
             recognizer.start(source)
             # _camera_started stays True
         return jsonify({"status": "ok", "source": str(source)})
@@ -310,6 +320,67 @@ def api_present_students():
     if not CAMERA_ENABLED or recognizer is None:
         return jsonify([])
     return jsonify(recognizer.get_present_students())
+
+
+@app.route("/api/live_checkin", methods=["POST"])
+def api_live_checkin():
+    """
+    Called by the local face_recognition_a.py the moment a student is detected.
+    Immediately saves a single Present record to Neon PostgreSQL.
+
+    Body JSON:
+    {
+        "name":             "Kelvin_Lloyd_Africa",
+        "class_code":       "CPT-111-CPET3201",
+        "section":          "CPET-3201",
+        "subject":          "CPT-111",
+        "instructor_email": "instructor@gmail.com",
+        "timestamp":        "09:15:33",
+        "status":           "Present"
+    }
+    """
+    data = request.json
+    if not data:
+        return jsonify({"error": "no data"}), 400
+
+    name       = data.get("name", "").replace("_", " ").strip()
+    class_code = data.get("class_code", "").strip()
+    section    = data.get("section", "").strip()
+    subject    = data.get("subject", "").strip()
+    timestamp  = data.get("timestamp", "")
+    status     = data.get("status", "Present")
+
+    if not name or not class_code:
+        return jsonify({"error": "name and class_code are required"}), 400
+
+    from datetime import datetime as _dt, date as _date
+    today = _date.today().isoformat()
+
+    try:
+        # Check if this student was already checked in today for this session
+        existing = db.get_attendance_for_student(class_code, name, today)
+        if existing:
+            return jsonify({"status": "already_recorded", "name": name}), 200
+
+        # Save the live check-in record
+        db.save_attendance(
+            class_code   = class_code,
+            section      = section,
+            subject      = subject,
+            records      = [{
+                "name":      name,
+                "sr_code":   "",
+                "status":    status,
+                "timestamp": timestamp,
+            }],
+            session_time = timestamp,
+        )
+        print(f"[LIVE] ✓ Checked in: {name} → {class_code} at {timestamp}")
+        return jsonify({"status": "ok", "name": name})
+
+    except Exception as e:
+        print(f"[LIVE] ✗ Error saving {name}: {e}")
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route("/api/save_attendance", methods=["POST"])

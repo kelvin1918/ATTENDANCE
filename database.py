@@ -32,7 +32,13 @@ DB_CONFIG = {
     "sslmode":  "require"
 }
 
-
+DB_CONFIG_LOCAL = {
+    "host":     "localhost",
+    "port":     5432,
+    "database": "attendance_fr",   # the database you created in pgAdmin
+    "user":     "postgres",        # default PostgreSQL username
+    "password": "kelvin123",   # your pgAdmin/PostgreSQL password
+}
 
 
 # ── CONNECTION ────────────────────────────────────────────────────────────────
@@ -40,6 +46,7 @@ DB_CONFIG = {
 def get_db():
     """Returns a PostgreSQL connection."""
     conn = psycopg2.connect(**DB_CONFIG)
+
     return conn
 
 
@@ -725,6 +732,18 @@ def update_instructor_profile(instructor_id, name=None, number=None):
     if number is not None:
         cur.execute("UPDATE instructors SET number=%s WHERE id=%s", (number, instructor_id))
     conn.commit(); cur.close(); conn.close()
+
+def get_attendance_for_student(class_code, name, date):
+    """Check if a student already has an attendance record for today's session."""
+    conn = get_db(); cur = get_cursor(conn)
+    cur.execute(
+        """SELECT id FROM attendance
+           WHERE class_code = %s AND name = %s AND date = %s
+           LIMIT 1""",
+        (class_code, name, date)
+    )
+    row = cur.fetchone(); cur.close(); conn.close()
+    return row
 
 def save_mail_config(instructor_id, gmail='', app_pass='', present_grace=15, late_grace=30):
     """Upsert mail config (gmail, app password, grace periods) for an instructor."""

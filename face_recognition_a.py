@@ -14,6 +14,7 @@ import numpy as np
 import os
 import threading
 import time
+import requests
 
 
 # ── CONFIG ────────────────────────────────────────────────────────────────────
@@ -24,6 +25,16 @@ RECOGNITION_FPS = 4                 # reduced: 0.5 scale is heavier, 4fps keeps 
 CAMERA_SOURCE   = 0                 # 0 = webcam, or "rtsp://user:pass@ip:554/..." for IP cam
 FRAME_WIDTH     = 1280
 FRAME_HEIGHT    = 720
+
+# ── CLOUD SYNC CONFIG ─────────────────────────────────────────────────────────
+# When a face is recognized locally, the result is immediately sent to the
+# Render server which saves it to Neon PostgreSQL — instructors see it live.
+CLOUD_URL       = "https://attendance-system-xapv.onrender.com"
+CLOUD_SYNC      = True              # Set False to disable cloud push (offline mode)
+INSTRUCTOR_EMAIL = ""               # Set this at runtime via set_session()
+CLASS_CODE       = ""               # Set this at runtime via set_session()
+SECTION          = ""               # Set this at runtime via set_session()
+SUBJECT          = ""               # Set this at runtime via set_session()
 
 
 # ── FACE ENCODER ──────────────────────────────────────────────────────────────
@@ -81,7 +92,58 @@ class FaceRecognizer:
         self._running        = False
         self._rec_thread     = None
 
+        # Cloud session info — set before starting camera
+        self._instructor_email = INSTRUCTOR_EMAIL
+        self._class_code       = CLASS_CODE
+        self._section          = SECTION
+        self._subject          = SUBJECT
+
     # ── public API ──────────────────────────────────────────────────────────
+
+    def set_session(self, instructor_email, class_code, section, subject):
+        """Call this before start() to link recognition to a class session."""
+        self._instructor_email = instructor_email
+        self._class_code       = class_code
+        self._section          = section
+        self._subject          = subject
+        print(f"[CLOUD] Session set → {class_code} | {subject} | {section}")
+
+    def _cloud_sync(self, name, timestamp):
+        """
+        Sends a single student check-in to the Render server in a background
+        thread so it never blocks the recognition loop.
+        The Render server saves it directly to Neon PostgreSQL.
+        """
+        if not CLOUD_SYNC or not self._class_code:
+            return
+
+        def _push():
+            try:
+                payload = {
+                    "name":             name,
+                    "class_code":       self._class_code,
+                    "section":          self._section,
+                    "subject":          self._subject,
+                    "instructor_email": self._instructor_email,
+                    "timestamp":        timestamp,
+                    "status":           "Present"
+                }
+                res = requests.post(
+                    f"{CLOUD_URL}/api/live_checkin",
+                    json    = payload,
+                    timeout = 5
+                )
+                if res.status_code == 200:
+                    print(f"[CLOUD] ✓ Synced: {name}")
+                else:
+                    print(f"[CLOUD] ✗ Failed ({res.status_code}): {name}")
+            except requests.exceptions.ConnectionError:
+                print(f"[CLOUD] ✗ No internet — {name} saved locally only")
+            except Exception as e:
+                print(f"[CLOUD] ✗ Error: {e}")
+
+        # Run in background so recognition loop never waits
+        threading.Thread(target=_push, daemon=True).start()
 
     def start(self, camera_source):
         self.cap = cv2.VideoCapture(camera_source)
@@ -194,7 +256,12 @@ class FaceRecognizer:
                     with self._lock:
                         self._present_set.add(name)
                         if name not in self._scan_log:
-                            self._scan_log[name] = time.time()
+                            first_seen = time.time()
+                            self._scan_log[name] = first_seen
+                            # ── CLOUD SYNC: push to Render → Neon on first detection
+                            from datetime import datetime as _dt
+                            ts_str = _dt.fromtimestamp(first_seen).strftime("%H:%M:%S")
+                            self._cloud_sync(name, ts_str)
 
             # Scale coordinates back to original frame size
             inv = int(1 / SCALE)  # 2 — scales coords back to full frame
