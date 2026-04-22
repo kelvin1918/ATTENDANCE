@@ -28,7 +28,7 @@ DB_CONFIG = {
     "port":     int(os.environ.get("DB_PORT", 5432)),
     "database": os.environ.get("DB_NAME",     "neondb"),
     "user":     os.environ.get("DB_USER",     "neondb_owner"),
-    "password": os.environ.get("DB_PASSWORD", ""),
+    "password": os.environ.get(""),
     "sslmode":  "require"
 }
 
@@ -148,6 +148,29 @@ def init_db():
             subject       VARCHAR(50),
             room          VARCHAR(50),
             day           VARCHAR(10)
+        );
+    """)
+
+    # ── 7. camera_sessions — agent polls this to know when to start/stop ────────
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS camera_sessions (
+            id            INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+            instructor_id INTEGER UNIQUE REFERENCES instructors(id) ON DELETE CASCADE,
+            class_code    VARCHAR(50),
+            section       VARCHAR(50),
+            subject       VARCHAR(50),
+            source        TEXT    DEFAULT '0',
+            status        VARCHAR(20) DEFAULT 'idle',
+            updated_at    TIMESTAMP DEFAULT NOW()
+        );
+    """)
+
+    # ── 8. campus_rooms — maps friendly room name to RTSP URL ────────────────
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS campus_rooms (
+            id        INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+            room_name VARCHAR(50) UNIQUE NOT NULL,
+            rtsp_url  TEXT NOT NULL
         );
     """)
 
@@ -765,3 +788,64 @@ def get_mail_config(instructor_id):
     cur.execute("SELECT * FROM mail_config WHERE instructor_id=%s", (instructor_id,))
     row = cur.fetchone(); cur.close(); conn.close()
     return row
+
+# ── CAMERA SESSION (Agent Control) ───────────────────────────────────────────
+
+def upsert_camera_session(instructor_id, class_code, section, subject, source, status):
+    """Create or update the camera session row for this instructor."""
+    conn = get_db(); cur = get_cursor(conn)
+    cur.execute("""
+        INSERT INTO camera_sessions (instructor_id, class_code, section, subject, source, status, updated_at)
+        VALUES (%s, %s, %s, %s, %s, %s, NOW())
+        ON CONFLICT (instructor_id) DO UPDATE
+            SET class_code = EXCLUDED.class_code,
+                section    = EXCLUDED.section,
+                subject    = EXCLUDED.subject,
+                source     = EXCLUDED.source,
+                status     = EXCLUDED.status,
+                updated_at = NOW()
+    """, (instructor_id, class_code, section, subject, source, status))
+    conn.commit(); cur.close(); conn.close()
+
+def get_camera_session(instructor_id):
+    """Get current camera session for an instructor."""
+    conn = get_db(); cur = get_cursor(conn)
+    cur.execute("SELECT * FROM camera_sessions WHERE instructor_id=%s", (instructor_id,))
+    row = cur.fetchone(); cur.close(); conn.close()
+    return row
+
+def get_camera_session_by_email(email):
+    """Get camera session by instructor email — used by the agent."""
+    conn = get_db(); cur = get_cursor(conn)
+    cur.execute("""
+        SELECT cs.*, i.email, i.name as instructor_name
+        FROM camera_sessions cs
+        JOIN instructors i ON i.id = cs.instructor_id
+        WHERE i.email = %s
+    """, (email,))
+    row = cur.fetchone(); cur.close(); conn.close()
+    return row
+
+# ── CAMPUS ROOMS ─────────────────────────────────────────────────────────────
+
+def get_all_rooms():
+    """Return all campus rooms (name + RTSP URL)."""
+    conn = get_db(); cur = get_cursor(conn)
+    cur.execute("SELECT * FROM campus_rooms ORDER BY room_name")
+    rows = cur.fetchall(); cur.close(); conn.close()
+    return rows
+
+def upsert_room(room_name, rtsp_url):
+    """Add or update a campus room mapping."""
+    conn = get_db(); cur = get_cursor(conn)
+    cur.execute("""
+        INSERT INTO campus_rooms (room_name, rtsp_url)
+        VALUES (%s, %s)
+        ON CONFLICT (room_name) DO UPDATE SET rtsp_url = EXCLUDED.rtsp_url
+    """, (room_name, rtsp_url))
+    conn.commit(); cur.close(); conn.close()
+
+def delete_room(room_id):
+    conn = get_db(); cur = get_cursor(conn)
+    cur.execute("DELETE FROM campus_rooms WHERE id=%s", (room_id,))
+    conn.commit(); cur.close(); conn.close()

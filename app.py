@@ -780,5 +780,101 @@ def api_send_email():
         return jsonify({"error": str(e)}), 500
 
 
+# ════════════════════════════════════════════════════════════════════════════════
+# API — AGENT CONTROL (Plugin Bridge)
+# ════════════════════════════════════════════════════════════════════════════════
+
+@app.route("/api/agent/signal", methods=["POST"])
+def api_agent_signal():
+    """Browser dashboard calls this to tell the agent to start or stop."""
+    instructor_id = get_current_instructor_id(request)
+    if not instructor_id:
+        return jsonify({"error": "unauthorized"}), 401
+    data       = request.json or {}
+    status     = data.get("status",     "idle")
+    class_code = data.get("class_code", "")
+    section    = data.get("section",    "")
+    subject    = data.get("subject",    "")
+    source     = data.get("source",     "0")
+    db.upsert_camera_session(instructor_id, class_code, section, subject, source, status)
+    return jsonify({"status": "ok", "signal": status})
+
+
+@app.route("/api/agent/poll", methods=["GET"])
+def api_agent_poll():
+    """Agent polls this every 3 seconds to check if it should start or stop."""
+    email   = request.headers.get("X-Instructor-Email", "")
+    session = db.get_camera_session_by_email(email)
+    if not session:
+        return jsonify({"status": "idle"})
+    return jsonify({
+        "status":     session["status"]     or "idle",
+        "class_code": session["class_code"] or "",
+        "section":    session["section"]    or "",
+        "subject":    session["subject"]    or "",
+        "source":     session["source"]     or "0",
+    })
+
+
+@app.route("/api/agent/heartbeat", methods=["POST"])
+def api_agent_heartbeat():
+    """Agent sends this every 5 seconds so dashboard can show online/offline dot."""
+    email      = request.headers.get("X-Instructor-Email", "")
+    instructor = db.get_instructor_by_email(email)
+    if not instructor:
+        return jsonify({"error": "unknown"}), 404
+    session = db.get_camera_session(instructor["id"])
+    if session:
+        db.upsert_camera_session(
+            instructor["id"],
+            session["class_code"] or "",
+            session["section"]    or "",
+            session["subject"]    or "",
+            session["source"]     or "0",
+            session["status"]     or "idle"
+        )
+    return jsonify({"status": "ok"})
+
+
+@app.route("/api/agent/status", methods=["GET"])
+def api_agent_status():
+    """Dashboard checks this to show green/red agent indicator."""
+    instructor_id = get_current_instructor_id(request)
+    if not instructor_id:
+        return jsonify({"online": False})
+    session = db.get_camera_session(instructor_id)
+    if not session:
+        return jsonify({"online": False, "status": "idle"})
+    from datetime import datetime as _dt, timezone
+    last_seen = session.get("updated_at")
+    if last_seen:
+        if last_seen.tzinfo is None:
+            last_seen = last_seen.replace(tzinfo=timezone.utc)
+        age = (_dt.now(timezone.utc) - last_seen).total_seconds()
+        online = age < 15
+    else:
+        online = False
+    return jsonify({"online": online, "status": session["status"] or "idle"})
+
+
+# ── CAMPUS ROOMS ──────────────────────────────────────────────────────────────
+
+@app.route("/api/rooms", methods=["GET"])
+def api_get_rooms():
+    return jsonify([dict(r) for r in db.get_all_rooms()])
+
+@app.route("/api/rooms", methods=["POST"])
+def api_add_room():
+    data = request.json or {}
+    db.upsert_room(data.get("room_name", ""), data.get("rtsp_url", ""))
+    return jsonify({"status": "ok"})
+
+@app.route("/api/rooms/<int:room_id>", methods=["DELETE"])
+def api_delete_room(room_id):
+    db.delete_room(room_id)
+    return jsonify({"status": "ok"})
+
+
 if __name__ == "__main__":
-    app.run(debug=True, threaded=True, port=5000)
+    port = int(os.environ.get("PORT", 5000))
+    app.run(debug=False, host="0.0.0.0", port=port, threaded=True)
