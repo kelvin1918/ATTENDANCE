@@ -1693,16 +1693,20 @@ async function startCameraSession(cls, activeSchedule) {
                 const scanLog = await res.json();
 
                 Object.entries(scanLog).forEach(([rawName, firstSeenUnix]) => {
+                    // Normalize: "Kelvin_Lloyd_Africa" → "Kelvin Lloyd Africa"
                     const displayName = normalizeName(rawName);
                     const status      = getStatusForScanTime(firstSeenUnix);
                     const time        = new Date(firstSeenUnix * 1000)
                                           .toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                    // Use displayName as key so duplicates are avoided
                     _scannedStudents[displayName] = { displayName, status, time, rawName };
                 });
 
                 renderAttendancePanel();
                 updateDetectionHeader();
-            } catch {}
+            } catch (err) {
+                console.warn('[Poll] scan_log error:', err);
+            }
         }, 2000);
 
         // Auto-dismiss at class end time

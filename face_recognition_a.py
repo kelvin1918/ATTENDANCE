@@ -292,13 +292,16 @@ class FaceRecognizer:
         for (top, right, bottom, left), name in zip(locations, names):
             color = (0, 0, 220) if name != "Unknown" else (120, 120, 120)
 
+            # Display name with spaces instead of underscores
+            display_name = name.replace("_", " ") if name != "Unknown" else "Unknown"
+
             # Box around face
             cv2.rectangle(frame, (left, top), (right, bottom), color, 2)
 
             # Label bar
             cv2.rectangle(frame, (left, bottom - 32), (right, bottom), color, -1)
             cv2.putText(
-                frame, name,
+                frame, display_name,
                 (left + 6, bottom - 8),
                 cv2.FONT_HERSHEY_DUPLEX, 0.65,
                 (255, 255, 255), 1
