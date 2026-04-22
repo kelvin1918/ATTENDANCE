@@ -1578,11 +1578,18 @@ async function refreshCameraFeed() {
     } catch {}
 
     const source = getSelectedCameraSource();
+    // Get current class info so session is preserved on refresh
+    const _refreshCls = classFolders.find(f => f.id === currentOpenedFolder) || {};
     try {
         await authFetch('/api/start_camera', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ source })
+            body: JSON.stringify({
+                source,
+                class_code: _refreshCls.id       || currentOpenedFolder || '',
+                section:    _refreshCls.section   || '',
+                subject:    _refreshCls.subject   || ''
+            })
         });
     } catch (e) {
         loadingEl.innerHTML = `
@@ -1631,12 +1638,17 @@ async function startCameraSession(cls, activeSchedule) {
     // Get selected camera source from dropdown
     const source = getSelectedCameraSource();
 
-    // Start camera on backend with selected source
+    // Start camera on backend with class session info for cloud sync
     try {
         await authFetch('/api/start_camera', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ source })
+            body: JSON.stringify({
+                source,
+                class_code: cls.id      || currentOpenedFolder || '',
+                section:    cls.section || '',
+                subject:    cls.subject || ''
+            })
         });
         _camera_started_flag = true;
     } catch (e) {
