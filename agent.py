@@ -257,9 +257,22 @@ def main():
                     headers={"X-Instructor-Email": INSTRUCTOR_EMAIL},
                     timeout=5
                 )
-                data = res.json()
+                if res.status_code == 200 and res.text.strip():
+                    data = res.json()
+                else:
+                    log(f"Server not ready yet (status {res.status_code}) — retrying...")
+                    time.sleep(POLL_INTERVAL)
+                    continue
+            except requests.exceptions.ConnectionError:
+                log("Cannot reach Render — check internet connection. Retrying...")
+                time.sleep(POLL_INTERVAL)
+                continue
+            except ValueError:
+                log("Server returned empty response — Render may still be waking up. Retrying...")
+                time.sleep(POLL_INTERVAL)
+                continue
             except Exception as e:
-                log(f"Poll failed: {e} — retrying...")
+                log(f"Poll error: {e} — retrying...")
                 time.sleep(POLL_INTERVAL)
                 continue
 
