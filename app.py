@@ -875,6 +875,28 @@ def api_delete_room(room_id):
     return jsonify({"status": "ok"})
 
 
+@app.route("/api/attendance/<class_code>/<date>", methods=["GET"])
+def api_attendance_by_date(class_code, date):
+    """Returns all attendance records for a class on a specific date.
+    Used by the dashboard agent poll to show live detection in the panel."""
+    try:
+        rows = db.get_attendance_by_date(class_code, date)
+        return jsonify([dict(r) for r in rows])
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/download_agent", methods=["GET"])
+def download_agent():
+    """Serves the agent.py file as a download from the dashboard."""
+    import os as _os
+    agent_path = _os.path.join(_os.path.dirname(__file__), "agent.py")
+    if _os.path.exists(agent_path):
+        from flask import send_file
+        return send_file(agent_path, as_attachment=True, download_name="agent.py")
+    return jsonify({"error": "Agent file not found on server."}), 404
+
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(debug=False, host="0.0.0.0", port=port, threaded=True)

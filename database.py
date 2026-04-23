@@ -768,6 +768,20 @@ def get_attendance_for_student(class_code, name, date):
     row = cur.fetchone(); cur.close(); conn.close()
     return row
 
+def get_attendance_by_date(class_code, date):
+    """Return all attendance records for a class on a given date.
+    Used by the dashboard to show live detection in agent mode."""
+    conn = get_db(); cur = get_cursor(conn)
+    cur.execute(
+        """SELECT name, status, timestamp, sr_code
+           FROM attendance
+           WHERE class_code = %s AND date = %s
+           ORDER BY timestamp ASC""",
+        (class_code, date)
+    )
+    rows = cur.fetchall(); cur.close(); conn.close()
+    return rows
+
 def save_mail_config(instructor_id, gmail='', app_pass='', present_grace=15, late_grace=30):
     """Upsert mail config (gmail, app password, grace periods) for an instructor."""
     conn = get_db(); cur = get_cursor(conn)
