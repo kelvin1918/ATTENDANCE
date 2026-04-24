@@ -435,7 +435,7 @@ def get_all_sessions(instructor_id=None):
                    SUM(CASE WHEN a.status='Absent'  THEN 1 ELSE 0 END) AS absent
                FROM attendance a
                JOIN classes c ON c.id = a.class_code
-               WHERE c.instructor_id = %s
+               WHERE c.instructor_id = %s AND a.session_time != 'LIVE'
                GROUP BY a.class_code, a.date, a.section, a.subject
                ORDER BY a.date DESC""",
             (instructor_id,)
@@ -452,6 +452,7 @@ def get_all_sessions(instructor_id=None):
                    SUM(CASE WHEN a.status='Late'    THEN 1 ELSE 0 END) AS late,
                    SUM(CASE WHEN a.status='Absent'  THEN 1 ELSE 0 END) AS absent
                FROM attendance a
+               WHERE a.session_time != 'LIVE'
                GROUP BY a.class_code, a.date, a.section, a.subject
                ORDER BY a.date DESC"""
         )
@@ -481,7 +482,7 @@ def get_sessions_by_class(class_code):
                SUM(CASE WHEN a.status='Late'    THEN 1 ELSE 0 END)         AS late,
                SUM(CASE WHEN a.status='Absent'  THEN 1 ELSE 0 END)         AS absent
            FROM attendance a
-           WHERE a.class_code = %s
+           WHERE a.class_code = %s AND a.session_time != 'LIVE'
            GROUP BY a.class_code, a.date, a.section, a.subject, a.session_time
            ORDER BY a.date DESC, a.session_time DESC""",
         (class_code,)
@@ -508,7 +509,7 @@ def get_recent_activity(limit=10, instructor_id=None):
                    TO_CHAR(MIN(a.timestamp), 'HH24:MI:SS')                  AS time
                FROM attendance a
                JOIN classes c ON c.id = a.class_code
-               WHERE c.instructor_id = %s
+               WHERE c.instructor_id = %s AND a.session_time != 'LIVE'
                GROUP BY a.class_code, a.date, a.section, a.subject, a.session_time
                ORDER BY a.date DESC, a.session_time DESC
                LIMIT %s""",
@@ -524,6 +525,7 @@ def get_recent_activity(limit=10, instructor_id=None):
                    COALESCE(session_time, TO_CHAR(MIN(timestamp), 'HH24:MI')) AS session_time,
                    TO_CHAR(MIN(timestamp), 'HH24:MI:SS')                    AS time
                FROM attendance
+               WHERE session_time != 'LIVE'
                GROUP BY class_code, date, section, subject, session_time
                ORDER BY date DESC, session_time DESC
                LIMIT %s""",
@@ -564,7 +566,7 @@ def get_absence_counts(instructor_id=None):
                    , 1)                                             AS pct_absent
                FROM attendance a
                JOIN classes c ON c.id = a.class_code
-               WHERE c.instructor_id = %s
+               WHERE c.instructor_id = %s AND a.session_time != 'LIVE'
                GROUP BY a.subject
                ORDER BY pct_absent DESC""",
             (instructor_id,)
@@ -586,6 +588,7 @@ def get_absence_counts(instructor_id=None):
                        / NULLIF(COUNT(*), 0) * 100
                    , 1)                                             AS pct_absent
                FROM attendance a
+               WHERE a.session_time != 'LIVE'
                GROUP BY a.subject
                ORDER BY pct_absent DESC"""
         )
@@ -743,11 +746,12 @@ def update_instructor_profile(instructor_id, name=None, number=None):
     conn.commit(); cur.close(); conn.close()
 
 def get_attendance_for_student(class_code, name, date):
-    """Check if a student already has an attendance record for today's session."""
+    """Check if a student already has a LIVE staging row for today.
+    Only looks at session_time='LIVE' — finalized sessions don't block re-detection."""
     conn = get_db(); cur = get_cursor(conn)
     cur.execute(
         """SELECT id FROM attendance
-           WHERE class_code = %s AND name = %s AND date = %s
+           WHERE class_code = %s AND name = %s AND date = %s AND session_time = 'LIVE'
            LIMIT 1""",
         (class_code, name, date)
     )

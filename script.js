@@ -31,6 +31,7 @@ let selectedHistoryIdx  = 0;
 let showAllHistoryFiles = false;
 let currentOpenedFolder = "";   // stores class_code of the open folder
 let currentStatusFilter  = 'All'; // student list filter: All/Enrolled/Unenrolled/Dropped
+let studentSearchVal     = '';    // student name/SR search inside folder view
 
 // ── ON LOAD ───────────────────────────────────────────────────────────────────
 
@@ -206,24 +207,44 @@ async function renderDashboard() {
             <h1 class="text-4xl font-black text-gray-900 mb-2 tracking-tighter">Dashboard</h1>
             <p class="text-gray-400 text-sm font-bold uppercase tracking-widest">Attendance Monitoring</p>
         </div>
-        <div class="relative mb-10">
-            <i data-lucide="search" class="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-300"></i>
-            <input type="text" placeholder="Search everything..." class="w-full bg-gray-50 border-none rounded-2xl py-4 pl-12 pr-4 text-sm font-bold outline-none ring-1 ring-gray-100 focus:ring-red-200 transition">
+
+        <!-- Search + Class Folder Filter row -->
+        <div class="flex gap-3 mb-10">
+            <div class="relative flex-1">
+                <i data-lucide="search" class="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-300"></i>
+                <input id="dashSearch" type="text"
+                    placeholder="Search by subject, section, or date..."
+                    oninput="filterDashboardActivity()"
+                    class="w-full bg-gray-50 border-none rounded-2xl py-4 pl-12 pr-4 text-sm font-bold outline-none ring-1 ring-gray-100 focus:ring-red-200 transition">
+            </div>
+            <div class="relative">
+                <i data-lucide="folder" class="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-300 pointer-events-none"></i>
+                <select id="dashFolderFilter" onchange="filterDashboardActivity()"
+                    class="appearance-none bg-gray-50 border-none rounded-2xl py-4 pl-11 pr-10 text-sm font-bold outline-none ring-1 ring-gray-100 focus:ring-red-200 transition text-gray-500 cursor-pointer min-w-[200px]">
+                    <option value="">All Class Folders</option>
+                </select>
+                <i data-lucide="chevron-down" class="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-300 pointer-events-none"></i>
+            </div>
         </div>
+
         <div class="bg-white p-8 rounded-[3rem] border border-gray-100 shadow-sm mb-10 h-[450px]">
-             <h3 class="text-lg font-black text-gray-800 mb-1 flex items-center"><i data-lucide="bar-chart-3" class="w-5 h-5 mr-2 text-[#D32F2F]"></i> Absence Rate by Class</h3>
+             <h3 class="text-lg font-black text-gray-800 mb-1 flex items-center"><i data-lucide="pie-chart" class="w-5 h-5 mr-2 text-[#D32F2F]"></i> Absence Rate by Class</h3>
              <p class="text-[10px] text-gray-400 font-bold uppercase tracking-widest mb-4">Average absences per session &amp; overall percentage</p>
-             <div class="h-[300px] w-full"><canvas id="absentChart"></canvas></div>
+             <div class="h-[330px] w-full"><canvas id="absentChart"></canvas></div>
         </div>
+
         <div class="bg-white p-8 rounded-[3rem] border border-gray-100 shadow-sm">
-            <h3 class="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-6">Recent Activity</h3>
+            <div class="flex items-center justify-between mb-6">
+                <h3 class="text-[10px] font-black text-gray-400 uppercase tracking-widest">Recent Activity</h3>
+                <span id="dashResultCount" class="text-[10px] font-black text-gray-300 uppercase tracking-wider"></span>
+            </div>
             <div id="recentActivityList" class="space-y-4">
                 <p class="text-center text-gray-300 font-bold py-4">Loading...</p>
             </div>
         </div>`;
     lucide.createIcons();
 
-    // Load absence chart data from backend
+    // Load absence chart
     try {
         const res  = await authFetch('/api/absences');
         const data = await res.json();
@@ -232,126 +253,248 @@ async function renderDashboard() {
         initChart([]);
     }
 
-    // Load recent activity from backend
+    // Load recent activity
     try {
         const res     = await authFetch('/api/recent');
         const records = await res.json();
-        const list    = document.getElementById('recentActivityList');
 
-        if (records.length === 0) {
-            list.innerHTML = '<p class="text-center text-gray-300 font-bold py-4">No recent history.</p>';
-        } else {
-            list.innerHTML = records.map(r => {
-                // Format date as "Tue, 07 Apr 2026"
-                const dateObj  = new Date(r.date + 'T00:00:00');
-                const dateStr  = dateObj.toLocaleDateString('en-US', { weekday:'short', day:'2-digit', month:'short', year:'numeric' });
-                // Format session time as "HH:MM:SS AM/PM"
-                const timeRaw  = (r.time || '').substring(0, 8);   // "10:35:44"
-                const dispTime = timeRaw
-                    ? new Date('1970-01-01T' + timeRaw).toLocaleTimeString([], { hour:'2-digit', minute:'2-digit', second:'2-digit' })
-                    : '';
-                const filename = `${dateStr} ${dispTime}_Report.pdf`;
-                return `
-                <div class="flex items-center justify-between p-4 bg-gray-50 rounded-2xl cursor-pointer hover:bg-red-50 transition"
-                     onclick="goToHistoryByClassDate('${r.class_code}', '${r.date}')">
-                    <div class="flex items-center space-x-4">
-                        <div class="w-10 h-10 bg-white rounded-xl flex items-center justify-center text-[#D32F2F] shadow-sm">
-                            <i data-lucide="file-text" class="w-4 h-4"></i>
-                        </div>
-                        <div>
-                            <p class="text-sm font-black text-gray-900">${filename}</p>
-                            <p class="text-[9px] text-gray-400 font-bold uppercase">${r.section} | ${r.subject}</p>
-                        </div>
-                    </div>
-                    <p class="text-[9px] text-gray-400 font-bold">${dispTime}</p>
-                </div>`; }).join('');
-            lucide.createIcons();
+        // Store globally for filtering
+        window._allRecentRecords = records;
+
+        // Populate folder filter dropdown with distinct classes from records
+        const folderSel = document.getElementById('dashFolderFilter');
+        if (folderSel && records.length) {
+            const seen = new Map();  // class_code → label
+            records.forEach(r => {
+                if (!seen.has(r.class_code)) {
+                    seen.set(r.class_code, `${r.subject} — ${r.section}`);
+                }
+            });
+            seen.forEach((label, code) => {
+                const opt = document.createElement('option');
+                opt.value       = code;
+                opt.textContent = label;
+                folderSel.appendChild(opt);
+            });
         }
+
+        // Initial render
+        renderRecentActivityList(records);
+        lucide.createIcons();
+
     } catch {
         document.getElementById('recentActivityList').innerHTML =
             '<p class="text-center text-gray-300 font-bold py-4">Could not load recent activity.</p>';
     }
 }
 
-// Chart — uses real absence data from backend
+// ── DASHBOARD FILTER ──────────────────────────────────────────────────────────
+
+function filterDashboardActivity() {
+    const query  = (document.getElementById('dashSearch')?.value   || '').trim().toLowerCase();
+    const folder = (document.getElementById('dashFolderFilter')?.value || '');
+    const all    = window._allRecentRecords || [];
+
+    const filtered = all.filter(r => {
+        // Class folder filter
+        if (folder && r.class_code !== folder) return false;
+        // Text search across subject, section, date
+        if (!query) return true;
+        const subject = (r.subject  || '').toLowerCase();
+        const section = (r.section  || '').toLowerCase();
+        const date    = (r.date     || '').toLowerCase();
+        const code    = (r.class_code || '').toLowerCase();
+        return subject.includes(query) || section.includes(query) ||
+               date.includes(query)    || code.includes(query);
+    });
+
+    renderRecentActivityList(filtered, query || folder ? all.length : null);
+}
+
+function renderRecentActivityList(records, totalCount = null) {
+    const list    = document.getElementById('recentActivityList');
+    const countEl = document.getElementById('dashResultCount');
+    if (!list) return;
+
+    // Update result count badge
+    if (countEl) {
+        countEl.textContent = totalCount !== null
+            ? `${records.length} of ${totalCount} results`
+            : records.length > 0 ? `${records.length} records` : '';
+    }
+
+    if (records.length === 0) {
+        const isFiltered = totalCount !== null;
+        list.innerHTML = isFiltered
+            ? `<div class="text-center py-10">
+                   <p class="text-gray-300 font-bold text-sm">No matching records found.</p>
+                   <p class="text-gray-200 text-[10px] mt-1 font-bold">Try a different search or folder.</p>
+               </div>`
+            : '<p class="text-center text-gray-300 font-bold py-4">No recent history.</p>';
+        return;
+    }
+
+    list.innerHTML = records.map(r => {
+        const dateObj  = new Date(r.date + 'T00:00:00');
+        const dateStr  = dateObj.toLocaleDateString('en-US', { weekday:'short', day:'2-digit', month:'short', year:'numeric' });
+        const timeRaw  = (r.time || '').substring(0, 8);
+        const dispTime = timeRaw
+            ? new Date('1970-01-01T' + timeRaw).toLocaleTimeString([], { hour:'2-digit', minute:'2-digit', second:'2-digit' })
+            : '';
+        const filename = `${dateStr} ${dispTime}_Report.pdf`;
+
+        return `
+        <div class="flex items-center justify-between p-4 bg-gray-50 rounded-2xl cursor-pointer hover:bg-red-50 transition group"
+             onclick="goToHistoryByClassDate('${r.class_code}', '${r.date}')">
+            <div class="flex items-center space-x-4">
+                <div class="w-10 h-10 bg-white rounded-xl flex items-center justify-center text-[#D32F2F] shadow-sm group-hover:bg-[#D32F2F] group-hover:text-white transition">
+                    <i data-lucide="file-text" class="w-4 h-4"></i>
+                </div>
+                <div>
+                    <p class="text-sm font-black text-gray-900">${filename}</p>
+                    <!-- Class folder badge -->
+                    <div class="flex items-center gap-2 mt-0.5">
+                        <span class="inline-flex items-center gap-1 bg-red-50 text-[#D32F2F] text-[9px] font-black px-2 py-0.5 rounded-lg uppercase tracking-wide">
+                            <i data-lucide="folder" class="w-2.5 h-2.5"></i>
+                            ${r.subject}
+                        </span>
+                        <span class="text-[9px] text-gray-400 font-bold uppercase">${r.section}</span>
+                    </div>
+                </div>
+            </div>
+            <p class="text-[9px] text-gray-400 font-bold">${dispTime}</p>
+        </div>`;
+    }).join('');
+
+    lucide.createIcons();
+}
+
+// Chart — uses real absence data from backend (Doughnut style)
 function initChart(data = []) {
     const ctx = document.getElementById('absentChart');
     if (!ctx) return;
 
-    // Destroy any existing chart instance to avoid canvas reuse error
     if (window._absentChartInstance) {
         window._absentChartInstance.destroy();
     }
 
+    // Color by severity
+    const getColor = pct => pct >= 50 ? '#D32F2F' : pct >= 25 ? '#E65100' : '#F59E0B';
+
+    // Plugin: draws centered text inside the doughnut hole
+    const centerLabelPlugin = {
+        id: 'centerLabel',
+        afterDraw(chart) {
+            if (chart.config.type !== 'doughnut') return;
+            const { ctx: c, chartArea: { top, left, width, height } } = chart;
+            const cx = left + width / 2;
+            const cy = top  + height / 2;
+            c.save();
+
+            const vals = chart.data.datasets[0]?.data || [];
+            const hasData = vals.length > 1 || (vals.length === 1 && vals[0] !== 1);
+
+            if (hasData) {
+                const avg = Math.round(vals.reduce((a, b) => a + b, 0) / vals.length);
+                c.font = 'bold 26px Inter, sans-serif';
+                c.fillStyle = '#1a1a1a';
+                c.textAlign = 'center';
+                c.textBaseline = 'middle';
+                c.fillText(avg + '%', cx, cy - 10);
+                c.font = '700 9px Inter, sans-serif';
+                c.fillStyle = '#9CA3AF';
+                c.letterSpacing = '1.5px';
+                c.fillText('AVG ABSENCE', cx, cy + 13);
+            } else {
+                c.font = '600 12px Inter, sans-serif';
+                c.fillStyle = '#D1D5DB';
+                c.textAlign = 'center';
+                c.textBaseline = 'middle';
+                c.fillText('No data yet', cx, cy);
+            }
+            c.restore();
+        }
+    };
+
     if (!data.length) {
-        new Chart(ctx, {
-            type: 'bar',
+        window._absentChartInstance = new Chart(ctx, {
+            type: 'doughnut',
             data: {
-                labels: ['No data yet'],
-                datasets: [{ label: 'Absence %', data: [0], backgroundColor: '#D32F2F', borderRadius: 8 }]
+                labels: ['No Data'],
+                datasets: [{ data: [1], backgroundColor: ['#F3F4F6'], borderWidth: 0 }]
             },
             options: {
                 responsive: true, maintainAspectRatio: false,
-                plugins: { legend: { display: false } }
-            }
+                cutout: '72%',
+                plugins: { legend: { display: false }, tooltip: { enabled: false } }
+            },
+            plugins: [centerLabelPlugin]
         });
         return;
     }
 
     const labels  = data.map(d => d.name);
-    const pctVals = data.map(d => d.pct_absent);   // percentage for bar height
-    const avgVals = data.map(d => d.avg_absent);    // avg absences per session for tooltip
-    const totVals = data.map(d => d.total_absent);  // raw count for tooltip
+    const pctVals = data.map(d => d.pct_absent);
+    const avgVals = data.map(d => d.avg_absent);
+    const totVals = data.map(d => d.total_absent);
     const sesVals = data.map(d => d.total_sessions);
-
-    // Color bars: ≥50% red, 25–49% orange, <25% yellow-green
-    const barColors = pctVals.map(p =>
-        p >= 50 ? '#D32F2F' : p >= 25 ? '#E65100' : '#F9A825'
-    );
+    const colors  = pctVals.map(getColor);
 
     window._absentChartInstance = new Chart(ctx, {
-        type: 'bar',
+        type: 'doughnut',
         data: {
             labels,
             datasets: [{
-                label: 'Absence Rate (%)',
                 data: pctVals,
-                backgroundColor: barColors,
-                borderRadius: 8,
+                backgroundColor: colors,
+                borderWidth: 3,
+                borderColor: '#ffffff',
+                hoverOffset: 10,
             }]
         },
         options: {
             responsive: true,
             maintainAspectRatio: false,
-            scales: {
-                x: { ticks: { font: { size: 9, weight: 'bold' } } },
-                y: {
-                    min: 0, max: 100,
-                    ticks: {
-                        callback: v => v + '%',
-                        font: { size: 9 }
-                    },
-                    title: { display: true, text: 'Absence Rate (%)', font: { size: 9 } }
-                }
-            },
+            cutout: '65%',
             plugins: {
-                legend: { display: false },
+                legend: {
+                    display: true,
+                    position: 'bottom',
+                    labels: {
+                        usePointStyle: true,
+                        pointStyle: 'circle',
+                        padding: 18,
+                        font: { size: 10, weight: 'bold', family: 'Inter' },
+                        color: '#6B7280',
+                    }
+                },
                 tooltip: {
+                    backgroundColor: '#111827',
+                    titleColor: '#F9FAFB',
+                    bodyColor: '#D1D5DB',
+                    padding: 14,
+                    cornerRadius: 12,
                     callbacks: {
                         title: items => items[0].label,
                         label: item => {
-                            const i   = item.dataIndex;
+                            const i = item.dataIndex;
                             return [
-                                `Absence Rate : ${pctVals[i]}%`,
-                                `Avg / Session: ${avgVals[i]} students`,
-                                `Total Absences: ${totVals[i]}`,
-                                `Sessions : ${sesVals[i]}`
+                                `  Absence Rate : ${pctVals[i]}%`,
+                                `  Avg / Session: ${avgVals[i]} students`,
+                                `  Total Absences: ${totVals[i]}`,
+                                `  Sessions       : ${sesVals[i]}`
                             ];
                         }
                     }
                 }
+            },
+            animation: {
+                animateRotate: true,
+                duration: 900,
+                easing: 'easeInOutQuart'
             }
-        }
+        },
+        plugins: [centerLabelPlugin]
     });
 }
 
@@ -891,6 +1034,7 @@ function goToHistoryByClassDate(class_code, date) {
 async function openFolderView(class_code) {
     currentOpenedFolder = class_code;
     currentStatusFilter  = 'All';   // reset filter on folder open
+    studentSearchVal     = '';      // reset student search on folder open
     const cls = classFolders.find(f => f.id === class_code) || {};
 
     // Load students FIRST then render camera button based on count
@@ -906,10 +1050,14 @@ async function openFolderView(class_code) {
 function renderFolderView(cls, class_code, students) {
     const hasStudents = students.length > 0;
 
-    // Apply status filter
+    // Apply status filter + student search
     const filtered = students.filter(s => {
-        if (currentStatusFilter === 'All') return true;
-        return (s.status || 'Enrolled') === currentStatusFilter;
+        const statusOk = currentStatusFilter === 'All' || (s.status || 'Enrolled') === currentStatusFilter;
+        const q = studentSearchVal.trim().toLowerCase();
+        const searchOk = !q ||
+            s.name.toLowerCase().includes(q) ||
+            (s.sr_code || '').toLowerCase().includes(q);
+        return statusOk && searchOk;
     });
 
     document.getElementById('content-area').innerHTML = `
@@ -940,12 +1088,22 @@ function renderFolderView(cls, class_code, students) {
         </div>` : ''}
 
         <!-- Status Filters -->
-        <div class="flex gap-2 mt-6 mb-4">
+        <div class="flex gap-2 mt-6 mb-3">
             ${['All','Enrolled','Unenrolled','Dropped'].map(f => `
                 <button onclick="applyStudentFilter('${f}')"
                     class="px-4 py-2 text-[10px] font-black border rounded-xl transition ${f === currentStatusFilter ? 'bg-[#D32F2F] text-white border-[#D32F2F]' : 'bg-white text-gray-400 border-gray-200 hover:border-red-300'}">
                     ${f.toUpperCase()}
                 </button>`).join('')}
+        </div>
+
+        <!-- Student Search -->
+        <div class="relative mb-4">
+            <i data-lucide="search" class="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-300"></i>
+            <input type="text"
+                   oninput="studentSearchVal = this.value; applyStudentSearch();"
+                   value="${studentSearchVal.replace(/"/g, '&quot;')}"
+                   placeholder="Search student by name or SR code..."
+                   class="w-full bg-gray-50 border-none rounded-2xl py-3 pl-12 pr-4 text-sm font-bold outline-none ring-1 ring-gray-100 focus:ring-red-200 transition">
         </div>
 
         <div class="bg-white p-6 rounded-[2rem] border border-gray-100 shadow-sm">
@@ -993,6 +1151,11 @@ function renderFolderView(cls, class_code, students) {
 
 function applyStudentFilter(filter) {
     currentStatusFilter = filter;
+    const cls = classFolders.find(f => f.id === currentOpenedFolder) || {};
+    renderFolderView(cls, currentOpenedFolder, window._cachedStudents || []);
+}
+
+function applyStudentSearch() {
     const cls = classFolders.find(f => f.id === currentOpenedFolder) || {};
     renderFolderView(cls, currentOpenedFolder, window._cachedStudents || []);
 }

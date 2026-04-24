@@ -325,8 +325,10 @@ def api_present_students():
 @app.route("/api/live_checkin", methods=["POST"])
 def api_live_checkin():
     """
-    Called by the local face_recognition_a.py the moment a student is detected.
-    Immediately saves a single Present record to Neon PostgreSQL.
+    Called by face_recognition_a.py the moment a student is detected.
+    Writes to a 'LIVE' staging slot in attendance (session_time = 'LIVE').
+    These staging rows are DELETED when /api/save_attendance finalises the session,
+    so they never appear as a ghost duplicate session in History.
 
     Body JSON:
     {
@@ -357,7 +359,7 @@ def api_live_checkin():
     today = _date.today().isoformat()
 
     try:
-        # Look up SR code from students table by matching name + class
+        # Look up SR code from students table
         sr_code = ""
         try:
             students = db.get_students(class_code)
@@ -366,65 +368,90 @@ def api_live_checkin():
                     sr_code = s.get("sr_code", "") or ""
                     break
         except Exception:
-            pass  # sr_code stays empty if lookup fails
+            pass
 
-        # Check if already checked in today
-        existing = db.get_attendance_for_student(class_code, name, today)
-        if existing:
+        # Check if already in LIVE staging for today (prevents duplicate live entries)
+        conn = db.get_db()
+        cur  = db.get_cursor(conn)
+        cur.execute(
+            """SELECT id FROM attendance
+               WHERE class_code = %s AND name = %s AND date = %s AND session_time = 'LIVE'
+               LIMIT 1""",
+            (class_code, name, today)
+        )
+        already_live = cur.fetchone()
+        cur.close(); conn.close()
+
+        if already_live:
             return jsonify({"status": "already_recorded", "name": name}), 200
 
-        # Save the live check-in record with SR code
-        db.save_attendance(
-            class_code   = class_code,
-            section      = section,
-            subject      = subject,
-            records      = [{
-                "name":      name,
-                "sr_code":   sr_code,
-                "status":    status,
-                "timestamp": timestamp,
-            }],
-            session_time = timestamp,
+        # INSERT into staging slot — session_time = 'LIVE' (not a real HH:MM)
+        # /api/save_attendance will DELETE all 'LIVE' rows for this class+date
+        # when the camera session is officially closed.
+        conn = db.get_db()
+        cur  = db.get_cursor(conn)
+        full_timestamp = f"{today} {timestamp}" if timestamp else None
+        cur.execute(
+            """INSERT INTO attendance
+               (class_code, sr_code, name, section, subject, status, timestamp, date, session_time)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'LIVE')""",
+            (class_code, sr_code, name, section, subject,
+             status, full_timestamp, today)
         )
-        print(f"[LIVE] ✓ Checked in: {name} (SR: {sr_code or 'N/A'}) → {class_code} at {timestamp}")
+        conn.commit()
+        cur.close(); conn.close()
+
+        print(f"[LIVE] ✓ Staged: {name} (SR: {sr_code or 'N/A'}) → {class_code} at {timestamp}")
         return jsonify({"status": "ok", "name": name, "sr_code": sr_code})
 
     except Exception as e:
-        print(f"[LIVE] ✗ Error saving {name}: {e}")
+        print(f"[LIVE] ✗ Error staging {name}: {e}")
         return jsonify({"error": str(e)}), 500
 
 
 @app.route("/api/save_attendance", methods=["POST"])
 def api_save_attendance():
     """
-    Body JSON:
-    {
-        "class_code": "CPET-3201-2026",
-        "section":    "CPET-3201",
-        "subject":    "CPT-113",
-        "records": [
-            {"name": "JohnDoe",   "sr_code": "2021-0001",
-             "status": "Present", "timestamp": "07:02:34"},
-            {"name": "AnnaSmith", "sr_code": "2021-0002",
-             "status": "Late",    "timestamp": "07:15:10"},
-            {"name": "MarkLee",   "sr_code": "2021-0003",
-             "status": "Absent",  "timestamp": ""}
-        ]
-    }
+    Called by the instructor's browser when they click 'Save Attendance'.
+    1. Deletes all LIVE staging rows for this class+date (ghost-buster).
+    2. Deletes any prior record for this exact session_time (idempotent re-save).
+    3. Inserts the final, complete attendance list.
     """
     data = request.json
     if not data:
         return jsonify({"error": "no data"}), 400
 
-    from datetime import datetime as _dt
+    from datetime import datetime as _dt, date as _date
+    today        = _date.today().isoformat()
+    class_code   = data["class_code"]
+    session_time = data.get("session_time", _dt.now().strftime("%H:%M:%S"))
+
+    # ── Step 1: purge LIVE staging rows for this class today ─────────────────
+    try:
+        conn = db.get_db()
+        cur  = db.get_cursor(conn)
+        cur.execute(
+            "DELETE FROM attendance WHERE class_code = %s AND date = %s AND session_time = 'LIVE'",
+            (class_code, today)
+        )
+        purged = cur.rowcount
+        conn.commit()
+        cur.close(); conn.close()
+        if purged:
+            print(f"[SAVE] Purged {purged} LIVE staging row(s) for {class_code}")
+    except Exception as e:
+        print(f"[SAVE] Warning: could not purge LIVE rows: {e}")
+
+    # ── Step 2 & 3: save the final, official attendance records ──────────────
     db.save_attendance(
-        class_code   = data["class_code"],
+        class_code   = class_code,
         section      = data["section"],
         subject      = data["subject"],
         records      = data["records"],
-        session_time = data.get("session_time", _dt.now().strftime("%H:%M:%S")),
+        session_time = session_time,
     )
-    recognizer.reset_attendance()
+    if recognizer:
+        recognizer.reset_attendance()
     return jsonify({"status": "ok"})
 
 
@@ -434,6 +461,28 @@ def api_reset_attendance():
     return jsonify({"status": "ok"})
 
 
+
+
+@app.route("/api/admin/purge_live_rows", methods=["POST"])
+def api_purge_live_rows():
+    """
+    One-time maintenance endpoint.
+    Deletes all orphaned LIVE staging rows left in the attendance table
+    from before this fix was deployed.
+    Call once from Postman or curl after deploying:
+      POST https://attendance-system-xapv.onrender.com/api/admin/purge_live_rows
+    """
+    try:
+        conn = db.get_db()
+        cur  = db.get_cursor(conn)
+        cur.execute("DELETE FROM attendance WHERE session_time = 'LIVE'")
+        deleted = cur.rowcount
+        conn.commit()
+        cur.close(); conn.close()
+        print(f"[PURGE] Deleted {deleted} orphaned LIVE row(s)")
+        return jsonify({"status": "ok", "deleted": deleted})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 # ════════════════════════════════════════════════════════════════════════════════
