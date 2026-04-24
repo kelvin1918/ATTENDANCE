@@ -58,6 +58,52 @@ def log(msg):
 
 # ── FACE LOADER ───────────────────────────────────────────────────────────────
 
+def sync_faces_from_server(faces_dir):
+    """
+    Downloads student photos from the Render server into the local faces/ folder.
+    This ensures the agent always has the latest registered students.
+    Photos are stored as: faces/FirstName_LastName.jpg
+    """
+    os.makedirs(faces_dir, exist_ok=True)
+    try:
+        res = requests.get(
+            f"{RENDER_URL}/api/students/photos",
+            headers={"X-Instructor-Email": INSTRUCTOR_EMAIL},
+            timeout=10
+        )
+        if res.status_code != 200:
+            log(f"Could not sync faces from server (status {res.status_code}). Using local faces only.")
+            return
+        students = res.json()
+        synced = 0
+        for s in students:
+            name     = s.get("name", "").strip().replace(" ", "_")
+            photo_url= s.get("photo_url", "")
+            if not name or not photo_url:
+                continue
+            # Build local filename
+            ext       = os.path.splitext(photo_url)[-1] or ".jpg"
+            local_path= os.path.join(faces_dir, f"{name}{ext}")
+            # Skip if already downloaded
+            if os.path.exists(local_path):
+                continue
+            try:
+                img_res = requests.get(photo_url, timeout=10)
+                if img_res.status_code == 200:
+                    with open(local_path, 'wb') as f:
+                        f.write(img_res.content)
+                    log(f"SYNCED FACE: {name}")
+                    synced += 1
+            except Exception as e:
+                log(f"Could not download photo for {name}: {e}")
+        if synced > 0:
+            log(f"Downloaded {synced} new student photo(s) from server.")
+        else:
+            log("Faces are up to date.")
+    except Exception as e:
+        log(f"Face sync failed: {e}. Using local faces only.")
+
+
 def load_known_faces(faces_dir):
     known_encodings = []
     known_names     = []
@@ -223,6 +269,10 @@ def main():
 
     log(f"Agent starting for: {INSTRUCTOR_EMAIL}")
     log(f"Render URL: {RENDER_URL}")
+
+    # Sync student photos from server before loading faces
+    log("Syncing student faces from server...")
+    sync_faces_from_server(FACES_DIR)
 
     # Load faces
     known_enc, known_names = load_known_faces(FACES_DIR)

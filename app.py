@@ -886,6 +886,44 @@ def api_attendance_by_date(class_code, date):
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/students/photos", methods=["GET"])
+def api_students_photos():
+    """
+    Returns all students with their photo URLs for the agent to download.
+    Agent uses this to sync the faces/ folder automatically.
+    """
+    instructor_id = get_current_instructor_id(request)
+    if not instructor_id:
+        # Also allow via X-Instructor-Email header (agent auth)
+        email = request.headers.get("X-Instructor-Email", "")
+        instr = db.get_instructor_by_email(email) if email else None
+        if not instr:
+            return jsonify({"error": "unauthorized"}), 401
+        instructor_id = instr["id"]
+
+    try:
+        classes = db.get_all_classes(instructor_id)
+        result  = []
+        for cls in classes:
+            students = db.get_students(cls["id"])
+            for s in students:
+                if s.get("photo"):
+                    # Build full URL for the photo
+                    photo_path = s["photo"]
+                    if not photo_path.startswith("http"):
+                        photo_url = request.host_url.rstrip("/") + "/" + photo_path.lstrip("/")
+                    else:
+                        photo_url = photo_path
+                    result.append({
+                        "name":      s["name"],
+                        "sr_code":   s.get("sr_code", ""),
+                        "photo_url": photo_url
+                    })
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/download_agent", methods=["GET"])
 def download_agent():
     """Serves the agent.py file as a download from the dashboard."""

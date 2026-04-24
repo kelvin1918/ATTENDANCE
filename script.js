@@ -1635,13 +1635,14 @@ async function startCameraSession(cls, activeSchedule) {
     _scannedStudents     = {};
     _cameraOpenTime      = Date.now();
     _camera_started_flag = false;
+    _agentMode           = false;
 
     document.getElementById('recognizedList').innerHTML = '';
     document.getElementById('cameraModal').classList.remove('hidden');
     document.getElementById('cameraLoading').classList.remove('hidden');
     document.getElementById('cameraLoading').innerHTML = `
         <div class="w-20 h-20 border-4 border-t-[#D32F2F] border-gray-800 rounded-full animate-spin mb-6"></div>
-        <h3 class="text-white font-bold text-lg mb-2">Checking agent status...</h3>`;
+        <h3 class="text-white font-bold text-lg mb-2">Initializing Camera...</h3>`;
     document.getElementById('dummyFeed').classList.add('hidden');
     updateDetectionHeader();
 
@@ -1650,96 +1651,79 @@ async function startCameraSession(cls, activeSchedule) {
     const section    = cls.section || '';
     const subject    = cls.subject || '';
 
-    // ── Check if agent is online ──────────────────────────────────────────────
-    let agentOnline = false;
+    // ── Always use local camera + video feed for the live view ───────────────
+    // The agent runs silently in background for cloud sync only.
+    // The video feed always comes from local /video_feed regardless.
+    try {
+        await authFetch('/api/start_camera', {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ source, class_code, section, subject })
+        });
+        _camera_started_flag = true;
+    } catch (e) {
+        _showCameraError('Camera failed to start. Check your camera connection.');
+        return;
+    }
+
+    // ── Also signal agent if online (background cloud sync) ──────────────────
     try {
         const agentRes  = await authFetch('/api/agent/status');
         const agentData = await agentRes.json();
-        agentOnline = agentData.online === true;
-    } catch { agentOnline = false; }
-
-    if (agentOnline) {
-        // ── AGENT MODE: signal agent to start, show agent feed UI ────────────
-        _agentMode = true;
-        try {
-            await authFetch('/api/agent/signal', {
+        if (agentData.online === true) {
+            _agentMode = true;
+            authFetch('/api/agent/signal', {
                 method:  'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ status: 'active', source, class_code, section, subject })
-            });
-            _camera_started_flag = true;
-        } catch (e) {
-            _showCameraError('Agent signal failed. Make sure the agent is running.');
-            return;
+            }).catch(() => {});
         }
+    } catch { /* agent offline — local only, that's fine */ }
 
-        // Show agent mode UI — no local /video_feed, agent handles the camera
+    // ── Show live video feed ──────────────────────────────────────────────────
+    setTimeout(() => {
         document.getElementById('cameraLoading').classList.add('hidden');
         const dummyFeed = document.getElementById('dummyFeed');
         dummyFeed.classList.remove('hidden');
-        dummyFeed.innerHTML = `
-            <div class="flex flex-col items-center justify-center h-full text-center p-8 space-y-4">
-                <div class="w-4 h-4 bg-green-400 rounded-full animate-pulse"></div>
-                <h3 class="text-white font-bold text-lg">Agent Camera Active</h3>
-                <p class="text-gray-400 text-xs max-w-xs">
-                    The Camera Agent is running on the classroom PC and scanning students.
-                    Detection results will appear in the panel on the right in real time.
-                </p>
-                <p class="text-[10px] text-gray-500 uppercase tracking-widest">
-                    Camera feed is on the classroom computer
-                </p>
-            </div>`;
+        dummyFeed.innerHTML = '';
 
-        // Poll attendance from Neon (students synced by agent) every 3 seconds
-        _agentPollInterval = setInterval(async () => {
+        const img = document.createElement('img');
+        img.style.cssText = 'width:100%; height:100%; object-fit:cover;';
+        img.src = `/video_feed?t=${Date.now()}`;
+        img.onerror = () => {
+            dummyFeed.innerHTML = `
+                <div class="flex flex-col items-center justify-center h-full text-center p-8">
+                    <h3 class="text-white font-bold text-lg mb-2">No Video Feed</h3>
+                    <p class="text-gray-400 text-xs">Could not connect to camera stream.<br>
+                    Make sure you are on the local classroom PC (127.0.0.1:5000).</p>
+                    <button onclick="refreshCameraFeed()"
+                        class="mt-4 px-5 py-2 bg-[#D32F2F] text-white rounded-xl font-bold text-xs hover:bg-[#B71C1C] transition">
+                        Retry
+                    </button>
+                </div>`;
+        };
+        dummyFeed.appendChild(img);
+
+        // ── Poll scan_log for detection panel updates ─────────────────────────
+        _pollInterval = setInterval(async () => {
             try {
-                const res     = await authFetch(`/api/attendance/${class_code}/${new Date().toISOString().split('T')[0]}`);
-                const records = await res.json();
-                records.forEach(r => {
-                    const displayName = r.name;
-                    const status      = r.status || 'Present';
-                    const ts          = r.timestamp
-                        ? new Date('1970-01-01T' + String(r.timestamp).substring(11,19))
-                              .toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-                        : '';
-                    _scannedStudents[displayName] = { displayName, status, time: ts, rawName: displayName };
+                const res     = await authFetch('/api/scan_log');
+                const scanLog = await res.json();
+                Object.entries(scanLog).forEach(([rawName, firstSeenUnix]) => {
+                    const displayName = normalizeName(rawName);
+                    const status      = getStatusForScanTime(firstSeenUnix);
+                    const time        = new Date(firstSeenUnix * 1000)
+                                          .toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                    _scannedStudents[displayName] = { displayName, status, time, rawName };
                 });
                 renderAttendancePanel();
                 updateDetectionHeader();
             } catch {}
-        }, 3000);
+        }, 2000);
 
-    } else {
-        // ── LOCAL MODE: no agent — use existing local /api/start_camera ──────
-        _agentMode = false;
+    }, 1500);
 
-        // Show download prompt before proceeding
-        const loadingEl = document.getElementById('cameraLoading');
-        loadingEl.innerHTML = `
-            <div class="flex flex-col items-center justify-center text-center px-8 space-y-4">
-                <div class="w-16 h-16 bg-yellow-500/20 rounded-full flex items-center justify-center">
-                    <i data-lucide="download" class="w-8 h-8 text-yellow-400"></i>
-                </div>
-                <h3 class="text-white font-bold text-lg">Camera Agent Not Detected</h3>
-                <p class="text-gray-400 text-xs max-w-xs">
-                    For full camera support, download and run the Camera Agent on this classroom PC.
-                    Or continue with local camera mode below.
-                </p>
-                <a href="/download_agent" download
-                    class="px-5 py-2 bg-yellow-500 text-black rounded-xl font-black text-xs hover:bg-yellow-400 transition">
-                    ⬇ Download Camera Agent
-                </a>
-                <button onclick="_startLocalCamera('${class_code}','${section}','${subject}','${source}')"
-                    class="px-5 py-2 bg-[#D32F2F] text-white rounded-xl font-bold text-xs hover:bg-[#B71C1C] transition">
-                    Continue with Local Camera
-                </button>
-                <button onclick="closeCamera()"
-                    class="text-gray-500 text-xs hover:text-white transition">Cancel</button>
-            </div>`;
-        lucide.createIcons();
-    }
-
-    // Auto-dismiss at class end time (works for both modes)
+    // ── Auto-dismiss at class end time ────────────────────────────────────────
     if (activeSchedule && activeSchedule.time) {
         const parts = activeSchedule.time.split(' - ');
         if (parts.length === 2) {
