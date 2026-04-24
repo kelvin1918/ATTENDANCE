@@ -28,7 +28,7 @@ DB_CONFIG = {
     "port":     int(os.environ.get("DB_PORT", 5432)),
     "database": os.environ.get("DB_NAME",     "neondb"),
     "user":     os.environ.get("DB_USER",     "neondb_owner"),
-    "password": os.environ.get("DB_PASSWORD", "npg_WI7TMFYw0vOe"),
+    "password": os.environ.get("DB_PASSWORD", ""),
     "sslmode":  "require"
 }
 
@@ -151,20 +151,6 @@ def init_db():
         );
     """)
 
-    # ── 7. camera_sessions — agent polls this to know when to start/stop ────────
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS camera_sessions (
-            id            INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-            instructor_id INTEGER UNIQUE REFERENCES instructors(id) ON DELETE CASCADE,
-            class_code    VARCHAR(50),
-            section       VARCHAR(50),
-            subject       VARCHAR(50),
-            source        TEXT    DEFAULT '0',
-            status        VARCHAR(20) DEFAULT 'idle',
-            updated_at    TIMESTAMP DEFAULT NOW()
-        );
-    """)
-
     # ── 8. campus_rooms — maps friendly room name to RTSP URL ────────────────
     cur.execute("""
         CREATE TABLE IF NOT EXISTS campus_rooms (
@@ -172,7 +158,7 @@ def init_db():
             room_name VARCHAR(50) UNIQUE NOT NULL,
             rtsp_url  TEXT NOT NULL
         );
-    """)
+    """)    
 
     conn.commit()
     cur.close()
@@ -768,20 +754,6 @@ def get_attendance_for_student(class_code, name, date):
     row = cur.fetchone(); cur.close(); conn.close()
     return row
 
-def get_attendance_by_date(class_code, date):
-    """Return all attendance records for a class on a given date.
-    Used by the dashboard to show live detection in agent mode."""
-    conn = get_db(); cur = get_cursor(conn)
-    cur.execute(
-        """SELECT name, status, timestamp, sr_code
-           FROM attendance
-           WHERE class_code = %s AND date = %s
-           ORDER BY timestamp ASC""",
-        (class_code, date)
-    )
-    rows = cur.fetchall(); cur.close(); conn.close()
-    return rows
-
 def save_mail_config(instructor_id, gmail='', app_pass='', present_grace=15, late_grace=30):
     """Upsert mail config (gmail, app password, grace periods) for an instructor."""
     conn = get_db(); cur = get_cursor(conn)
@@ -800,43 +772,6 @@ def get_mail_config(instructor_id):
     """Return mail config row for an instructor, or None."""
     conn = get_db(); cur = get_cursor(conn)
     cur.execute("SELECT * FROM mail_config WHERE instructor_id=%s", (instructor_id,))
-    row = cur.fetchone(); cur.close(); conn.close()
-    return row
-
-# ── CAMERA SESSION (Agent Control) ───────────────────────────────────────────
-
-def upsert_camera_session(instructor_id, class_code, section, subject, source, status):
-    """Create or update the camera session row for this instructor."""
-    conn = get_db(); cur = get_cursor(conn)
-    cur.execute("""
-        INSERT INTO camera_sessions (instructor_id, class_code, section, subject, source, status, updated_at)
-        VALUES (%s, %s, %s, %s, %s, %s, NOW())
-        ON CONFLICT (instructor_id) DO UPDATE
-            SET class_code = EXCLUDED.class_code,
-                section    = EXCLUDED.section,
-                subject    = EXCLUDED.subject,
-                source     = EXCLUDED.source,
-                status     = EXCLUDED.status,
-                updated_at = NOW()
-    """, (instructor_id, class_code, section, subject, source, status))
-    conn.commit(); cur.close(); conn.close()
-
-def get_camera_session(instructor_id):
-    """Get current camera session for an instructor."""
-    conn = get_db(); cur = get_cursor(conn)
-    cur.execute("SELECT * FROM camera_sessions WHERE instructor_id=%s", (instructor_id,))
-    row = cur.fetchone(); cur.close(); conn.close()
-    return row
-
-def get_camera_session_by_email(email):
-    """Get camera session by instructor email — used by the agent."""
-    conn = get_db(); cur = get_cursor(conn)
-    cur.execute("""
-        SELECT cs.*, i.email, i.name as instructor_name
-        FROM camera_sessions cs
-        JOIN instructors i ON i.id = cs.instructor_id
-        WHERE i.email = %s
-    """, (email,))
     row = cur.fetchone(); cur.close(); conn.close()
     return row
 
