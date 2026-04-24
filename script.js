@@ -75,6 +75,15 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 // ── CLOCK ─────────────────────────────────────────────────────────────────────
 
+// ── ENVIRONMENT DETECTION ────────────────────────────────────────────────────
+// The buttons are injected via innerHTML so getElementById on DOMContentLoaded
+// won't find them. Instead we check the environment HERE, at render time,
+// directly inside the template string that builds the buttons.
+function isLocalEnvironment() {
+    const host = window.location.hostname;
+    return host === '127.0.0.1' || host === 'localhost';
+}
+
 function updateTime() {
     const clockEl = document.getElementById('clock');
     const dateEl  = document.getElementById('date');
@@ -909,14 +918,26 @@ function renderFolderView(cls, class_code, students) {
                 <i data-lucide="arrow-left" class="w-4 h-4 mr-2"></i> Back
             </button>
             <div class="flex space-x-3">
-                <button onclick="openRegModal()" class="bg-gray-100 text-gray-600 px-8 py-4 rounded-2xl text-[10px] font-black uppercase hover:bg-gray-200 transition">Registration</button>
-                ${hasStudents
-                    ? `<button onclick="openCamera()" class="bg-black text-white px-8 py-4 rounded-2xl text-[10px] font-black uppercase flex items-center space-x-2 hover:bg-gray-800 transition"><i data-lucide="camera" class="w-4 h-4"></i> <span>Open Camera</span></button>`
-                    : `<button disabled title="Register at least one student before scanning" class="bg-gray-200 text-gray-400 px-8 py-4 rounded-2xl text-[10px] font-black uppercase flex items-center space-x-2 cursor-not-allowed opacity-60"><i data-lucide="camera" class="w-4 h-4"></i> <span>Open Camera</span></button>`}
+                ${isLocalEnvironment()
+                    ? `<button onclick="openRegModal()" class="bg-gray-100 text-gray-600 px-8 py-4 rounded-2xl text-[10px] font-black uppercase hover:bg-gray-200 transition">Registration</button>`
+                    : `<button disabled title="Registration is only available on the local classroom PC." class="bg-gray-100 text-gray-300 px-8 py-4 rounded-2xl text-[10px] font-black uppercase cursor-not-allowed opacity-40 flex items-center space-x-2"><span>Registration</span></button>`}
+                ${isLocalEnvironment()
+                    ? (hasStudents
+                        ? `<button onclick="openCamera()" class="bg-black text-white px-8 py-4 rounded-2xl text-[10px] font-black uppercase flex items-center space-x-2 hover:bg-gray-800 transition"><i data-lucide="camera" class="w-4 h-4"></i> <span>Open Camera</span></button>`
+                        : `<button disabled title="Register at least one student before scanning." class="bg-gray-200 text-gray-400 px-8 py-4 rounded-2xl text-[10px] font-black uppercase flex items-center space-x-2 cursor-not-allowed opacity-60"><i data-lucide="camera" class="w-4 h-4"></i> <span>Open Camera</span></button>`)
+                    : `<button disabled title="Camera is only available on the local classroom PC." class="bg-gray-200 text-gray-300 px-8 py-4 rounded-2xl text-[10px] font-black uppercase flex items-center space-x-2 cursor-not-allowed opacity-40"><i data-lucide="camera" class="w-4 h-4"></i> <span>Open Camera</span></button>`}
             </div>
         </div>
         <h1 class="text-4xl font-black text-gray-900 tracking-tighter uppercase">${cls.subject || class_code}</h1>
         <p class="text-gray-400 font-bold text-sm uppercase tracking-widest mt-1">${cls.section || ''} • ${cls.course_code || ''}</p>
+        ${!isLocalEnvironment() ? `
+        <div class="mt-4 flex items-start space-x-3 bg-amber-50 border border-amber-200 rounded-2xl px-5 py-3">
+            <svg class="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M12 2a10 10 0 110 20A10 10 0 0112 2z"/></svg>
+            <div>
+                <p class="text-[11px] font-black text-amber-700 uppercase tracking-widest">Online View Only</p>
+                <p class="text-[10px] text-amber-600 mt-0.5">Registration and Camera are only available on the local classroom PC at 127.0.0.1:5000. Student records and attendance history are visible here.</p>
+            </div>
+        </div>` : ''}
 
         <!-- Status Filters -->
         <div class="flex gap-2 mt-6 mb-4">
@@ -2244,3 +2265,27 @@ async function openRealDoc(class_code, date) {
     }
 }
 
+document.addEventListener('DOMContentLoaded', () => {
+    const isCloud = window.location.hostname.includes('onrender.com');
+
+    if (isCloud) {
+        // Select the buttons you want to disable
+        const registerBtn = document.getElementById('register-btn');
+        const cameraBtn = document.getElementById('camera-btn');
+
+        // Apply "Grey Look" and Disable
+        if (registerBtn) {
+            registerBtn.disabled = true;
+            registerBtn.style.opacity = "0.5";
+            registerBtn.style.cursor = "not-allowed";
+            registerBtn.title = "Registration is handled at the Local Station for Biometric Privacy.";
+        }
+
+        if (cameraBtn) {
+            cameraBtn.disabled = true;
+            cameraBtn.style.opacity = "0.5";
+            cameraBtn.style.cursor = "not-allowed";
+            cameraBtn.title = "Camera access requires a Local Edge connection.";
+        }
+    }
+});
