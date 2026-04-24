@@ -2243,3 +2243,28 @@ async function openRealDoc(class_code, date) {
         alert('Could not load attendance record: ' + e.message);
     }
 }
+
+document.addEventListener('DOMContentLoaded', () => {
+    const isCloud = window.location.hostname.includes('onrender.com');
+
+    if (isCloud) {
+        // Select the buttons you want to disable
+        const registerBtn = document.getElementById('register-btn');
+        const cameraBtn = document.getElementById('camera-btn');
+
+        // Apply "Grey Look" and Disable
+        if (registerBtn) {
+            registerBtn.disabled = true;
+            registerBtn.style.opacity = "0.5";
+            registerBtn.style.cursor = "not-allowed";
+            registerBtn.title = "Registration is handled at the Local Station for Biometric Privacy.";
+        }
+
+        if (cameraBtn) {
+            cameraBtn.disabled = true;
+            cameraBtn.style.opacity = "0.5";
+            cameraBtn.style.cursor = "not-allowed";
+            cameraBtn.title = "Camera access requires a Local Edge connection.";
+        }
+    }
+});
