@@ -158,6 +158,19 @@ def init_db():
             room_name VARCHAR(50) UNIQUE NOT NULL,
             rtsp_url  TEXT NOT NULL
         );
+    """)
+
+    # ── 9. notifications — per-instructor activity feed ──────────────────────
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS notifications (
+            id            INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+            instructor_id INTEGER REFERENCES instructors(id) ON DELETE CASCADE,
+            type          VARCHAR(50)  NOT NULL,
+            title         VARCHAR(200) NOT NULL,
+            body          TEXT         NOT NULL,
+            is_read       BOOLEAN      DEFAULT FALSE,
+            created_at    TIMESTAMP(0) DEFAULT NOW()
+        );
     """)    
 
     conn.commit()
@@ -802,3 +815,77 @@ def delete_room(room_id):
     conn = get_db(); cur = get_cursor(conn)
     cur.execute("DELETE FROM campus_rooms WHERE id=%s", (room_id,))
     conn.commit(); cur.close(); conn.close()
+
+
+# ── NOTIFICATIONS ─────────────────────────────────────────────────────────────
+
+def add_notification(instructor_id, notif_type, title, body):
+    """
+    Insert a notification row for the given instructor.
+    notif_type  : 'approved' | 'email_sent' | 'attendance_saved' |
+                  'class_created' | 'student_registered' | 'general'
+    title       : Short headline shown in the bell dropdown.
+    body        : Full detail line shown under the title.
+    """
+    if not instructor_id:
+        return
+    conn = get_db(); cur = get_cursor(conn)
+    cur.execute(
+        """INSERT INTO notifications (instructor_id, type, title, body)
+           VALUES (%s, %s, %s, %s)""",
+        (instructor_id, notif_type, title, body)
+    )
+    conn.commit(); cur.close(); conn.close()
+
+
+def get_notifications(instructor_id, limit=50):
+    """
+    Return up to `limit` most-recent notifications for this instructor.
+    Returns list of dicts with keys:
+      id, type, title, body, is_read, created_at (ISO string)
+    """
+    conn = get_db(); cur = get_cursor(conn)
+    cur.execute(
+        """SELECT id, type, title, body, is_read,
+                  TO_CHAR(created_at, 'YYYY-MM-DD"T"HH24:MI:SS') AS created_at
+           FROM notifications
+           WHERE instructor_id = %s
+           ORDER BY created_at DESC
+           LIMIT %s""",
+        (instructor_id, limit)
+    )
+    rows = [dict(r) for r in cur.fetchall()]
+    cur.close(); conn.close()
+    return rows
+
+
+def mark_notifications_read(instructor_id, notif_ids=None):
+    """
+    Mark notifications as read.
+    If notif_ids is None → mark ALL unread for this instructor.
+    If notif_ids is a list of ints → mark only those specific rows.
+    """
+    conn = get_db(); cur = get_cursor(conn)
+    if notif_ids:
+        cur.execute(
+            """UPDATE notifications SET is_read = TRUE
+               WHERE instructor_id = %s AND id = ANY(%s)""",
+            (instructor_id, notif_ids)
+        )
+    else:
+        cur.execute(
+            "UPDATE notifications SET is_read = TRUE WHERE instructor_id = %s",
+            (instructor_id,)
+        )
+    conn.commit(); cur.close(); conn.close()
+
+
+def get_unread_count(instructor_id):
+    """Return the count of unread notifications for the badge."""
+    conn = get_db(); cur = get_cursor(conn)
+    cur.execute(
+        "SELECT COUNT(*) AS cnt FROM notifications WHERE instructor_id=%s AND is_read=FALSE",
+        (instructor_id,)
+    )
+    row = cur.fetchone(); cur.close(); conn.close()
+    return row["cnt"] if row else 0

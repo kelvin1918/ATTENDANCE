@@ -2452,3 +2452,212 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 });
+
+
+// ════════════════════════════════════════════════════════════════════════════════
+// NOTIFICATION SYSTEM
+// ════════════════════════════════════════════════════════════════════════════════
+
+const NOTIF_ICONS = {
+    approved:          { icon: 'shield-check',  color: 'text-green-500',  bg: 'bg-green-50'  },
+    class_created:     { icon: 'folder-plus',   color: 'text-blue-500',   bg: 'bg-blue-50'   },
+    attendance_saved:  { icon: 'clipboard-check',color: 'text-[#D32F2F]', bg: 'bg-red-50'    },
+    email_sent:        { icon: 'mail-check',    color: 'text-purple-500', bg: 'bg-purple-50' },
+    student_registered:{ icon: 'user-plus',     color: 'text-orange-500', bg: 'bg-orange-50' },
+    general:           { icon: 'bell',          color: 'text-gray-400',   bg: 'bg-gray-50'   },
+};
+
+let _notifPanelOpen   = false;
+let _notifPollTimer   = null;
+let _lastUnreadCount  = 0;
+
+// ── Public: called by the bell button ────────────────────────────────────────
+function toggleNotifPanel() {
+    _notifPanelOpen = !_notifPanelOpen;
+    const panel = document.getElementById('notifPanel');
+    if (!panel) return;
+    panel.classList.toggle('hidden', !_notifPanelOpen);
+    if (_notifPanelOpen) {
+        loadNotifications();
+    }
+}
+
+// ── Close panel when clicking outside ────────────────────────────────────────
+document.addEventListener('click', e => {
+    const wrapper = document.getElementById('notifWrapper');
+    if (wrapper && !wrapper.contains(e.target) && _notifPanelOpen) {
+        _notifPanelOpen = false;
+        document.getElementById('notifPanel')?.classList.add('hidden');
+    }
+});
+
+// ── Fetch notifications from API ─────────────────────────────────────────────
+async function loadNotifications() {
+    const list = document.getElementById('notifList');
+    if (!list) return;
+
+    try {
+        const res  = await authFetch('/api/notifications');
+        const data = await res.json();
+        const { notifications = [], unread = 0 } = data;
+
+        updateBadge(unread);
+        renderNotifList(notifications);
+
+    } catch {
+        list.innerHTML = `<p class="text-center text-gray-300 text-xs font-bold py-6">Could not load notifications.</p>`;
+    }
+}
+
+// ── Render the list of notification items ────────────────────────────────────
+function renderNotifList(notifications) {
+    const list = document.getElementById('notifList');
+    if (!list) return;
+
+    if (!notifications.length) {
+        list.innerHTML = `
+            <div class="flex flex-col items-center justify-center py-8 text-gray-300">
+                <svg class="w-10 h-10 mb-2 opacity-40" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                          d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6 6 0 10-12 0v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/>
+                </svg>
+                <p class="text-xs font-bold">No notifications yet</p>
+            </div>`;
+        return;
+    }
+
+    list.innerHTML = notifications.map(n => {
+        const meta    = NOTIF_ICONS[n.type] || NOTIF_ICONS.general;
+        const ts      = _fmtNotifTime(n.created_at);
+        const unread  = !n.is_read;
+
+        return `
+        <div onclick="markNotifRead(${n.id}, this)"
+             class="flex items-start gap-3 px-4 py-3 cursor-pointer transition
+                    ${unread ? 'bg-red-50/40 hover:bg-red-50' : 'hover:bg-gray-50'}">
+            <!-- Icon -->
+            <div class="w-9 h-9 rounded-xl ${meta.bg} flex items-center justify-center flex-shrink-0 mt-0.5">
+                <i data-lucide="${meta.icon}" class="w-4 h-4 ${meta.color}"></i>
+            </div>
+            <!-- Text -->
+            <div class="flex-1 min-w-0">
+                <p class="text-xs font-black text-gray-800 leading-snug
+                          ${unread ? '' : 'font-bold text-gray-500'}">
+                    ${n.title}
+                </p>
+                <p class="text-[10px] text-gray-400 mt-0.5 leading-snug line-clamp-2">
+                    ${n.body}
+                </p>
+                <p class="text-[9px] text-gray-300 font-bold mt-1 uppercase tracking-wide">
+                    ${ts}
+                </p>
+            </div>
+            <!-- Unread dot -->
+            ${unread ? `<div class="w-2 h-2 bg-[#D32F2F] rounded-full mt-1 flex-shrink-0"></div>` : ''}
+        </div>`;
+    }).join('');
+
+    lucide.createIcons();
+}
+
+// ── Mark a single notification as read ───────────────────────────────────────
+async function markNotifRead(id, el) {
+    try {
+        await authFetch('/api/notifications/mark_read', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ids: [id] })
+        });
+        // Visually update the row immediately
+        if (el) {
+            el.classList.remove('bg-red-50/40', 'hover:bg-red-50');
+            el.classList.add('hover:bg-gray-50');
+            el.querySelector('.bg-\\[\\#D32F2F\\]')?.remove();
+        }
+        // Decrement badge
+        const badge = document.getElementById('notifBadge');
+        if (badge) {
+            const current = parseInt(badge.textContent) || 0;
+            updateBadge(Math.max(0, current - 1));
+        }
+    } catch { /* silent */ }
+}
+
+// ── Mark ALL as read ──────────────────────────────────────────────────────────
+async function markAllNotifRead() {
+    try {
+        await authFetch('/api/notifications/mark_read', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({})
+        });
+        updateBadge(0);
+        await loadNotifications();
+    } catch { /* silent */ }
+}
+
+// ── Update the red badge number ───────────────────────────────────────────────
+function updateBadge(count) {
+    const badge = document.getElementById('notifBadge');
+    if (!badge) return;
+    _lastUnreadCount = count;
+    if (count > 0) {
+        badge.textContent = count > 99 ? '99+' : count;
+        badge.classList.remove('hidden');
+        // Pulse the bell icon when new unread arrives
+        const bell = document.getElementById('notifBell');
+        if (bell) {
+            bell.classList.add('animate-bounce');
+            setTimeout(() => bell.classList.remove('animate-bounce'), 1000);
+        }
+    } else {
+        badge.classList.add('hidden');
+    }
+}
+
+// ── Format ISO timestamp to relative / absolute ───────────────────────────────
+function _fmtNotifTime(iso) {
+    if (!iso) return '';
+    const d    = new Date(iso);
+    const now  = new Date();
+    const diff = Math.floor((now - d) / 1000);   // seconds ago
+
+    if (diff < 60)          return 'Just now';
+    if (diff < 3600)        return `${Math.floor(diff / 60)}m ago`;
+    if (diff < 86400)       return `${Math.floor(diff / 3600)}h ago`;
+    if (diff < 86400 * 7)   return `${Math.floor(diff / 86400)}d ago`;
+
+    return d.toLocaleDateString('en-US', {
+        month: 'short', day: 'numeric', year: 'numeric',
+        hour: '2-digit', minute: '2-digit'
+    });
+}
+
+// ── Poll every 30 seconds for new notifications ───────────────────────────────
+async function pollNotifications() {
+    try {
+        const res  = await authFetch('/api/notifications');
+        const data = await res.json();
+        const { unread = 0 } = data;
+        // Only update badge if count changed (avoids animation flicker)
+        if (unread !== _lastUnreadCount) {
+            updateBadge(unread);
+            // If panel is open, re-render immediately
+            if (_notifPanelOpen) renderNotifList(data.notifications || []);
+        }
+    } catch { /* silent — no internet / session expired */ }
+}
+
+function startNotifPolling() {
+    // Initial load of badge count on page load
+    pollNotifications();
+    // Then poll every 30 seconds
+    if (_notifPollTimer) clearInterval(_notifPollTimer);
+    _notifPollTimer = setInterval(pollNotifications, 30_000);
+}
+
+// Auto-start polling once page loads
+document.addEventListener('DOMContentLoaded', () => {
+    // Slight delay to let auth token load first
+    setTimeout(startNotifPolling, 1500);
+});

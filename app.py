@@ -141,6 +141,13 @@ def api_create_class():
         section       = data["section"],
         instructor_id = instructor_id,
     )
+    # Notify instructor that the class folder was created
+    db.add_notification(
+        instructor_id = instructor_id,
+        notif_type    = "class_created",
+        title         = f"Class Created — {data['subject']}",
+        body          = f"Class folder \"{data['id']}\" ({data['subject']} · {data['section']}) was successfully created."
+    )
     return jsonify({"status": "ok"})
 
 
@@ -424,6 +431,8 @@ def api_save_attendance():
     from datetime import datetime as _dt, date as _date
     today        = _date.today().isoformat()
     class_code   = data["class_code"]
+    section      = data.get("section", "")
+    subject      = data.get("subject", "")
     session_time = data.get("session_time", _dt.now().strftime("%H:%M:%S"))
 
     # ── Step 1: purge LIVE staging rows for this class today ─────────────────
@@ -443,13 +452,29 @@ def api_save_attendance():
         print(f"[SAVE] Warning: could not purge LIVE rows: {e}")
 
     # ── Step 2 & 3: save the final, official attendance records ──────────────
+    records      = data.get("records", [])
+    present_cnt  = sum(1 for r in records if r.get("status") == "Present")
+    late_cnt     = sum(1 for r in records if r.get("status") == "Late")
+    absent_cnt   = sum(1 for r in records if r.get("status") == "Absent")
+
     db.save_attendance(
         class_code   = class_code,
-        section      = data["section"],
-        subject      = data["subject"],
-        records      = data["records"],
+        section      = section,
+        subject      = subject,
+        records      = records,
         session_time = session_time,
     )
+
+    # Notify instructor that attendance was recorded
+    instructor_id = get_current_instructor_id(request)
+    db.add_notification(
+        instructor_id = instructor_id,
+        notif_type    = "attendance_saved",
+        title         = f"Attendance Saved — {subject}",
+        body          = (f"Session recorded for {subject} ({section}) on {today} at {session_time}. "
+                         f"Present: {present_cnt} · Late: {late_cnt} · Absent: {absent_cnt}.")
+    )
+
     if recognizer:
         recognizer.reset_attendance()
     return jsonify({"status": "ok"})
@@ -691,6 +716,13 @@ def api_get_instructors():
 @app.route("/api/instructors/<int:instructor_id>/approve", methods=["POST"])
 def api_approve_instructor(instructor_id):
     db.approve_instructor(instructor_id)
+    # Notify the instructor that their account was approved
+    db.add_notification(
+        instructor_id = instructor_id,
+        notif_type    = "approved",
+        title         = "Account Approved",
+        body          = "Your instructor account has been approved by the administrator. You can now create classes and record attendance."
+    )
     return jsonify({"status": "ok"})
 
 
@@ -821,12 +853,52 @@ def api_send_email():
             server.login(smtp_user, smtp_password)
             server.sendmail(smtp_user, data["to"], msg.as_string())
 
+        # Notify instructor that the email was sent successfully
+        db.add_notification(
+            instructor_id = instructor_id,
+            notif_type    = "email_sent",
+            title         = f"Email Sent — {data.get('subject', 'Attendance Update')}",
+            body          = f"Email successfully delivered to {data['to']}."
+        )
         return jsonify({"status": "sent"})
 
     except smtplib.SMTPAuthenticationError:
         return jsonify({"error": "SMTP authentication failed. Check your Gmail and App Password in Profile → Mailing Setup."}), 401
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+
+
+# ════════════════════════════════════════════════════════════════════════════════
+# API — NOTIFICATIONS
+# ════════════════════════════════════════════════════════════════════════════════
+
+@app.route("/api/notifications", methods=["GET"])
+def api_get_notifications():
+    """Return up to 50 most-recent notifications for the current instructor."""
+    instructor_id = get_current_instructor_id(request)
+    if not instructor_id:
+        return jsonify([])
+    notifications = db.get_notifications(instructor_id, limit=50)
+    unread_count  = db.get_unread_count(instructor_id)
+    return jsonify({"notifications": notifications, "unread": unread_count})
+
+
+@app.route("/api/notifications/mark_read", methods=["POST"])
+def api_mark_notifications_read():
+    """
+    Mark notifications as read.
+    Body JSON (optional): { "ids": [1, 2, 3] }
+    If no ids provided → marks ALL as read for current instructor.
+    """
+    instructor_id = get_current_instructor_id(request)
+    if not instructor_id:
+        return jsonify({"error": "unauthorized"}), 401
+    data = request.json or {}
+    ids  = data.get("ids", None)
+    db.mark_notifications_read(instructor_id, ids)
+    return jsonify({"status": "ok"})
 
 
 if __name__ == "__main__":

@@ -180,9 +180,45 @@
     </main>
 
     <aside class="w-80 p-8 flex flex-col bg-[#FDFDFD] border-l border-gray-50"> 
-        <div class="mb-10 text-right">
-            <h1 id="clock" class="text-4xl font-black text-[#D32F2F] tracking-tighter">00:00:00 AM</h1>
-            <p id="date" class="text-gray-400 text-[10px] uppercase font-bold tracking-widest mt-1">Loading...</p>
+        <div class="mb-10 flex items-start justify-between">
+            <div class="text-right flex-1">
+                <h1 id="clock" class="text-4xl font-black text-[#D32F2F] tracking-tighter">00:00:00 AM</h1>
+                <p id="date" class="text-gray-400 text-[10px] uppercase font-bold tracking-widest mt-1">Loading...</p>
+            </div>
+            <!-- Notification Bell -->
+            <div class="relative ml-3 mt-1" id="notifWrapper">
+                <button onclick="toggleNotifPanel()" id="notifBell"
+                    class="relative w-10 h-10 flex items-center justify-center rounded-xl bg-white border border-gray-100 shadow-sm hover:bg-red-50 hover:border-red-200 transition">
+                    <i data-lucide="bell" class="w-5 h-5 text-gray-500"></i>
+                    <span id="notifBadge"
+                        class="hidden absolute -top-1.5 -right-1.5 w-5 h-5 bg-[#D32F2F] text-white text-[9px] font-black rounded-full flex items-center justify-center">
+                        0
+                    </span>
+                </button>
+
+                <!-- Notification Dropdown Panel -->
+                <div id="notifPanel"
+                    class="hidden absolute right-0 top-12 w-80 bg-white rounded-2xl shadow-2xl border border-gray-100 z-50 overflow-hidden">
+                    <!-- Panel Header -->
+                    <div class="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+                        <span class="text-xs font-black text-gray-800 uppercase tracking-wider">Notifications</span>
+                        <button onclick="markAllNotifRead()"
+                            class="text-[10px] font-bold text-[#D32F2F] hover:underline">
+                            Mark all read
+                        </button>
+                    </div>
+                    <!-- Notification List -->
+                    <div id="notifList" class="overflow-y-auto max-h-80 divide-y divide-gray-50">
+                        <p class="text-center text-gray-300 text-xs font-bold py-6">Loading...</p>
+                    </div>
+                    <!-- Panel Footer -->
+                    <div class="px-4 py-2 border-t border-gray-100 text-center">
+                        <span class="text-[9px] text-gray-300 font-bold uppercase tracking-widest">
+                            Last 50 notifications
+                        </span>
+                    </div>
+                </div>
+            </div>
         </div>
         <div id="day-filters" class="flex flex-wrap gap-2 mb-6"></div>
         <div class="flex-1 overflow-y-auto pr-2 scroll-hide">
