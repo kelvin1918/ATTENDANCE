@@ -360,7 +360,7 @@
         </div>
         <h2>Admin Portal</h2>
         <p>Secure access — enter your administrator credentials.</p>
-        <input type="email" id="adm-email" placeholder="admin@email.com" autocomplete="username">
+        <input type="email" id="adm-email" placeholder="Username" autocomplete="username">
         <input type="password" id="adm-pass" placeholder="Password" autocomplete="current-password">
         <button class="login-btn" onclick="adminLogin()">Sign In</button>
     </div>
@@ -638,7 +638,7 @@
     function adminLogin() {
         const email = document.getElementById('adm-email').value.trim();
         const pass  = document.getElementById('adm-pass').value;
-        if (email === "Ian@gmail.com" && pass === "admin123") {
+        if (email === "admin" && pass === "admin123") {
             // 1. Hide login
             const loginEl = document.getElementById('login-overlay');
             loginEl.classList.add('hidden');
