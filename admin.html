@@ -339,12 +339,15 @@
 
         /* Scrollable table body */
         .table-scroll { max-height: 420px; overflow-y: auto; }
+
+        /* Global hidden utility — used by loading-overlay and login-overlay */
+        .hidden { display: none !important; }
     </style>
 </head>
 <body>
 
 <!-- ── LOADING OVERLAY ──────────────────────────────────────────────────── -->
-<div id="loading-overlay" class="hidden">
+<div id="loading-overlay" class="hidden" style="display:none;">
     <div class="spinner"></div>
     <p class="spinner-label">Loading dashboard...</p>
 </div>
@@ -364,7 +367,7 @@
 </div>
 
 <!-- ── MAIN DASHBOARD ───────────────────────────────────────────────────── -->
-<div id="main-content" class="hidden">
+<div id="main-content" class="hidden" style="display:none;">
 
     <!-- SIDEBAR -->
     <nav id="sidebar">
@@ -633,16 +636,31 @@
 
     // ── LOGIN ────────────────────────────────────────────────────────────────
     function adminLogin() {
-        const email = document.getElementById('adm-email').value;
+        const email = document.getElementById('adm-email').value.trim();
         const pass  = document.getElementById('adm-pass').value;
         if (email === "Ian@gmail.com" && pass === "admin123") {
-            document.getElementById('login-overlay').classList.add('hidden');
-            document.getElementById('loading-overlay').classList.remove('hidden');
+            // 1. Hide login
+            const loginEl = document.getElementById('login-overlay');
+            loginEl.classList.add('hidden');
+            loginEl.style.display = 'none';
+
+            // 2. Show loading spinner
+            const loadEl = document.getElementById('loading-overlay');
+            loadEl.classList.remove('hidden');
+            loadEl.style.display = 'flex';
+
+            // 3. After brief delay, show dashboard
             setTimeout(() => {
-                document.getElementById('loading-overlay').classList.add('hidden');
-                document.getElementById('main-content').classList.remove('hidden');
+                loadEl.classList.add('hidden');
+                loadEl.style.display = 'none';
+
+                const mainEl = document.getElementById('main-content');
+                mainEl.classList.remove('hidden');
+                mainEl.style.display = 'flex';
+
                 lucide.createIcons();
                 renderAdmin();
+                renderRooms();
             }, 1200);
         } else {
             showToast("Invalid credentials. Please try again.");
