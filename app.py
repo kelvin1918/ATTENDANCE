@@ -824,8 +824,8 @@ def api_send_email():
     instructor_id = get_current_instructor_id(request)
     cfg = db.get_mail_config(instructor_id) if instructor_id else None
 
-    smtp_user     = cfg["gmail"]    if cfg and cfg["gmail"]    else None
-    smtp_password = cfg["app_pass"] if cfg and cfg["app_pass"] else None
+    smtp_user     = cfg["gmail"].strip()              if cfg and cfg["gmail"]    else None
+    smtp_password = cfg["app_pass"].replace(" ", "")  if cfg and cfg["app_pass"] else None
 
     if not smtp_user or not smtp_password:
         return jsonify({
@@ -866,6 +866,63 @@ def api_send_email():
         return jsonify({"error": "SMTP authentication failed. Check your Gmail and App Password in Profile → Mailing Setup."}), 401
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/test_smtp", methods=["POST"])
+def api_test_smtp():
+    """
+    Tests the instructor's Gmail SMTP credentials without sending any email.
+    Returns a clear, actionable error message for every known failure mode.
+    Called by the 'Test Connection' button in Profile → Mailing Setup.
+    """
+    instructor_id = get_current_instructor_id(request)
+    cfg           = db.get_mail_config(instructor_id) if instructor_id else None
+
+    smtp_user     = cfg["gmail"].strip()             if cfg and cfg["gmail"]    else None
+    smtp_password = cfg["app_pass"].replace(" ", "") if cfg and cfg["app_pass"] else None
+
+    if not smtp_user or not smtp_password:
+        return jsonify({
+            "ok":    False,
+            "error": "No credentials saved. Fill in your Gmail and App Password first, then save."
+        }), 400
+
+    try:
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=10) as server:
+            server.ehlo()
+            server.starttls()
+            server.login(smtp_user, smtp_password)
+        return jsonify({
+            "ok":      True,
+            "message": f"✓ Connected successfully as {smtp_user}. Email is ready to send."
+        })
+
+    except smtplib.SMTPAuthenticationError:
+        return jsonify({
+            "ok":    False,
+            "error": (
+                "Authentication failed. Most likely causes:\n"
+                "① 2-Step Verification is NOT turned on in your Google Account.\n"
+                "② The App Password is wrong — regenerate it and paste the new one.\n"
+                "③ Wrong Gmail address entered.\n\n"
+                "Go to: Google Account → Security → 2-Step Verification → App Passwords."
+            )
+        }), 401
+
+    except smtplib.SMTPConnectError:
+        return jsonify({
+            "ok":    False,
+            "error": "Cannot connect to Gmail servers. Check your internet connection."
+        }), 503
+
+    except TimeoutError:
+        return jsonify({
+            "ok":    False,
+            "error": "Connection timed out. Check your network or firewall settings."
+        }), 504
+
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
 
 
 

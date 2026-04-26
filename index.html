@@ -143,6 +143,17 @@
                             </div>
                             <input type="password" id="mail-app-pass" class="reg-input mail-field" placeholder="xxxx xxxx xxxx xxxx" readonly>
                         </div>
+
+                        <!-- Test Connection — full width row -->
+                        <div class="md:col-span-2">
+                            <button id="testSmtpBtn" onclick="testSmtpConnection()"
+                                class="flex items-center gap-2 px-5 py-2.5 bg-gray-900 text-white text-xs font-black rounded-xl hover:bg-gray-700 transition disabled:opacity-50 disabled:cursor-not-allowed">
+                                <i data-lucide="plug-zap" class="w-4 h-4"></i>
+                                Test Connection
+                            </button>
+                            <!-- Result banner — hidden until test runs -->
+                            <div id="smtpTestResult" class="hidden mt-3 p-4 rounded-xl text-xs font-bold leading-relaxed whitespace-pre-line"></div>
+                        </div>
                         <div class="bg-gray-50 rounded-2xl p-6 border border-gray-100 space-y-4 md:col-span-2">
                             <div class="flex items-center space-x-2 text-gray-900 mb-2">
                                 <i data-lucide="clock" class="w-5 h-5 text-red-600"></i>
@@ -182,7 +193,7 @@
     <aside class="w-80 p-8 flex flex-col bg-[#FDFDFD] border-l border-gray-50"> 
         <div class="mb-10 flex items-start justify-between">
             <div class="text-right flex-1">
-                <h1 id="clock" class="text-4xl font-black text-[#D32F2F] tracking-tighter">00:00:00 AM</h1>
+                <h1 id="clock" class="text-[2.05rem] font-black text-[#D32F2F] tracking-tighter">00:00:00 AM</h1>
                 <p id="date" class="text-gray-400 text-[10px] uppercase font-bold tracking-widest mt-1">Loading...</p>
             </div>
             <!-- Notification Bell -->

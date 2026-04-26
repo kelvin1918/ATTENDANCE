@@ -2648,6 +2648,46 @@ async function pollNotifications() {
     } catch { /* silent — no internet / session expired */ }
 }
 
+// ── SMTP Test Connection ──────────────────────────────────────────────────────
+async function testSmtpConnection() {
+    const btn    = document.getElementById('testSmtpBtn');
+    const banner = document.getElementById('smtpTestResult');
+    if (!btn || !banner) return;
+
+    // Must be in edit mode to test (credentials must be saved first)
+    if (btn.disabled) return;
+
+    // Show loading state
+    btn.disabled   = true;
+    btn.innerHTML  = `<svg class="animate-spin w-4 h-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path></svg>
+        Testing...`;
+    banner.className = 'hidden';
+
+    try {
+        const res  = await authFetch('/api/test_smtp', { method: 'POST' });
+        const data = await res.json();
+
+        if (data.ok) {
+            banner.className   = 'mt-3 p-4 rounded-xl text-xs font-bold leading-relaxed bg-green-50 text-green-700 border border-green-200';
+            banner.textContent = data.message;
+        } else {
+            banner.className   = 'mt-3 p-4 rounded-xl text-xs font-bold leading-relaxed whitespace-pre-line bg-red-50 text-red-700 border border-red-200';
+            banner.textContent = data.error;
+        }
+    } catch {
+        banner.className   = 'mt-3 p-4 rounded-xl text-xs font-bold leading-relaxed bg-red-50 text-red-700 border border-red-200';
+        banner.textContent = 'Could not reach the server. Check your connection.';
+    } finally {
+        btn.disabled  = false;
+        btn.innerHTML = `<i data-lucide="plug-zap" class="w-4 h-4"></i> Test Connection`;
+        lucide.createIcons();
+    }
+}
+
+
+// ── NOTIFICATION POLLING ──────────────────────────────────────────────────────
 function startNotifPolling() {
     // Initial load of badge count on page load
     pollNotifications();
