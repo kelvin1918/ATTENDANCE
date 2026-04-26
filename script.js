@@ -1721,23 +1721,81 @@ function confirmMakeupSchedule(day) {
 
 // ── CAMERA SOURCE HELPERS ────────────────────────────────────────────────────
 
+// Cache of rooms loaded from API: [{id, room_name, rtsp_url}, ...]
+let _cachedRooms = [];
+
+async function loadCameraRooms() {
+    try {
+        const res   = await authFetch('/api/rooms');
+        const rooms = await res.json();
+        _cachedRooms = rooms;
+
+        const roomSel  = document.getElementById('rtspRoomSelect');
+        const rtspInput = document.getElementById('rtspUrlInput');
+        if (!roomSel) return;
+
+        if (rooms.length === 0) {
+            // No rooms configured by admin → fall back to manual RTSP input
+            roomSel.classList.add('hidden');
+            if (document.getElementById('cameraSourceSelect')?.value === 'rtsp') {
+                rtspInput?.classList.remove('hidden');
+            }
+            roomSel.innerHTML = '<option value="">No rooms configured</option>';
+        } else {
+            // Populate room dropdown with friendly names
+            roomSel.innerHTML = rooms.map(r =>
+                `<option value="${r.id}">📡 ${r.room_name}</option>`
+            ).join('');
+            // Show room dropdown if RTSP is already selected
+            if (document.getElementById('cameraSourceSelect')?.value === 'rtsp') {
+                roomSel.classList.remove('hidden');
+                rtspInput?.classList.add('hidden');
+            }
+        }
+    } catch {
+        // Network error — silently fall back to manual input
+        _cachedRooms = [];
+    }
+}
+
 function getSelectedCameraSource() {
     const sel = document.getElementById('cameraSourceSelect');
     if (!sel) return '0';
     const val = sel.value;
+
     if (val === 'rtsp') {
+        // Try room dropdown first
+        const roomSel = document.getElementById('rtspRoomSelect');
+        const roomId  = roomSel ? parseInt(roomSel.value) : NaN;
+        if (!isNaN(roomId) && _cachedRooms.length > 0) {
+            const room = _cachedRooms.find(r => r.id === roomId);
+            if (room) return room.rtsp_url;
+        }
+        // Fall back to manual text input
         const url = (document.getElementById('rtspUrlInput')?.value || '').trim();
-        return url || '"rtsp://admin:Sentinel_04@192.168.137.166:554/Streaming/Channels/101"';
+        return url || 'rtsp://admin:Sentinel_04@192.168.137.166:554/Streaming/Channels/101';
     }
     return val; // "0" or "1"
 }
 
-// Show/hide RTSP URL input when dropdown changes
+// Show/hide the correct RTSP control when source dropdown changes
 document.addEventListener('change', function(e) {
     if (e.target && e.target.id === 'cameraSourceSelect') {
+        const isRtsp   = e.target.value === 'rtsp';
+        const roomSel  = document.getElementById('rtspRoomSelect');
         const rtspInput = document.getElementById('rtspUrlInput');
-        if (rtspInput) {
-            rtspInput.classList.toggle('hidden', e.target.value !== 'rtsp');
+
+        if (isRtsp) {
+            if (_cachedRooms.length > 0) {
+                roomSel?.classList.remove('hidden');
+                rtspInput?.classList.add('hidden');
+            } else {
+                roomSel?.classList.add('hidden');
+                rtspInput?.classList.remove('hidden');
+            }
+        } else {
+            roomSel?.classList.add('hidden');
+            rtspInput?.classList.add('hidden');
         }
     }
 });
@@ -1818,6 +1876,9 @@ async function startCameraSession(cls, activeSchedule) {
         <h3 class="text-white font-bold text-lg mb-2">Initializing Camera...</h3>`;
     document.getElementById('dummyFeed').classList.add('hidden');
     updateDetectionHeader();
+
+    // Load room names from admin config into the RTSP dropdown
+    await loadCameraRooms();
 
     // Get selected camera source from dropdown
     const source = getSelectedCameraSource();

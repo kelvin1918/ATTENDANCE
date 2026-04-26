@@ -958,5 +958,36 @@ def api_mark_notifications_read():
     return jsonify({"status": "ok"})
 
 
+# ════════════════════════════════════════════════════════════════════════════════
+# API — CAMERA ROOMS  (admin manages RTSP URL ↔ friendly room name)
+# ════════════════════════════════════════════════════════════════════════════════
+
+@app.route("/api/rooms", methods=["GET"])
+def api_get_rooms():
+    """Return all campus rooms. Public — used by instructor camera modal dropdown."""
+    rooms = db.get_all_rooms()
+    return jsonify([dict(r) for r in rooms])
+
+
+@app.route("/api/rooms", methods=["POST"])
+def api_upsert_room():
+    """
+    Add or update a room.  Admin-only.
+    Body JSON: { "room_name": "VMB-401", "rtsp_url": "rtsp://admin:pass@192.168.1.10:554/..." }
+    """
+    data = request.json
+    if not data or not data.get("room_name") or not data.get("rtsp_url"):
+        return jsonify({"error": "room_name and rtsp_url are required"}), 400
+    db.upsert_room(data["room_name"].strip(), data["rtsp_url"].strip())
+    return jsonify({"status": "ok"})
+
+
+@app.route("/api/rooms/<int:room_id>", methods=["DELETE"])
+def api_delete_room(room_id):
+    """Delete a room by ID. Admin-only."""
+    db.delete_room(room_id)
+    return jsonify({"status": "ok"})
+
+
 if __name__ == "__main__":
     app.run(debug=True, threaded=True, port=5000)

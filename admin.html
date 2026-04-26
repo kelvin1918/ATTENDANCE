@@ -356,6 +356,42 @@
         .hidden { 
             display: none !important; 
         }
+
+        /* --- SEARCH BAR --- */
+        .search-wrapper {
+            position: relative;
+            margin-bottom: 22px;
+        }
+        .search-icon {
+            position: absolute;
+            left: 14px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #ccc;
+            font-size: 15px;
+            pointer-events: none;
+        }
+        .admin-search {
+            width: 100%;
+            padding: 11px 16px 11px 42px;
+            border: 1px solid #eee;
+            border-radius: 12px;
+            font-size: 0.875rem;
+            outline: none;
+            transition: 0.25s;
+            box-sizing: border-box;
+            background: #fafafa;
+            color: #333;
+        }
+        .admin-search:focus {
+            border-color: var(--red);
+            background: #fff;
+            box-shadow: 0 0 0 3px rgba(211,47,47,0.07);
+        }
+        .admin-search::placeholder { color: #bbb; }
+
+        /* wider name col */
+        td:first-child, th:first-child { width: 25%; }
     </style>
 </head>
 
@@ -392,12 +428,49 @@
         </div>
 
         <div class="data-card">
-            <h3 style="margin:0 0 20px 0;">Registration Requests</h3>
+            <h3 style="margin:0 0 18px 0;">Registration Requests</h3>
+            <!-- Search bar -->
+            <div class="search-wrapper">
+                <span class="search-icon">&#128269;</span>
+                <input type="text" id="adminSearch" class="admin-search"
+                       placeholder="Search by name, email, or status..."
+                       oninput="filterAndRenderTable(this.value)">
+            </div>
             <table>
                 <thead>
-                    <tr><th>Email</th><th>Status</th><th style="text-align: right;">Action</th></tr>
+                    <tr>
+                        <th>Name</th>
+                        <th>Email</th>
+                        <th>Status</th>
+                        <th style="text-align: right;">Action</th>
+                    </tr>
                 </thead>
                 <tbody id="instructor-list"></tbody>
+            </table>
+        </div>
+
+        <!-- ── CAMERA ROOMS ── -->
+        <div class="data-card" style="margin-top:24px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;">
+                <h3 style="margin:0;">Camera Rooms</h3>
+                <button onclick="openRoomModal()" class="btn-action btn-approve" style="font-size:0.75rem;padding:8px 16px;">
+                    + Add Room
+                </button>
+            </div>
+            <p style="font-size:0.8rem;color:#888;margin:0 0 16px 0;">
+                Map each IP camera's RTSP link to a friendly room name. Instructors will see room names instead of raw RTSP URLs.
+            </p>
+            <table>
+                <thead>
+                    <tr>
+                        <th style="width:30%;">Room Name</th>
+                        <th>RTSP URL</th>
+                        <th style="text-align:right;width:100px;">Action</th>
+                    </tr>
+                </thead>
+                <tbody id="room-list">
+                    <tr><td colspan="3" style="text-align:center;padding:24px;color:#ccc;">Loading...</td></tr>
+                </tbody>
             </table>
         </div>
     </div>
@@ -413,10 +486,42 @@
         </div>
     </div>
 
+    <!-- ── ROOM MODAL ── -->
+    <div id="room-modal" class="modal-overlay hidden">
+        <div class="modal-content" style="max-width:480px;width:90%;">
+            <h3 style="margin:0 0 4px 0;font-size:1rem;">Add / Edit Room</h3>
+            <p style="font-size:0.78rem;color:#888;margin:0 0 20px 0;">Enter a friendly room name and its full RTSP URL.</p>
+
+            <div style="margin-bottom:14px;">
+                <label style="display:block;font-size:0.72rem;font-weight:700;color:#555;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;">Room Name</label>
+                <input id="room-name-input" type="text" placeholder="e.g. VMB-401"
+                    class="admin-search" style="margin:0;" oninput="roomModalValidate()">
+            </div>
+
+            <div style="margin-bottom:20px;">
+                <label style="display:block;font-size:0.72rem;font-weight:700;color:#555;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;">RTSP URL</label>
+                <input id="room-rtsp-input" type="text"
+                    placeholder="rtsp://admin:password@192.168.1.10:554/Streaming/Channels/101"
+                    class="admin-search" style="margin:0;font-family:monospace;font-size:0.78rem;" oninput="roomModalValidate()">
+                <p style="font-size:0.7rem;color:#aaa;margin:6px 0 0 0;">
+                    Format: rtsp://username:password@ip-address:port/channel
+                </p>
+            </div>
+
+            <div id="room-modal-error" style="display:none;background:#fef2f2;color:#b91c1c;font-size:0.78rem;font-weight:600;padding:10px 14px;border-radius:10px;margin-bottom:14px;"></div>
+
+            <div class="modal-btns">
+                <button class="btn-modal-cancel" onclick="closeRoomModal()">Cancel</button>
+                <button id="room-save-btn" class="btn-modal-confirm" onclick="saveRoom()" disabled>Save Room</button>
+            </div>
+        </div>
+    </div>
+
     <div id="toast">Message here</div>
 
     <script>
         let currentConfirmAction = null;
+        let allUsers = [];   // full list for client-side search filtering
 
         // KEYBOARD LISTENERS
         window.addEventListener('keydown', (e) => {
@@ -483,27 +588,62 @@
             try {
                 const res   = await fetch('/api/instructors');
                 const users = await res.json();
-                const tbody = document.getElementById('instructor-list');
+                allUsers    = users;
                 document.getElementById('stat-total').innerText   = users.length;
                 document.getElementById('stat-pending').innerText  = users.filter(u => u.status === 'pending').length;
                 document.getElementById('stat-approved').innerText = users.filter(u => u.status === 'approved').length;
-                tbody.innerHTML = '';
-                if (users.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;padding:30px;color:#999;">No instructors yet.</td></tr>';
-                    return;
-                }
-                users.forEach(u => {
-                    const tr = document.createElement('tr');
-                    tr.innerHTML = `
-                        <td><strong>${u.email}</strong></td>
-                        <td><span class="status-pill status-${u.status}">${u.status}</span></td>
-                        <td style="text-align:right;">
-                            ${u.status === 'pending' ? `<button class="btn-action btn-approve" onclick="handleAction(${u.id},'approved')">Approve</button>` : ''}
-                            <button class="btn-action btn-delete" onclick="handleAction(${u.id},'delete')">Remove</button>
-                        </td>`;
-                    tbody.appendChild(tr);
-                });
+                // Clear search on fresh load
+                const searchEl = document.getElementById('adminSearch');
+                if (searchEl) searchEl.value = '';
+                filterAndRenderTable('');
             } catch { showToast("Could not load instructors."); }
+        }
+
+        function filterAndRenderTable(query) {
+            const tbody = document.getElementById('instructor-list');
+            if (!tbody) return;
+            const q = (query || '').trim().toLowerCase();
+
+            const filtered = allUsers.filter(u => {
+                if (!q) return true;
+                const name   = (u.name   || '').toLowerCase();
+                const email  = (u.email  || '').toLowerCase();
+                const status = (u.status || '').toLowerCase();
+                return name.includes(q) || email.includes(q) || status.includes(q);
+            });
+
+            tbody.innerHTML = '';
+
+            if (allUsers.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:30px;color:#999;">No instructors yet.</td></tr>';
+                return;
+            }
+            if (filtered.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:30px;color:#ccc;">No results match your search.</td></tr>';
+                return;
+            }
+
+            filtered.forEach(u => {
+                // Derive display name: prefer u.name, fall back to email prefix
+                const displayName = (u.name && u.name.trim())
+                    ? u.name
+                    : u.email.split('@')[0]
+                        .replace(/[._]/g, ' ')
+                        .replace(/\b\w/g, l => l.toUpperCase());
+
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td><strong>${displayName}</strong></td>
+                    <td style="color:#666;">${u.email}</td>
+                    <td><span class="status-pill status-${u.status}">${u.status}</span></td>
+                    <td style="text-align:right;">
+                        ${u.status === 'pending'
+                            ? `<button class="btn-action btn-approve" onclick="handleAction(${u.id},'approved')">Approve</button>`
+                            : ''}
+                        <button class="btn-action btn-delete" onclick="handleAction(${u.id},'delete')">Remove</button>
+                    </td>`;
+                tbody.appendChild(tr);
+            });
         }
 
         function handleAction(id, type) {
@@ -525,6 +665,118 @@
         document.getElementById('adm-pass').addEventListener('keypress', (e) => {
             if (e.key === 'Enter') adminLogin();
         });
+
+        // ── ROOM MANAGEMENT ───────────────────────────────────────────────────
+
+        async function renderRooms() {
+            const tbody = document.getElementById('room-list');
+            if (!tbody) return;
+            try {
+                const res   = await fetch('/api/rooms');
+                const rooms = await res.json();
+                if (!rooms.length) {
+                    tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;padding:24px;color:#ccc;">No rooms configured yet. Click "+ Add Room" to start.</td></tr>';
+                    return;
+                }
+                tbody.innerHTML = rooms.map(r => `
+                    <tr>
+                        <td><strong>${r.room_name}</strong></td>
+                        <td style="font-family:monospace;font-size:0.78rem;color:#555;word-break:break-all;">${r.rtsp_url}</td>
+                        <td style="text-align:right;">
+                            <button class="btn-action btn-delete" onclick="deleteRoom(${r.id},'${r.room_name.replace(/'/g,"\\'")}')">Remove</button>
+                        </td>
+                    </tr>`).join('');
+            } catch {
+                tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;padding:24px;color:#ccc;">Could not load rooms.</td></tr>';
+            }
+        }
+
+        function openRoomModal() {
+            document.getElementById('room-name-input').value  = '';
+            document.getElementById('room-rtsp-input').value  = '';
+            document.getElementById('room-modal-error').style.display = 'none';
+            document.getElementById('room-save-btn').disabled = true;
+            document.getElementById('room-modal').classList.remove('hidden');
+            document.getElementById('room-name-input').focus();
+        }
+
+        function closeRoomModal() {
+            document.getElementById('room-modal').classList.add('hidden');
+        }
+
+        // Close room modal on backdrop click
+        document.getElementById('room-modal').addEventListener('click', function(e) {
+            if (e.target === this) closeRoomModal();
+        });
+
+        // Allow Enter key to submit room modal
+        ['room-name-input','room-rtsp-input'].forEach(id => {
+            document.getElementById(id).addEventListener('keypress', e => {
+                if (e.key === 'Enter') saveRoom();
+            });
+        });
+
+        function roomModalValidate() {
+            const name = document.getElementById('room-name-input').value.trim();
+            const rtsp = document.getElementById('room-rtsp-input').value.trim();
+            const btn  = document.getElementById('room-save-btn');
+            const valid = name.length > 0 && rtsp.startsWith('rtsp://');
+            btn.disabled = !valid;
+            btn.style.opacity = valid ? '1' : '0.5';
+        }
+
+        async function saveRoom() {
+            const name  = document.getElementById('room-name-input').value.trim();
+            const rtsp  = document.getElementById('room-rtsp-input').value.trim();
+            const errEl = document.getElementById('room-modal-error');
+            const btn   = document.getElementById('room-save-btn');
+            if (!name || !rtsp.startsWith('rtsp://')) return;
+
+            btn.disabled    = true;
+            btn.textContent = 'Saving...';
+            errEl.style.display = 'none';
+
+            try {
+                const res  = await fetch('/api/rooms', {
+                    method:  'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body:    JSON.stringify({ room_name: name, rtsp_url: rtsp })
+                });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || 'Failed to save room.');
+                closeRoomModal();
+                showToast(`Room "${name}" saved successfully.`);
+                renderRooms();
+            } catch (err) {
+                errEl.textContent   = err.message;
+                errEl.style.display = 'block';
+                btn.disabled        = false;
+                btn.textContent     = 'Save Room';
+            }
+        }
+
+        async function deleteRoom(id, name) {
+            openModal(
+                'Remove Room',
+                `Remove "${name}"? Instructors will no longer see it in the camera room dropdown.`,
+                async () => {
+                    try {
+                        await fetch(`/api/rooms/${id}`, { method: 'DELETE' });
+                        showToast(`Room "${name}" removed.`);
+                        renderRooms();
+                    } catch {
+                        showToast('Failed to remove room.');
+                    }
+                }
+            );
+        }
+
+        // Trigger room load when admin dashboard becomes visible
+        const _origRenderAdmin = renderAdmin;
+        renderAdmin = async function() {
+            await _origRenderAdmin();
+            renderRooms();
+        };
     </script>
 </body>
 </html>

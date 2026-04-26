@@ -28,7 +28,7 @@ DB_CONFIG = {
     "port":     int(os.environ.get("DB_PORT", 5432)),
     "database": os.environ.get("DB_NAME",     "neondb"),
     "user":     os.environ.get("DB_USER",     "neondb_owner"),
-    "password": os.environ.get("DB_PASSWORD", ""),
+    "password": os.environ.get("DB_PASSWORD", "npg_WI7TMFYw0vOe"),
     "sslmode":  "require"
 }
 

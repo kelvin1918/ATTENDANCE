@@ -256,9 +256,17 @@
                         <option value="1">📷 Webcam (External)</option>
                         <option value="rtsp">📡 IP Camera (RTSP)</option>
                     </select>
-                    <!-- RTSP URL input, shown only when IP Camera selected -->
+
+                    <!-- Room picker — shown when IP Camera (RTSP) is selected -->
+                    <select id="rtspRoomSelect"
+                        class="hidden text-[10px] font-black bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 outline-none focus:ring-1 focus:ring-red-200 transition min-w-[160px]">
+                        <option value="">⏳ Loading rooms...</option>
+                    </select>
+
+                    <!-- Fallback manual RTSP input — shown if no rooms configured -->
                     <input id="rtspUrlInput" type="text" placeholder="rtsp://user:pass@192.168.x.x:554/..."
                         class="hidden text-[10px] font-bold bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 w-64 outline-none focus:ring-1 focus:ring-red-200 transition">
+
                     <button onclick="refreshCameraFeed()"
                         title="Refresh / Restart Camera"
                         class="flex items-center space-x-2 px-4 py-2 bg-gray-100 text-gray-600 rounded-xl font-bold text-[10px] uppercase hover:bg-red-50 hover:text-[#D32F2F] transition">
