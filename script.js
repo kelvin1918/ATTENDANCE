@@ -116,6 +116,11 @@ function generateTimeOptions() {
 let isProfileEditing = false;
 
 function showPage(pageId, btn) {
+    // Auto-close mobile nav menu when any page is selected
+    const mobileMenu = document.getElementById('mobileMenu');
+    if (mobileMenu && !mobileMenu.classList.contains('hidden')) {
+        mobileMenu.classList.add('hidden');
+    }
     const contentArea = document.getElementById('content-area');
     const profilePage = document.getElementById('profilePage');
 
@@ -209,19 +214,19 @@ async function renderDashboard() {
         </div>
 
         <!-- Search + Class Folder Filter row -->
-        <div class="flex gap-3 mb-10 flex-wrap sm:flex-nowrap">
-            <div class="relative flex-1 min-w-0">
+        <div class="flex gap-3 mb-10">
+            <div class="relative flex-1">
                 <i data-lucide="search" class="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-300"></i>
                 <input id="dashSearch" type="text"
                     placeholder="Search by subject, section, or date..."
                     oninput="filterDashboardActivity()"
                     class="w-full bg-gray-50 border-none rounded-2xl py-4 pl-12 pr-4 text-sm font-bold outline-none ring-1 ring-gray-100 focus:ring-red-200 transition">
             </div>
-            <div class="relative flex-shrink-0">
+            <div class="relative">
                 <i data-lucide="folder" class="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-300 pointer-events-none"></i>
                 <select id="dashFolderFilter" onchange="filterDashboardActivity()"
-                    class="appearance-none bg-gray-50 border-none rounded-2xl py-4 pl-11 pr-10 text-sm font-bold outline-none ring-1 ring-gray-100 focus:ring-red-200 transition text-gray-500 cursor-pointer w-[160px]">
-                    <option value="">All Folders</option>
+                    class="appearance-none bg-gray-50 border-none rounded-2xl py-4 pl-11 pr-10 text-sm font-bold outline-none ring-1 ring-gray-100 focus:ring-red-200 transition text-gray-500 cursor-pointer min-w-[200px]">
+                    <option value="">All Class Folders</option>
                 </select>
                 <i data-lucide="chevron-down" class="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-300 pointer-events-none"></i>
             </div>
@@ -571,32 +576,30 @@ async function renderHistoryPage() {
             <input type="text" oninput="searchVal=this.value; renderHistoryPage()" value="${searchVal}"
                 placeholder="Search classes..." class="w-full bg-gray-50 border-none rounded-2xl py-4 pl-12 pr-4 text-sm font-bold outline-none">
         </div>
-        <!-- HISTORY: responsive 3-col on desktop, stacked accordion on mobile -->
-        <div class="history-layout">
+        <div class="flex gap-6 h-[calc(100vh-280px)] min-h-[400px]">
 
             <!-- Column 1: Class Folders -->
-            <div class="history-col-folders">
+            <div class="w-60 flex-shrink-0 space-y-3 overflow-y-auto pr-2 border-r border-gray-100">
                 <p class="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-3">Class Folders</p>
                 ${filtered.length === 0
                     ? '<p class="text-[10px] text-gray-300 font-bold text-center py-8">No classes yet</p>'
                     : filtered.map(f => `
                         <div onclick="historySelectClass('${f.id}')"
-                             class="p-4 rounded-2xl cursor-pointer transition border mb-2 ${historySelectedClass === '${f.id}' ? 'bg-red-50 border-[#D32F2F]' : 'bg-white border-gray-100 hover:border-red-200'}">
+                             class="p-4 rounded-2xl cursor-pointer transition border ${historySelectedClass === '${f.id}' ? 'bg-red-50 border-[#D32F2F]' : 'bg-white border-gray-100 hover:border-red-200'}">
                             <div class="flex items-center space-x-3">
                                 <div class="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${historySelectedClass === '${f.id}' ? 'bg-[#D32F2F] text-white' : 'bg-gray-100 text-[#D32F2F]'}">
                                     <i data-lucide="folder" class="w-4 h-4"></i>
                                 </div>
-                                <div class="min-w-0 flex-1">
+                                <div class="min-w-0">
                                     <p class="font-black text-gray-900 text-sm truncate">${f.subject}</p>
                                     <p class="text-[9px] text-gray-400 font-bold uppercase truncate">${f.section}</p>
                                 </div>
-                                <i data-lucide="chevron-right" class="w-4 h-4 text-gray-300 flex-shrink-0"></i>
                             </div>
                         </div>`).join('')}
             </div>
 
             <!-- Column 2: Attendance Files -->
-            <div class="history-col-files ${historySelectedClass ? '' : 'history-col-hidden-mobile'}">
+            <div class="w-60 flex-shrink-0 space-y-3 overflow-y-auto pr-2 border-r border-gray-100">
                 <p class="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-3">Attendance Files</p>
                 <div id="historyFilesList">
                     <p class="text-[10px] text-gray-300 font-bold text-center py-8">Select a class folder</p>
@@ -604,8 +607,8 @@ async function renderHistoryPage() {
             </div>
 
             <!-- Column 3: Detail panel -->
-            <div class="history-col-detail ${historySelectedClass ? '' : 'history-col-hidden-mobile'}">
-                <div id="historyDetailPanel" class="history-detail-inner">
+            <div class="flex-1 overflow-y-auto">
+                <div id="historyDetailPanel" class="h-full bg-gray-50/50 border-2 border-dashed border-gray-200 rounded-[2.5rem] p-8 flex flex-col">
                     <div class="flex-1 flex items-center justify-center text-gray-300 font-bold text-xs uppercase">
                         Select an attendance file
                     </div>
@@ -956,6 +959,36 @@ async function viewAndPrintPDF(class_code, date, session_time) {
             </div>`;
 
         document.getElementById('printArea').innerHTML = html;
+
+        // ── Mobile: zoom printArea content to fit screen width ───────────────
+        requestAnimationFrame(() => {
+            const printArea = document.getElementById('printArea');
+            const inner = printArea?.querySelector('div');
+            if (!inner) return;
+            const isMobile = window.innerWidth <= 768;
+            if (isMobile) {
+                // Reset any previous transform
+                inner.style.transformOrigin = 'top left';
+                inner.style.transform = 'none';
+                inner.style.margin = '0';
+                inner.style.padding = '16px';
+                // Scale to fit: inner is typically 800px wide (BSU format)
+                const targetW = 800;
+                const availW  = printArea.clientWidth - 32;
+                const scale   = Math.min(1, availW / targetW);
+                inner.style.transform = `scale(${scale})`;
+                inner.style.transformOrigin = 'top left';
+                inner.style.width = targetW + 'px';
+                inner.style.marginBottom = `-${Math.round(targetW * (1 - scale))}px`;
+                printArea.style.padding = '0';
+                printArea.style.overflow = 'auto';
+            } else {
+                inner.style.transform = '';
+                inner.style.width = '';
+                inner.style.transformOrigin = '';
+                printArea.style.padding = '';
+            }
+        });
 
         // ── Print button — clean isolated window, auto-triggers print dialog ──
         window.printSheet = () => {
@@ -1349,7 +1382,9 @@ function renderDayFilters() {
     if (!container) return;
 
     container.innerHTML = days.map(d => `
-        <button onclick="selectedDay='${d}'; renderDayFilters()" class="flex-1 py-3 text-[10px] font-black border rounded-xl transition ${d === selectedDay ? 'bg-[#D32F2F] text-white border-[#D32F2F]' : 'bg-white text-gray-400'}">${d}</button>
+        <button onclick="selectedDay='${d}'; renderDayFilters()"
+            style="touch-action:manipulation;-webkit-tap-highlight-color:transparent;"
+            class="w-full py-2 text-[9px] font-black border rounded-xl transition cursor-pointer select-none ${d === selectedDay ? 'bg-[#D32F2F] text-white border-[#D32F2F]' : 'bg-white text-gray-400 border-gray-200 active:bg-red-50'}">${d}</button>
     `).join('');
 
     const filtered = schedules.filter(s => s.day === selectedDay);
