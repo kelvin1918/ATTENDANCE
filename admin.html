@@ -63,6 +63,53 @@
             background: white; padding: 48px; border-radius: 24px;
             width: 440px; box-shadow: 0 30px 80px rgba(0,0,0,0.35);
         }
+
+        /* ── ADMIN MOBILE HEADER (hidden on desktop) ─────────── */
+        #admin-mobile-header {
+            display: none;
+            position: fixed; top: 0; left: 0; right: 0; height: 60px;
+            background: white; border-bottom: 1px solid var(--border);
+            z-index: 200; align-items: center; justify-content: space-between;
+            padding: 0 16px; box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+        }
+        #admin-mobile-header .adm-brand { display: flex; align-items: center; gap: 8px; }
+        #admin-mobile-header .adm-icon {
+            width: 32px; height: 32px; background: var(--red);
+            border-radius: 8px; display: flex; align-items: center; justify-content: center;
+        }
+        #admin-mobile-header .adm-icon svg { color: white; width: 16px; height: 16px; }
+        #admin-mobile-header .adm-name { font-size: 0.85rem; font-weight: 900; color: var(--text); }
+        #admin-mobile-header .adm-role { font-size: 0.6rem; font-weight: 700; color: var(--red); text-transform: uppercase; letter-spacing: 0.08em; }
+        #admin-ham-btn { background: none; border: none; cursor: pointer; padding: 8px; border-radius: 8px; }
+        #admin-ham-btn svg { width: 20px; height: 20px; color: #6B7280; display: block; }
+        #admin-mobile-nav {
+            display: none; position: fixed; top: 60px; left: 0; right: 0;
+            background: white; border-bottom: 1px solid var(--border);
+            z-index: 190; padding: 8px 12px 16px;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+        }
+        #admin-mobile-nav.open { display: block !important; }
+        #admin-mobile-nav .nav-item { width: 100% !important; }
+
+        /* ── ADMIN MOBILE RESPONSIVE ─────────────────────────── */
+        @media (max-width: 768px) {
+            #login-overlay { justify-content: center !important; padding: 24px !important; }
+            .login-card { width: 100% !important; max-width: 420px !important; padding: 32px 24px !important; }
+            .login-card input { font-size: 16px !important; }
+            #sidebar { display: none !important; }
+            #page-area { margin-left: 0 !important; padding: 72px 16px 24px !important; }
+            #admin-mobile-header { display: flex !important; }
+            .stats-grid { grid-template-columns: 1fr 1fr !important; gap: 12px !important; }
+            .page-title { font-size: 1.4rem !important; }
+            .card-header { flex-wrap: wrap !important; gap: 10px !important; }
+            .modal-box { width: 95% !important; padding: 24px !important; }
+            #toast { bottom: 80px !important; }
+            table { display: block !important; overflow-x: auto !important; -webkit-overflow-scrolling: touch !important; white-space: nowrap !important; }
+            .table-scroll { overflow-x: auto !important; }
+        }
+        @media (max-width: 400px) {
+            .stats-grid { grid-template-columns: 1fr !important; }
+        }
         .login-logo {
             width: 48px; height: 48px; background: var(--red);
             border-radius: 14px; display: flex; align-items: center;
@@ -340,91 +387,46 @@
         /* Scrollable table body */
         .table-scroll { max-height: 420px; overflow-y: auto; }
 
-        /* Mobile table card view — replaces horizontal scroll with stacked cards */
-        @media (max-width: 768px) {
-            /* Hide table headers on mobile */
-            .mobile-card-table thead { display: none !important; }
-
-            /* Each row becomes a card */
-            .mobile-card-table tbody tr {
-                display: block !important;
-                background: white;
-                border: 1px solid var(--border);
-                border-radius: 12px;
-                margin-bottom: 12px;
-                padding: 14px 16px;
-                white-space: normal !important;
-            }
-            .mobile-card-table tbody tr:hover td { background: transparent !important; }
-
-            /* Each cell stacks with a label */
-            .mobile-card-table tbody td {
-                display: flex !important;
-                justify-content: space-between;
-                align-items: center;
-                padding: 6px 0 !important;
-                border-bottom: 1px solid #F9FAFB !important;
-                font-size: 0.82rem;
-                white-space: normal !important;
-                word-break: break-word;
-            }
-            .mobile-card-table tbody td:last-child { border-bottom: none !important; }
-
-            /* Data-label becomes the left label */
-            .mobile-card-table tbody td::before {
-                content: attr(data-label);
-                font-size: 0.65rem;
-                font-weight: 800;
-                color: var(--muted);
-                text-transform: uppercase;
-                letter-spacing: 0.08em;
-                flex-shrink: 0;
-                margin-right: 12px;
-                min-width: 60px;
-            }
-
-            /* Action column: full width button row */
-            .mobile-card-table tbody td[data-label="Action"] {
-                justify-content: flex-end !important;
-                gap: 8px;
-                padding-top: 10px !important;
-                border-bottom: none !important;
-            }
-            .mobile-card-table tbody td[data-label="Action"]::before {
-                display: none !important;
-            }
-
-            /* RTSP URL: smaller mono font, wraps */
-            .mono { font-size: 0.7rem !important; word-break: break-all !important; white-space: normal !important; }
-
-            /* Stats grid: 2 col on mobile */
-            .stats-grid { grid-template-columns: 1fr 1fr !important; gap: 12px !important; }
-
-            /* Stat value smaller */
-            .stat-value { font-size: 1.8rem !important; }
-
-            /* Page area: no offset, proper top padding */
-            #page-area { margin-left: 0 !important; padding: 72px 16px 24px !important; }
-
-            /* Card body: less padding */
-            .card-body { padding: 16px !important; }
-            .card-header { padding: 16px !important; flex-wrap: wrap !important; gap: 10px !important; }
-
-            /* table-scroll wrapper */
-            .table-scroll { max-height: none !important; overflow-y: visible !important; }
-
-            /* Search input */
-            .search-input { font-size: 16px !important; }
-        }
-        @media (max-width: 400px) {
-            .stats-grid { grid-template-columns: 1fr !important; }
-        }
-
         /* Global hidden utility — used by loading-overlay and login-overlay */
         .hidden { display: none !important; }
     </style>
 </head>
 <body>
+
+<!-- ── ADMIN MOBILE HEADER ─────────────────────────────────────────────── -->
+<div id="admin-mobile-header">
+    <div class="adm-brand">
+        <div class="adm-icon"><i data-lucide="shield-check"></i></div>
+        <div>
+            <div class="adm-name">Attendance</div>
+            <div class="adm-role">Admin Panel</div>
+        </div>
+    </div>
+    <button id="admin-ham-btn" onclick="toggleAdminMobileNav()">
+        <i data-lucide="menu" id="admin-ham-icon"></i>
+    </button>
+</div>
+
+<!-- ── ADMIN MOBILE NAV DRAWER ──────────────────────────────────────────── -->
+<div id="admin-mobile-nav">
+    <div class="nav-label">Overview</div>
+    <button class="nav-item active" id="mob-nav-dashboard" onclick="showPage('dashboard', this); toggleAdminMobileNav()">
+        <i data-lucide="layout-dashboard"></i> Dashboard
+    </button>
+    <div class="nav-label">Management</div>
+    <button class="nav-item" id="mob-nav-instructors" onclick="showPage('instructors', this); toggleAdminMobileNav()">
+        <i data-lucide="users"></i> Instructors
+        <span class="nav-badge" id="pending-badge-mob" style="display:none;">0</span>
+    </button>
+    <button class="nav-item" id="mob-nav-rooms" onclick="showPage('rooms', this); toggleAdminMobileNav()">
+        <i data-lucide="camera"></i> Camera Rooms
+    </button>
+    <div style="margin-top:12px;border-top:1px solid #F0F0F0;padding-top:12px;">
+        <button class="btn-signout" onclick="handleSignOut(); toggleAdminMobileNav()">
+            <i data-lucide="log-out"></i> Sign Out
+        </button>
+    </div>
+</div>
 
 <!-- ── LOADING OVERLAY ──────────────────────────────────────────────────── -->
 <div id="loading-overlay" class="hidden" style="display:none;">
@@ -529,7 +531,7 @@
                     </button>
                 </div>
                 <div class="card-body" style="padding:0;">
-                    <table class="mobile-card-table">
+                    <table>
                         <thead>
                             <tr>
                                 <th>Name</th>
@@ -564,7 +566,7 @@
                                oninput="filterAndRenderTable(this.value)">
                     </div>
                     <div class="table-scroll">
-                        <table class="mobile-card-table">
+                        <table>
                             <thead>
                                 <tr>
                                     <th>Name</th>
@@ -600,7 +602,7 @@
                     </button>
                 </div>
                 <div class="card-body" style="padding:0;">
-                    <table class="mobile-card-table">
+                    <table>
                         <thead>
                             <tr>
                                 <th style="width:25%;">Room Name</th>
@@ -662,6 +664,17 @@
 
 <script>
     lucide.createIcons();
+
+    // ── ADMIN MOBILE NAV TOGGLE ──────────────────────────────────────────────
+    function toggleAdminMobileNav() {
+        const nav = document.getElementById('admin-mobile-nav');
+        const icon = document.getElementById('admin-ham-icon');
+        nav.classList.toggle('open');
+        // swap icon
+        const isOpen = nav.classList.contains('open');
+        icon.setAttribute('data-lucide', isOpen ? 'x' : 'menu');
+        lucide.createIcons();
+    }
 
     // ── STATE ────────────────────────────────────────────────────────────────
     let currentConfirmAction = null;
@@ -765,13 +778,16 @@
             document.getElementById('stat-pending').textContent = pending;
             document.getElementById('stat-approved').textContent = approved;
 
-            // Pending badge on sidebar nav item
+            // Pending badge on sidebar + mobile nav
             const badge = document.getElementById('pending-badge');
+            const badgeMob = document.getElementById('pending-badge-mob');
             if (pending > 0) {
                 badge.textContent = pending;
                 badge.style.display = '';
+                if (badgeMob) { badgeMob.textContent = pending; badgeMob.style.display = ''; }
             } else {
                 badge.style.display = 'none';
+                if (badgeMob) badgeMob.style.display = 'none';
             }
 
             // Pending list on dashboard page (shows only pending)
@@ -797,10 +813,10 @@
         tbody.innerHTML = pending.map(u => {
             const displayName = deriveName(u);
             return `<tr>
-                <td data-label="Name"><strong>${displayName}</strong></td>
-                <td data-label="Email" style="color:#6B7280;">${u.email}</td>
-                <td data-label="Status"><span class="pill pill-pending">Pending</span></td>
-                <td data-label="Action" style="text-align:right;">
+                <td><strong>${displayName}</strong></td>
+                <td style="color:#6B7280;">${u.email}</td>
+                <td><span class="pill pill-pending">Pending</span></td>
+                <td style="text-align:right;">
                     <button class="btn-sm btn-approve" onclick="handleAction(${u.id},'approved')" style="margin-right:6px;">Approve</button>
                     <button class="btn-sm btn-remove"  onclick="handleAction(${u.id},'delete')">Remove</button>
                 </td>
@@ -842,10 +858,10 @@
 
         tbody.innerHTML = filtered.map(u => `
             <tr>
-                <td data-label="Name"><strong>${deriveName(u)}</strong></td>
-                <td data-label="Email" style="color:#6B7280;">${u.email}</td>
-                <td data-label="Status"><span class="pill ${u.status === 'approved' ? 'pill-approved' : 'pill-pending'}">${u.status}</span></td>
-                <td data-label="Action" style="text-align:right;">
+                <td><strong>${deriveName(u)}</strong></td>
+                <td style="color:#6B7280;">${u.email}</td>
+                <td><span class="pill ${u.status === 'approved' ? 'pill-approved' : 'pill-pending'}">${u.status}</span></td>
+                <td style="text-align:right;">
                     ${u.status === 'pending'
                         ? `<button class="btn-sm btn-approve" onclick="handleAction(${u.id},'approved')" style="margin-right:6px;">Approve</button>`
                         : ''}
@@ -898,9 +914,9 @@
             }
             tbody.innerHTML = rooms.map(r => `
                 <tr>
-                    <td data-label="Room"><strong>${r.room_name}</strong></td>
-                    <td data-label="RTSP URL" class="mono">${r.rtsp_url}</td>
-                    <td data-label="Action" style="text-align:right;">
+                    <td><strong>${r.room_name}</strong></td>
+                    <td class="mono">${r.rtsp_url}</td>
+                    <td style="text-align:right;">
                         <button class="btn-sm btn-remove" onclick="deleteRoom(${r.id},'${r.room_name.replace(/'/g,"\\'")}')">Remove</button>
                     </td>
                 </tr>`).join('');

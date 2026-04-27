@@ -103,24 +103,39 @@
    MOBILE RESPONSIVE — max-width: 768px
    ═══════════════════════════════════════════════════════════════════════════ */
 
-/* ── HISTORY layout classes ── */
+/* ── HISTORY: 3-col layout ── */
 .history-layout {
-    display: flex; gap: 24px;
-    min-height: 400px; height: calc(100vh - 280px);
+    display: flex;
+    gap: 24px;
+    min-height: 400px;
+    height: calc(100vh - 280px);
 }
 .history-col-folders {
-    width: 240px; flex-shrink: 0; overflow-y: auto;
-    padding-right: 8px; border-right: 1px solid #F3F4F6;
+    width: 240px;
+    flex-shrink: 0;
+    overflow-y: auto;
+    padding-right: 8px;
+    border-right: 1px solid #F3F4F6;
 }
 .history-col-files {
-    width: 240px; flex-shrink: 0; overflow-y: auto;
-    padding-right: 8px; border-right: 1px solid #F3F4F6;
+    width: 240px;
+    flex-shrink: 0;
+    overflow-y: auto;
+    padding-right: 8px;
+    border-right: 1px solid #F3F4F6;
 }
-.history-col-detail { flex: 1; overflow-y: auto; }
+.history-col-detail {
+    flex: 1;
+    overflow-y: auto;
+}
 .history-detail-inner {
-    height: 100%; background: rgba(249,250,251,0.5);
-    border: 2px dashed #E5E7EB; border-radius: 2.5rem;
-    padding: 32px; display: flex; flex-direction: column;
+    height: 100%;
+    background: rgba(249,250,251,0.5);
+    border: 2px dashed #E5E7EB;
+    border-radius: 2.5rem;
+    padding: 32px;
+    display: flex;
+    flex-direction: column;
 }
 
 @media (max-width: 768px) {
@@ -135,121 +150,167 @@
         padding-bottom: 72px !important;
     }
 
-    /* ── SIDEBARS: hidden ── */
+    /* ── SIDEBARS: both hidden ── */
     #navSidebar,
-    body > aside:not(#navSidebar) { display: none !important; }
-
-    /* ── MAIN ── */
-    main {
-        flex: none !important; width: 100% !important;
-        min-width: 0 !important; box-shadow: none !important;
-        overflow-y: visible !important; overflow-x: hidden !important;
+    body > aside:not(#navSidebar) {
+        display: none !important;
     }
 
-    #content-area { padding: 16px !important; }
-    #profilePage  { padding: 16px !important; padding-bottom: 24px !important; }
+    /* ── MAIN: full width ── */
+    main {
+        flex: none !important;
+        width: 100% !important;
+        min-width: 0 !important;
+        box-shadow: none !important;
+        overflow-y: visible !important;
+        overflow-x: hidden !important;
+    }
 
-    /* ── GRIDS → 1 col ── */
+    /* ── CONTENT PADDING ── */
+    #content-area {
+        padding: 16px !important;
+    }
+    #profilePage {
+        padding: 16px !important;
+        padding-bottom: 24px !important;
+    }
+
+    /* ── PROFILE GRIDS ── */
     #profilePage .grid.grid-cols-2,
     .grid.grid-cols-1.md\:grid-cols-2,
-    .grid.grid-cols-2.gap-8,
-    .grid.grid-cols-2,
-    .grid.grid-cols-3 {
+    .grid.grid-cols-2.gap-8 {
         grid-template-columns: 1fr !important;
         gap: 16px !important;
     }
-    .folder-grid { grid-template-columns: 1fr !important; }
-
-    /* ── PROFILE ── */
     #profilePage .flex.items-center.space-x-8 {
         flex-direction: column !important;
-        align-items: flex-start !important; gap: 12px !important;
+        align-items: flex-start !important;
+        gap: 12px !important;
     }
     #profileEditBtn {
-        position: static !important; display: flex !important;
-        width: 100% !important; justify-content: center !important;
+        position: static !important;
+        display: flex !important;
+        width: 100% !important;
+        justify-content: center !important;
         margin-bottom: 16px !important;
     }
 
-    /* ── SEARCH BAR wider than dropdown ── */
-    #content-area .flex.gap-3 > .relative.flex-1 { min-width: 0 !important; flex: 1 1 0% !important; }
-    #content-area .flex.gap-3 > .relative.flex-shrink-0 { flex-shrink: 1 !important; min-width: 110px !important; max-width: 140px !important; }
+    /* ── DASHBOARD: stat cards ── */
+    .grid.grid-cols-2,
+    .grid.grid-cols-3 {
+        grid-template-columns: 1fr !important;
+    }
+    .folder-grid {
+        grid-template-columns: 1fr !important;
+    }
 
-    /* ── DAY FILTERS: equal-width grid ── */
-    #day-filters { display: grid !important; grid-template-columns: repeat(7, 1fr) !important; gap: 4px !important; }
-    #day-filters button { min-height: 36px !important; padding: 4px 2px !important; font-size: 8px !important; }
+    /* ── SEARCH BAR: always takes priority width ── */
+    #content-area .flex.gap-3 > .relative.flex-1 {
+        min-width: 0 !important;
+        flex: 1 1 0% !important;
+    }
+    #content-area .flex.gap-3 > .relative.flex-shrink-0 {
+        flex-shrink: 1 !important;
+        width: auto !important;
+        min-width: 120px !important;
+    }
 
-    /* ── MOBILE SCHEDULE PANEL day filters ── */
-    #mobileDayFilters { display: grid !important; grid-template-columns: repeat(7, 1fr) !important; gap: 3px !important; }
-    #mobileDayFilters button { min-height: 32px !important; font-size: 8px !important; padding: 2px !important; }
-
-    /* ── HISTORY: stack columns ── */
+    /* ── HISTORY: stack to single column on mobile ── */
     .history-layout {
-        flex-direction: column !important; height: auto !important; gap: 0 !important;
+        flex-direction: column !important;
+        height: auto !important;
+        gap: 0 !important;
     }
     .history-col-folders {
-        width: 100% !important; border-right: none !important;
+        width: 100% !important;
+        border-right: none !important;
         border-bottom: 1px solid #F3F4F6 !important;
-        padding-bottom: 12px !important; margin-bottom: 12px !important;
-        max-height: none !important; overflow-y: visible !important;
+        padding-bottom: 12px !important;
+        margin-bottom: 12px !important;
+        max-height: none !important;
+        overflow-y: visible !important;
     }
     .history-col-files {
-        width: 100% !important; border-right: none !important;
+        width: 100% !important;
+        border-right: none !important;
         border-bottom: 1px solid #F3F4F6 !important;
-        padding-bottom: 12px !important; margin-bottom: 12px !important;
-        max-height: none !important; overflow-y: visible !important;
+        padding-bottom: 12px !important;
+        margin-bottom: 12px !important;
+        max-height: none !important;
+        overflow-y: visible !important;
     }
-    .history-col-hidden-mobile { display: none !important; }
-    .history-col-detail { width: 100% !important; min-height: 300px !important; }
-    .history-detail-inner { border-radius: 1.5rem !important; padding: 16px !important; min-height: 200px !important; }
+    .history-col-hidden-mobile {
+        display: none !important;
+    }
+    .history-col-detail {
+        width: 100% !important;
+        min-height: 300px !important;
+    }
+    .history-detail-inner {
+        border-radius: 1.5rem !important;
+        padding: 16px !important;
+        min-height: 200px !important;
+    }
 
     /* ── MODALS: bottom sheet ── */
     #regModal, #classModal, #taskModal {
-        align-items: flex-end !important; padding: 0 !important;
+        align-items: flex-end !important;
+        padding: 0 !important;
     }
     #regModal > form, #classModal > form, #taskModal > form {
         border-radius: 1.5rem 1.5rem 0 0 !important;
-        max-height: 90vh !important; overflow-y: auto !important;
-        width: 100% !important; max-width: 100% !important;
-        margin: 0 !important; padding: 24px 20px 32px !important;
+        max-height: 90vh !important;
+        overflow-y: auto !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        margin: 0 !important;
+        padding: 24px 20px 32px !important;
     }
-    #studentRegForm .grid.grid-cols-2 { grid-template-columns: 1fr !important; }
-    #studentRegForm .col-span-2 { grid-column: span 1 !important; }
-
-    /* ── DOC VIEWER: full screen, clean ── */
-    #docViewer { padding: 4px !important; align-items: stretch !important; }
-    #docViewer > div {
-        border-radius: 1rem !important; max-width: 100% !important;
-        width: 100% !important; height: 100% !important;
+    #studentRegForm .grid.grid-cols-2 {
+        grid-template-columns: 1fr !important;
     }
-    #printArea {
-        padding: 0 !important; overflow: auto !important;
-        -webkit-overflow-scrolling: touch !important;
-    }
-    #printArea > div {
-        transform-origin: top left !important;
-        /* JS sets the scale dynamically */
+    #studentRegForm .col-span-2 {
+        grid-column: span 1 !important;
     }
 
     /* ── CAMERA MODAL ── */
-    #cameraModal { padding: 0 !important; align-items: flex-end !important; }
+    #cameraModal {
+        padding: 0 !important;
+        align-items: flex-end !important;
+    }
     #cameraModal > div {
         border-radius: 1.5rem 1.5rem 0 0 !important;
-        max-width: 100% !important; width: 100% !important; height: 95vh !important;
+        max-width: 100% !important;
+        width: 100% !important;
+        height: 95vh !important;
     }
     #cameraModal .flex.flex-1 { flex-direction: column !important; }
     #cameraMainArea {
-        flex: none !important; height: 240px !important;
-        border-right: none !important; border-bottom: 1px solid #f3f4f6 !important;
+        flex: none !important;
+        height: 240px !important;
+        border-right: none !important;
+        border-bottom: 1px solid #f3f4f6 !important;
     }
     #cameraSideArea { flex: 1 !important; padding: 16px !important; }
     #cameraModal .p-6.border-b > div:last-child { flex-wrap: wrap !important; gap: 8px !important; }
 
-    /* ── OTHER ── */
+    /* ── OTHER MODALS ── */
     #customConfirm > div, #saveModal > div { max-width: 90vw !important; }
+    #docViewer { padding: 0 !important; }
+    #docViewer > div { border-radius: 0 !important; max-width: 100% !important; height: 100% !important; }
     #notifPanel { right: -8px !important; width: calc(100vw - 32px) !important; }
     button[onclick="toggleMiniSidebar()"] { display: none !important; }
-    table { display: block !important; overflow-x: auto !important; -webkit-overflow-scrolling: touch !important; }
+
+    /* ── TABLES ── */
+    table {
+        display: block !important;
+        overflow-x: auto !important;
+        -webkit-overflow-scrolling: touch !important;
+    }
+
+    /* ── iOS ZOOM PREVENTION ── */
     input, select, textarea { font-size: 16px !important; }
+
+    /* ── TOUCH TARGETS ── */
     button, a { min-height: 44px; }
 }

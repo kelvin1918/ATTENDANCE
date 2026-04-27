@@ -231,7 +231,7 @@
                 </div>
             </div>
         </div>
-        <div id="day-filters" class="grid grid-cols-7 gap-1 mb-6"></div>
+        <div id="day-filters" class="flex flex-wrap gap-2 mb-6"></div>
         <div class="flex-1 overflow-y-auto pr-2 scroll-hide">
             <h3 class="font-black text-[10px] uppercase tracking-[0.2em] text-gray-400 mb-4">Daily Schedule</h3>
             <div id="schedule-list" class="space-y-3"></div>
@@ -389,21 +389,21 @@
         </div>
     </div>
 
-    <div id="docViewer" class="hidden fixed inset-0 bg-black/90 backdrop-blur-xl z-[300] flex items-center justify-center p-4 md:p-10">
-        <div class="bg-white w-full max-w-4xl h-full rounded-2xl md:rounded-[3rem] overflow-hidden flex flex-col print-container">
-            <div class="p-4 md:p-6 border-b flex justify-between items-center bg-white print-hide flex-wrap gap-2">
-                <h3 id="docTitle" class="font-black text-[#D32F2F] uppercase tracking-tighter text-sm md:text-base truncate max-w-[55%]">Document View</h3>
-                <div class="flex items-center gap-2">
-                    <button onclick="printSheet()" class="flex items-center gap-1 px-3 py-2 bg-red-50 text-[#D32F2F] rounded-xl font-bold text-xs hover:bg-red-100 transition">
-                        <i data-lucide="printer" class="w-4 h-4"></i> <span class="hidden sm:inline">Print</span>
+    <div id="docViewer" class="hidden fixed inset-0 bg-black/90 backdrop-blur-xl z-[300] flex items-center justify-center p-10">
+        <div class="bg-white w-full max-w-4xl h-full rounded-[3rem] overflow-hidden flex flex-col print-container">
+            <div class="p-6 border-b flex justify-between items-center bg-white print-hide">
+                <h3 id="docTitle" class="font-black text-[#D32F2F] uppercase tracking-tighter">Document View</h3>
+                <div class="flex items-center space-x-2">
+                    <button onclick="printSheet()" class="flex items-center space-x-2 px-4 py-2 bg-red-50 text-[#D32F2F] rounded-xl font-bold text-xs hover:bg-red-100 transition">
+                        <i data-lucide="printer" class="w-4 h-4"></i> <span>Print</span>
                     </button>
-                    <button id="downloadBtn" class="flex items-center gap-1 px-3 py-2 bg-green-50 text-green-600 rounded-xl font-bold text-xs hover:bg-green-100 transition">
-                        <i data-lucide="download" class="w-4 h-4"></i> <span class="hidden sm:inline">Download PDF</span>
+                    <button id="downloadBtn" class="flex items-center space-x-2 px-4 py-2 bg-green-50 text-green-600 rounded-xl font-bold text-xs hover:bg-green-100 transition">
+                        <i data-lucide="download" class="w-4 h-4"></i> <span>Download PDF</span>
                     </button>
                     <button onclick="document.getElementById('docViewer').classList.add('hidden')" class="p-2 bg-gray-100 rounded-full hover:bg-gray-200 transition"><i data-lucide="x"></i></button>
                 </div>
             </div>
-            <div id="printArea" class="flex-1 bg-gray-50 overflow-auto" style="padding:0;">
+            <div id="printArea" class="flex-1 bg-gray-50 p-12 overflow-y-auto">
                 <div class="max-w-2xl mx-auto bg-white shadow-sm border p-12 min-h-[800px]">
                     <h1 class="text-center font-bold text-xl mb-10 underline">ATTENDANCE LOG REPORT</h1>
                     <table class="w-full text-left text-xs">
@@ -434,59 +434,5 @@
 
     <script src="script.js"></script>
     <script src="mobile.js"></script>
-    <script>
-    // ── MOBILE: inject notification bell into mobile header after it's created ──
-    function injectMobileNotifBell() {
-        const header = document.getElementById('mobileHeader');
-        if (!header) return;
-        const existing = document.getElementById('mobileNotifBtn');
-        if (existing) return;
-
-        const btnWrap = document.createElement('div');
-        btnWrap.className = 'flex items-center gap-2';
-        btnWrap.innerHTML = `
-            <div class="relative" id="mobileNotifWrap">
-                <button onclick="toggleNotifPanel()" id="mobileNotifBtn"
-                    class="relative w-9 h-9 flex items-center justify-center rounded-xl bg-gray-50 border border-gray-100 hover:bg-red-50 transition">
-                    <i data-lucide="bell" class="w-4 h-4 text-gray-500"></i>
-                    <span id="mobileNotifBadge"
-                        class="hidden absolute -top-1 -right-1 w-4 h-4 bg-[#D32F2F] text-white text-[8px] font-black rounded-full flex items-center justify-center">0</span>
-                </button>
-            </div>
-            <button onclick="toggleMobileMenu()" class="p-2 hover:bg-gray-100 rounded-lg transition" id="menuBtn">
-                <i data-lucide="menu" class="w-6 h-6"></i>
-            </button>`;
-
-        // Replace the existing menu button with our new combined row
-        const oldMenuBtn = header.querySelector('button[onclick="toggleMobileMenu()"]');
-        if (oldMenuBtn) oldMenuBtn.replaceWith(btnWrap);
-        if (window.lucide) lucide.createIcons();
-
-        // Sync badge with desktop badge
-        syncMobileNotifBadge();
-    }
-
-    function syncMobileNotifBadge() {
-        const desktopBadge = document.getElementById('notifBadge');
-        const mobileBadge  = document.getElementById('mobileNotifBadge');
-        if (!desktopBadge || !mobileBadge) return;
-        const count = desktopBadge.textContent;
-        const hidden = desktopBadge.classList.contains('hidden');
-        mobileBadge.textContent = count;
-        mobileBadge.classList.toggle('hidden', hidden);
-    }
-
-    // Patch updateNotifBadge to also sync mobile
-    const _origUpdateBadge = window.updateNotifBadge;
-    window.updateNotifBadge = function(unread) {
-        if (_origUpdateBadge) _origUpdateBadge(unread);
-        syncMobileNotifBadge();
-    };
-
-    // Run after mobile.js initializes
-    document.addEventListener('DOMContentLoaded', () => {
-        setTimeout(injectMobileNotifBell, 100);
-    });
-    </script>
 </body>
 </html>
