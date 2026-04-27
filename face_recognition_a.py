@@ -178,13 +178,27 @@ class FaceRecognizer:
             self._scan_log    = {}
 
     def stop_and_reset(self):
-        """Stops the camera capture and clears all session data."""
+        """
+        Stops the camera capture and clears all session data.
+        Waits for the recognition thread to fully exit BEFORE releasing
+        the capture — prevents the race condition where cap.release() is
+        called while the recognition thread is still reading from it,
+        which causes a hard process crash on Windows + RTSP sources.
+        """
         self._running = False
+
+        # ── Wait for recognition thread to stop reading ──────────────────────
+        # Give it up to 3 seconds; if it doesn't stop we move on anyway.
+        if self._rec_thread is not None and self._rec_thread.is_alive():
+            self._rec_thread.join(timeout=3.0)
+
+        # ── Now safe to release the capture ──────────────────────────────────
         if hasattr(self, "cap"):
             try:
                 self.cap.release()
             except Exception:
                 pass
+
         with self._lock:
             self._present_set    = set()
             self._scan_log       = {}
@@ -228,48 +242,64 @@ class FaceRecognizer:
         """
         Runs on Thread 2.
         Processes frames at RECOGNITION_FPS — independent of camera FPS.
+        Wrapped in try/except so a corrupted RTSP frame or dlib error
+        never propagates to the main Flask process and crashes it.
         """
         interval = 1.0 / RECOGNITION_FPS
 
         while self._running:
             start = time.time()
 
-            with self._lock:
-                frame = self._latest_frame
+            try:
+                with self._lock:
+                    frame = self._latest_frame
 
-            if frame is None:
-                time.sleep(interval)
-                continue
+                if frame is None:
+                    time.sleep(interval)
+                    continue
 
-            # Shrink frame → much faster recognition
-            small = cv2.resize(frame, (0, 0), fx=SCALE, fy=SCALE)
-            rgb   = cv2.cvtColor(small, cv2.COLOR_BGR2RGB)
+                # ── Validate frame before passing to dlib ────────────────────
+                # RTSP streams can produce partial/corrupt frames (green frames,
+                # wrong channel count, zero-size). Passing these to dlib on
+                # Windows causes a hard segfault that kills Flask.
+                if frame.size == 0 or len(frame.shape) < 3 or frame.shape[2] != 3:
+                    time.sleep(interval)
+                    continue
 
-            locations = face_recognition.face_locations(rgb, model="hog")
-            encodings = face_recognition.face_encodings(rgb, locations)
+                # Shrink frame → much faster recognition
+                small = cv2.resize(frame, (0, 0), fx=SCALE, fy=SCALE)
+                rgb   = cv2.cvtColor(small, cv2.COLOR_BGR2RGB)
 
-            names = []
-            for enc in encodings:
-                name = self._match(enc)
-                names.append(name)
-                if name != "Unknown":
-                    with self._lock:
-                        self._present_set.add(name)
-                        if name not in self._scan_log:
-                            first_seen = time.time()
-                            self._scan_log[name] = first_seen
-                            # ── CLOUD SYNC: push to Render → Neon on first detection
-                            from datetime import datetime as _dt
-                            ts_str = _dt.fromtimestamp(first_seen).strftime("%H:%M:%S")
-                            self._cloud_sync(name, ts_str)
+                locations = face_recognition.face_locations(rgb, model="hog")
+                encodings = face_recognition.face_encodings(rgb, locations)
 
-            # Scale coordinates back to original frame size
-            inv = int(1 / SCALE)  # 2 — scales coords back to full frame
-            scaled = [(t*inv, r*inv, b*inv, l*inv) for (t, r, b, l) in locations]
+                names = []
+                for enc in encodings:
+                    name = self._match(enc)
+                    names.append(name)
+                    if name != "Unknown":
+                        with self._lock:
+                            self._present_set.add(name)
+                            if name not in self._scan_log:
+                                first_seen = time.time()
+                                self._scan_log[name] = first_seen
+                                from datetime import datetime as _dt
+                                ts_str = _dt.fromtimestamp(first_seen).strftime("%H:%M:%S")
+                                self._cloud_sync(name, ts_str)
 
-            with self._lock:
-                self._face_locations = scaled
-                self._face_names     = names
+                # Scale coordinates back to original frame size
+                inv    = int(1 / SCALE)
+                scaled = [(t*inv, r*inv, b*inv, l*inv) for (t, r, b, l) in locations]
+
+                with self._lock:
+                    self._face_locations = scaled
+                    self._face_names     = names
+
+            except Exception as e:
+                # Log the error but NEVER let it escape the loop —
+                # an unhandled exception here would kill the daemon thread
+                # silently and stop recognition without crashing Flask.
+                print(f"[RECOGNITION] Frame error (skipped): {e}")
 
             # Sleep remainder of interval to hit target FPS
             elapsed = time.time() - start

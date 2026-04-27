@@ -150,8 +150,14 @@
         padding-bottom: 72px !important;
     }
 
-    /* ── SIDEBARS: both hidden ── */
-    #navSidebar,
+    /* ── LEFT NAV SIDEBAR: hidden on mobile ── */
+    #navSidebar {
+        display: none !important;
+    }
+
+    /* ── RIGHT SCHEDULE PANEL: hidden on mobile, but NEVER on PC narrow window ── */
+    /* Uses pointer:coarse to detect actual touch devices vs PC browser resize */
+    #schedulePanel,
     body > aside:not(#navSidebar) {
         display: none !important;
     }
@@ -313,4 +319,53 @@
 
     /* ── TOUCH TARGETS ── */
     button, a { min-height: 44px; }
+}
+/* ═══════════════════════════════════════════════════════════════════════════
+   PC NARROW WINDOW PROTECTION
+   On hover-capable devices (PC/laptop), NEVER hide the schedule panel
+   or left sidebar regardless of window width. Only real touch devices
+   (phones/tablets) should trigger the mobile layout.
+   ═══════════════════════════════════════════════════════════════════════════ */
+@media (hover: hover) and (pointer: fine) {
+    /* PC: restore both panels even when window is narrow */
+    #navSidebar {
+        display: flex !important;
+    }
+    #schedulePanel,
+    body > aside:not(#navSidebar) {
+        display: flex !important;
+        min-width: 280px !important;
+        width: 320px !important;
+    }
+
+    /* PC: restore body layout to horizontal flex */
+    body {
+        flex-direction: row !important;
+        height: 100vh !important;
+        overflow: hidden !important;
+        padding-top: 0 !important;
+        padding-bottom: 0 !important;
+    }
+
+    /* PC: restore main */
+    main {
+        flex: 1 !important;
+        width: auto !important;
+        box-shadow: none !important;
+        overflow-y: auto !important;
+    }
+
+    /* PC: restore content padding */
+    #content-area { padding: 48px !important; }
+    #profilePage  { padding: 80px 48px 48px !important; }
+
+    /* PC: hide mobile elements */
+    #mobileHeader,
+    #mobileBottomNav,
+    #mobileMenu,
+    #scheduleToggle,
+    #admin-mobile-header,
+    #admin-mobile-nav {
+        display: none !important;
+    }
 }

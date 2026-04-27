@@ -280,17 +280,34 @@ def api_start_camera():
         instr_email= instr_obj["email"] if instr_obj else ""
 
         if not _camera_started:
+            # Fresh start
             recognizer = FaceRecognizer(known_enc, known_names)
             recognizer.set_session(instr_email, class_code, section, subject)
             recognizer.start(source)
             _camera_started = True
+            print(f"[CAMERA] Started → source={source} class={class_code}")
         else:
-            # Already running — stop, reinitialise with new source, restart
-            recognizer.stop_and_reset()
-            recognizer = FaceRecognizer(known_enc, known_names)
-            recognizer.set_session(instr_email, class_code, section, subject)
-            recognizer.start(source)
-            # _camera_started stays True
+            # Camera already running.
+            # Only restart if the source actually changed — prevents the JS
+            # double-call (feed-drop detection) from triggering stop_and_reset()
+            # while the recognition thread is live, which caused the crash.
+            current_source = getattr(recognizer, '_source', None)
+            if current_source != source:
+                print(f"[CAMERA] Source changed {current_source} → {source}, restarting.")
+                recognizer.stop_and_reset()   # safe now — waits for thread
+                recognizer = FaceRecognizer(known_enc, known_names)
+                recognizer.set_session(instr_email, class_code, section, subject)
+                recognizer.start(source)
+                recognizer._source = source
+            else:
+                # Same source — just update session metadata, do NOT restart
+                recognizer.set_session(instr_email, class_code, section, subject)
+                print(f"[CAMERA] Already running, session refreshed (no restart).")
+
+        # Store current source so we can detect changes on next call
+        if recognizer:
+            recognizer._source = source
+
         return jsonify({"status": "ok", "source": str(source)})
     except Exception as e:
         return jsonify({"error": str(e)}), 500

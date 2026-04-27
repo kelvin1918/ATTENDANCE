@@ -190,7 +190,7 @@
         </div>
     </main>
 
-    <aside class="w-80 p-8 flex flex-col bg-[#FDFDFD] border-l border-gray-50"> 
+    <aside id="schedulePanel" class="w-80 min-w-[320px] p-8 flex flex-col bg-[#FDFDFD] border-l border-gray-50 flex-shrink-0"> 
         <div class="mb-10 flex items-start justify-between">
             <div class="text-right flex-1">
                 <h1 id="clock" class="text-[2.00rem] font-black text-[#D32F2F] tracking-tighter">00:00:00 AM</h1>
@@ -434,5 +434,54 @@
 
     <script src="script.js"></script>
     <script src="mobile.js"></script>
+    <script>
+    // ── MOBILE: inject notification bell into mobile header ──────────────────
+    function injectMobileNotifBell() {
+        const header = document.getElementById('mobileHeader');
+        if (!header || document.getElementById('mobileNotifBtn')) return;
+
+        const btnWrap = document.createElement('div');
+        btnWrap.className = 'flex items-center gap-2';
+        btnWrap.innerHTML = `
+            <div class="relative">
+                <button onclick="toggleNotifPanel()" id="mobileNotifBtn"
+                    class="relative w-9 h-9 flex items-center justify-center rounded-xl bg-gray-50 border border-gray-100 hover:bg-red-50 transition"
+                    style="min-height:36px;min-width:36px;">
+                    <i data-lucide="bell" class="w-4 h-4 text-gray-500"></i>
+                    <span id="mobileNotifBadge"
+                        class="hidden absolute -top-1 -right-1 w-4 h-4 bg-[#D32F2F] text-white text-[8px] font-black rounded-full flex items-center justify-center">0</span>
+                </button>
+            </div>
+            <button onclick="toggleMobileMenu()" id="mobileHamBtn"
+                class="p-2 hover:bg-gray-100 rounded-lg transition" style="min-height:36px;">
+                <i data-lucide="menu" class="w-6 h-6" id="mobileHamIcon"></i>
+            </button>`;
+
+        // Replace the existing hamburger button only
+        const oldBtn = header.querySelector('button[onclick="toggleMobileMenu()"]');
+        if (oldBtn) oldBtn.replaceWith(btnWrap);
+        if (window.lucide) lucide.createIcons();
+        syncMobileNotifBadge();
+    }
+
+    function syncMobileNotifBadge() {
+        const desktop = document.getElementById('notifBadge');
+        const mobile  = document.getElementById('mobileNotifBadge');
+        if (!desktop || !mobile) return;
+        mobile.textContent = desktop.textContent;
+        mobile.classList.toggle('hidden', desktop.classList.contains('hidden'));
+    }
+
+    // Patch updateNotifBadge to also sync mobile badge
+    document.addEventListener('DOMContentLoaded', () => {
+        const _orig = window.updateNotifBadge;
+        window.updateNotifBadge = function(unread) {
+            if (_orig) _orig(unread);
+            syncMobileNotifBadge();
+        };
+        // Inject after mobile.js has had time to create the header
+        setTimeout(injectMobileNotifBell, 200);
+    });
+    </script>
 </body>
 </html>
