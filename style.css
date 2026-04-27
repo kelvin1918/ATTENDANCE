@@ -101,12 +101,46 @@
 }
 /* ═══════════════════════════════════════════════════════════════════════════
    MOBILE RESPONSIVE — max-width: 768px
-   CSS-first approach. Controls layout/visibility.
-   mobile.js handles dynamic elements (top header, bottom nav) separately.
    ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── HISTORY: 3-col layout ── */
+.history-layout {
+    display: flex;
+    gap: 24px;
+    min-height: 400px;
+    height: calc(100vh - 280px);
+}
+.history-col-folders {
+    width: 240px;
+    flex-shrink: 0;
+    overflow-y: auto;
+    padding-right: 8px;
+    border-right: 1px solid #F3F4F6;
+}
+.history-col-files {
+    width: 240px;
+    flex-shrink: 0;
+    overflow-y: auto;
+    padding-right: 8px;
+    border-right: 1px solid #F3F4F6;
+}
+.history-col-detail {
+    flex: 1;
+    overflow-y: auto;
+}
+.history-detail-inner {
+    height: 100%;
+    background: rgba(249,250,251,0.5);
+    border: 2px dashed #E5E7EB;
+    border-radius: 2.5rem;
+    padding: 32px;
+    display: flex;
+    flex-direction: column;
+}
+
 @media (max-width: 768px) {
 
-    /* ── BODY: vertical stack, room for mobile header (64px) + bottom nav (72px) ── */
+    /* ── BODY ── */
     body {
         flex-direction: column !important;
         height: auto !important;
@@ -116,18 +150,13 @@
         padding-bottom: 72px !important;
     }
 
-    /* ── LEFT NAV SIDEBAR: hidden — mobile.js hamburger menu replaces it ── */
-    #navSidebar {
-        display: none !important;
-    }
-
-    /* ── RIGHT ASIDE (clock + schedule panel): hidden on mobile ── */
-    /* The schedule toggle button from mobile.js replaces this */
+    /* ── SIDEBARS: both hidden ── */
+    #navSidebar,
     body > aside:not(#navSidebar) {
         display: none !important;
     }
 
-    /* ── MAIN: full width, no desktop drop shadow ── */
+    /* ── MAIN: full width ── */
     main {
         flex: none !important;
         width: 100% !important;
@@ -137,30 +166,27 @@
         overflow-x: hidden !important;
     }
 
-    /* ── CONTENT AREA: mobile padding ── */
+    /* ── CONTENT PADDING ── */
     #content-area {
         padding: 16px !important;
     }
-
-    /* ── PROFILE PAGE ── */
     #profilePage {
         padding: 16px !important;
         padding-bottom: 24px !important;
     }
 
-    /* Profile 2-col grid → 1 col */
-    #profilePage .grid.grid-cols-2 {
+    /* ── PROFILE GRIDS ── */
+    #profilePage .grid.grid-cols-2,
+    .grid.grid-cols-1.md\:grid-cols-2,
+    .grid.grid-cols-2.gap-8 {
         grid-template-columns: 1fr !important;
+        gap: 16px !important;
     }
-
-    /* Profile photo + name: stack vertically */
     #profilePage .flex.items-center.space-x-8 {
         flex-direction: column !important;
         align-items: flex-start !important;
         gap: 12px !important;
     }
-
-    /* Edit button: static, full width */
     #profileEditBtn {
         position: static !important;
         display: flex !important;
@@ -169,39 +195,69 @@
         margin-bottom: 16px !important;
     }
 
-    /* ── DASHBOARD: stat cards all 1 col ── */
+    /* ── DASHBOARD: stat cards ── */
     .grid.grid-cols-2,
     .grid.grid-cols-3 {
         grid-template-columns: 1fr !important;
     }
-
-    /* Mailing setup 2-col grid → 1 col */
-    .grid.grid-cols-1.md\:grid-cols-2 {
-        grid-template-columns: 1fr !important;
-    }
-
-    /* Grace period grid → 1 col */
-    .grid.grid-cols-2.gap-8 {
-        grid-template-columns: 1fr !important;
-        gap: 16px !important;
-    }
-
-    /* ── FOLDER/CLASS GRID ── */
     .folder-grid {
         grid-template-columns: 1fr !important;
     }
 
-    /* ── MODALS: bottom sheet style ── */
-    #regModal,
-    #classModal,
-    #taskModal {
+    /* ── SEARCH BAR: always takes priority width ── */
+    #content-area .flex.gap-3 > .relative.flex-1 {
+        min-width: 0 !important;
+        flex: 1 1 0% !important;
+    }
+    #content-area .flex.gap-3 > .relative.flex-shrink-0 {
+        flex-shrink: 1 !important;
+        width: auto !important;
+        min-width: 120px !important;
+    }
+
+    /* ── HISTORY: stack to single column on mobile ── */
+    .history-layout {
+        flex-direction: column !important;
+        height: auto !important;
+        gap: 0 !important;
+    }
+    .history-col-folders {
+        width: 100% !important;
+        border-right: none !important;
+        border-bottom: 1px solid #F3F4F6 !important;
+        padding-bottom: 12px !important;
+        margin-bottom: 12px !important;
+        max-height: none !important;
+        overflow-y: visible !important;
+    }
+    .history-col-files {
+        width: 100% !important;
+        border-right: none !important;
+        border-bottom: 1px solid #F3F4F6 !important;
+        padding-bottom: 12px !important;
+        margin-bottom: 12px !important;
+        max-height: none !important;
+        overflow-y: visible !important;
+    }
+    .history-col-hidden-mobile {
+        display: none !important;
+    }
+    .history-col-detail {
+        width: 100% !important;
+        min-height: 300px !important;
+    }
+    .history-detail-inner {
+        border-radius: 1.5rem !important;
+        padding: 16px !important;
+        min-height: 200px !important;
+    }
+
+    /* ── MODALS: bottom sheet ── */
+    #regModal, #classModal, #taskModal {
         align-items: flex-end !important;
         padding: 0 !important;
     }
-
-    #regModal > form,
-    #classModal > form,
-    #taskModal > form {
+    #regModal > form, #classModal > form, #taskModal > form {
         border-radius: 1.5rem 1.5rem 0 0 !important;
         max-height: 90vh !important;
         overflow-y: auto !important;
@@ -210,8 +266,6 @@
         margin: 0 !important;
         padding: 24px 20px 32px !important;
     }
-
-    /* Student reg form: 2 col → 1 col */
     #studentRegForm .grid.grid-cols-2 {
         grid-template-columns: 1fr !important;
     }
@@ -219,7 +273,7 @@
         grid-column: span 1 !important;
     }
 
-    /* ── CAMERA MODAL: full screen ── */
+    /* ── CAMERA MODAL ── */
     #cameraModal {
         padding: 0 !important;
         align-items: flex-end !important;
@@ -230,75 +284,33 @@
         width: 100% !important;
         height: 95vh !important;
     }
-    /* Stack feed + sidebar vertically */
-    #cameraModal .flex.flex-1 {
-        flex-direction: column !important;
-    }
+    #cameraModal .flex.flex-1 { flex-direction: column !important; }
     #cameraMainArea {
         flex: none !important;
         height: 240px !important;
         border-right: none !important;
         border-bottom: 1px solid #f3f4f6 !important;
     }
-    #cameraSideArea {
-        flex: 1 !important;
-        padding: 16px !important;
-    }
-    /* Camera header controls wrap */
-    #cameraModal .p-6.border-b > div:last-child {
-        flex-wrap: wrap !important;
-        gap: 8px !important;
-    }
+    #cameraSideArea { flex: 1 !important; padding: 16px !important; }
+    #cameraModal .p-6.border-b > div:last-child { flex-wrap: wrap !important; gap: 8px !important; }
 
-    /* ── CONFIRM DIALOG ── */
-    #customConfirm > div {
-        max-width: 90vw !important;
-    }
+    /* ── OTHER MODALS ── */
+    #customConfirm > div, #saveModal > div { max-width: 90vw !important; }
+    #docViewer { padding: 0 !important; }
+    #docViewer > div { border-radius: 0 !important; max-width: 100% !important; height: 100% !important; }
+    #notifPanel { right: -8px !important; width: calc(100vw - 32px) !important; }
+    button[onclick="toggleMiniSidebar()"] { display: none !important; }
 
-    /* ── DOC VIEWER: full screen ── */
-    #docViewer {
-        padding: 0 !important;
-    }
-    #docViewer > div {
-        border-radius: 0 !important;
-        max-width: 100% !important;
-        height: 100% !important;
-    }
-
-    /* ── SAVE MODAL ── */
-    #saveModal > div {
-        max-width: 90vw !important;
-    }
-
-    /* ── NOTIFICATION PANEL: fit screen width ── */
-    #notifPanel {
-        right: -8px !important;
-        width: calc(100vw - 32px) !important;
-    }
-
-    /* ── SIDEBAR TOGGLE: hide (no sidebar on mobile) ── */
-    button[onclick="toggleMiniSidebar()"] {
-        display: none !important;
-    }
-
-    /* ── TABLES: horizontal scroll ── */
+    /* ── TABLES ── */
     table {
         display: block !important;
         overflow-x: auto !important;
         -webkit-overflow-scrolling: touch !important;
     }
 
-    /* ── PREVENT iOS ZOOM on input focus ── */
-    input, select, textarea {
-        font-size: 16px !important;
-    }
+    /* ── iOS ZOOM PREVENTION ── */
+    input, select, textarea { font-size: 16px !important; }
 
-    /* ── TOUCH TARGETS: minimum tap size ── */
-    button, a {
-        min-height: 44px;
-    }
-
-    /* ── HEADING SCALE DOWN ── */
-    h1.text-4xl { font-size: 1.5rem !important; }
-    h1.text-5xl { font-size: 1.75rem !important; }
+    /* ── TOUCH TARGETS ── */
+    button, a { min-height: 44px; }
 }

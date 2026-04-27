@@ -209,19 +209,19 @@ async function renderDashboard() {
         </div>
 
         <!-- Search + Class Folder Filter row -->
-        <div class="flex gap-3 mb-10">
-            <div class="relative flex-1">
+        <div class="flex gap-3 mb-10 flex-wrap sm:flex-nowrap">
+            <div class="relative flex-1 min-w-0">
                 <i data-lucide="search" class="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-300"></i>
                 <input id="dashSearch" type="text"
                     placeholder="Search by subject, section, or date..."
                     oninput="filterDashboardActivity()"
                     class="w-full bg-gray-50 border-none rounded-2xl py-4 pl-12 pr-4 text-sm font-bold outline-none ring-1 ring-gray-100 focus:ring-red-200 transition">
             </div>
-            <div class="relative">
+            <div class="relative flex-shrink-0">
                 <i data-lucide="folder" class="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-300 pointer-events-none"></i>
                 <select id="dashFolderFilter" onchange="filterDashboardActivity()"
-                    class="appearance-none bg-gray-50 border-none rounded-2xl py-4 pl-11 pr-10 text-sm font-bold outline-none ring-1 ring-gray-100 focus:ring-red-200 transition text-gray-500 cursor-pointer min-w-[200px]">
-                    <option value="">All Class Folders</option>
+                    class="appearance-none bg-gray-50 border-none rounded-2xl py-4 pl-11 pr-10 text-sm font-bold outline-none ring-1 ring-gray-100 focus:ring-red-200 transition text-gray-500 cursor-pointer w-[160px]">
+                    <option value="">All Folders</option>
                 </select>
                 <i data-lucide="chevron-down" class="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-300 pointer-events-none"></i>
             </div>
@@ -571,30 +571,32 @@ async function renderHistoryPage() {
             <input type="text" oninput="searchVal=this.value; renderHistoryPage()" value="${searchVal}"
                 placeholder="Search classes..." class="w-full bg-gray-50 border-none rounded-2xl py-4 pl-12 pr-4 text-sm font-bold outline-none">
         </div>
-        <div class="flex gap-6 h-[calc(100vh-280px)] min-h-[400px]">
+        <!-- HISTORY: responsive 3-col on desktop, stacked accordion on mobile -->
+        <div class="history-layout">
 
             <!-- Column 1: Class Folders -->
-            <div class="w-60 flex-shrink-0 space-y-3 overflow-y-auto pr-2 border-r border-gray-100">
+            <div class="history-col-folders">
                 <p class="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-3">Class Folders</p>
                 ${filtered.length === 0
                     ? '<p class="text-[10px] text-gray-300 font-bold text-center py-8">No classes yet</p>'
                     : filtered.map(f => `
                         <div onclick="historySelectClass('${f.id}')"
-                             class="p-4 rounded-2xl cursor-pointer transition border ${historySelectedClass === '${f.id}' ? 'bg-red-50 border-[#D32F2F]' : 'bg-white border-gray-100 hover:border-red-200'}">
+                             class="p-4 rounded-2xl cursor-pointer transition border mb-2 ${historySelectedClass === '${f.id}' ? 'bg-red-50 border-[#D32F2F]' : 'bg-white border-gray-100 hover:border-red-200'}">
                             <div class="flex items-center space-x-3">
                                 <div class="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${historySelectedClass === '${f.id}' ? 'bg-[#D32F2F] text-white' : 'bg-gray-100 text-[#D32F2F]'}">
                                     <i data-lucide="folder" class="w-4 h-4"></i>
                                 </div>
-                                <div class="min-w-0">
+                                <div class="min-w-0 flex-1">
                                     <p class="font-black text-gray-900 text-sm truncate">${f.subject}</p>
                                     <p class="text-[9px] text-gray-400 font-bold uppercase truncate">${f.section}</p>
                                 </div>
+                                <i data-lucide="chevron-right" class="w-4 h-4 text-gray-300 flex-shrink-0"></i>
                             </div>
                         </div>`).join('')}
             </div>
 
             <!-- Column 2: Attendance Files -->
-            <div class="w-60 flex-shrink-0 space-y-3 overflow-y-auto pr-2 border-r border-gray-100">
+            <div class="history-col-files ${historySelectedClass ? '' : 'history-col-hidden-mobile'}">
                 <p class="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-3">Attendance Files</p>
                 <div id="historyFilesList">
                     <p class="text-[10px] text-gray-300 font-bold text-center py-8">Select a class folder</p>
@@ -602,8 +604,8 @@ async function renderHistoryPage() {
             </div>
 
             <!-- Column 3: Detail panel -->
-            <div class="flex-1 overflow-y-auto">
-                <div id="historyDetailPanel" class="h-full bg-gray-50/50 border-2 border-dashed border-gray-200 rounded-[2.5rem] p-8 flex flex-col">
+            <div class="history-col-detail ${historySelectedClass ? '' : 'history-col-hidden-mobile'}">
+                <div id="historyDetailPanel" class="history-detail-inner">
                     <div class="flex-1 flex items-center justify-center text-gray-300 font-bold text-xs uppercase">
                         Select an attendance file
                     </div>
