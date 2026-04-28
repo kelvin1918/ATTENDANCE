@@ -25,7 +25,7 @@ import os
 
 DB_CONFIG = {
     "host":     os.environ.get("DB_HOST",     "ep-cool-darkness-ao4fnwdj-pooler.c-2.ap-southeast-1.aws.neon.tech"),
-    "port":     int(os.environ.get("DB_PORT", 5432)),
+    "port":     int(os.environ.get("DB_PORT", 6432)),
     "database": os.environ.get("DB_NAME",     "neondb"),
     "user":     os.environ.get("DB_USER",     "neondb_owner"),
     "password": os.environ.get("DB_PASSWORD", "npg_WI7TMFYw0vOe"),
