@@ -1,0 +1,1348 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Attendance — Local Station</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* ── RESET & TOKENS ──────────────────────────────────────────────────── */
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --red:#D32F2F; --red-dark:#B71C1C; --red-light:#FFEBEE;
+  --green:#2E7D32; --green-light:#E8F5E9;
+  --amber:#F57F17; --amber-light:#FFF8E1;
+  --bg:#F7F8FA; --surface:#FFFFFF;
+  --border:#E8EAED; --border-strong:#D1D5DB;
+  --text:#111827; --muted:#6B7280; --subtle:#9CA3AF;
+  --shadow-sm:0 1px 3px rgba(0,0,0,.08);
+  --shadow-md:0 4px 16px rgba(0,0,0,.10);
+  --shadow-lg:0 12px 40px rgba(0,0,0,.14);
+  --r:14px; --r-sm:8px; --r-lg:20px;
+  --font:'DM Sans',sans-serif; --mono:'DM Mono',monospace;
+}
+body{font-family:var(--font);background:var(--bg);color:var(--text);
+     min-height:100vh;overflow-x:hidden}
+
+/* ── UTILITY ─────────────────────────────────────────────────────────── */
+.hidden{display:none!important}
+.flex{display:flex} .col{flex-direction:column} .center{align-items:center}
+.between{justify-content:space-between} .gap4{gap:4px} .gap8{gap:8px}
+.gap12{gap:12px} .gap16{gap:16px} .gap24{gap:24px}
+.bold{font-weight:600} .mono{font-family:var(--mono)}
+.red{color:var(--red)} .muted{color:var(--muted)} .subtle{color:var(--subtle)}
+.green{color:var(--green)}
+
+/* ── BUTTON BASE ─────────────────────────────────────────────────────── */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;
+     padding:11px 20px;border-radius:var(--r-sm);font-family:var(--font);
+     font-size:14px;font-weight:600;cursor:pointer;border:none;
+     transition:all .18s ease;white-space:nowrap;text-decoration:none}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.btn-primary{background:var(--red);color:#fff}
+.btn-primary:hover:not(:disabled){background:var(--red-dark);transform:translateY(-1px);
+  box-shadow:0 4px 14px rgba(211,47,47,.35)}
+.btn-ghost{background:transparent;color:var(--muted);border:1.5px solid var(--border)}
+.btn-ghost:hover:not(:disabled){border-color:var(--red);color:var(--red);background:var(--red-light)}
+.btn-green{background:var(--green);color:#fff}
+.btn-green:hover:not(:disabled){background:#1B5E20;transform:translateY(-1px)}
+.btn-sm{padding:7px 14px;font-size:13px}
+.btn-lg{padding:14px 28px;font-size:15px;border-radius:var(--r)}
+.btn-full{width:100%}
+.btn-icon{width:38px;height:38px;padding:0;border-radius:var(--r-sm);
+          background:transparent;border:1.5px solid var(--border);color:var(--muted);
+          cursor:pointer;display:flex;align-items:center;justify-content:center;
+          transition:all .18s}
+.btn-icon:hover{border-color:var(--red);color:var(--red)}
+
+/* ── FORM INPUTS ─────────────────────────────────────────────────────── */
+.input{width:100%;padding:11px 14px;border:1.5px solid var(--border);
+       border-radius:var(--r-sm);font-family:var(--font);font-size:14px;
+       background:#F9FAFB;color:var(--text);outline:none;transition:all .18s}
+.input:focus{border-color:var(--red);background:#fff;
+             box-shadow:0 0 0 3px rgba(211,47,47,.08)}
+.input::placeholder{color:var(--subtle)}
+label.field-label{display:block;font-size:12px;font-weight:600;
+                  color:var(--muted);margin-bottom:6px;letter-spacing:.4px;
+                  text-transform:uppercase}
+.field{display:flex;flex-direction:column;gap:6px}
+
+/* ── BADGE ───────────────────────────────────────────────────────────── */
+.badge{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;
+       border-radius:99px;font-size:12px;font-weight:600}
+.badge-green{background:var(--green-light);color:var(--green)}
+.badge-red{background:var(--red-light);color:var(--red)}
+.badge-amber{background:var(--amber-light);color:var(--amber)}
+.badge-gray{background:#F3F4F6;color:var(--muted)}
+
+/* ── CARD ────────────────────────────────────────────────────────────── */
+.card{background:var(--surface);border-radius:var(--r);
+      border:1px solid var(--border);box-shadow:var(--shadow-sm)}
+
+/* ════════════════════════════════════════════════════════════════════════
+   SCREEN SYSTEM — only one screen visible at a time
+   ════════════════════════════════════════════════════════════════════════ */
+.screen{display:none;min-height:100vh}
+.screen.active{display:flex}
+
+/* ══════════════════════════════════════════════════════════════════════
+   SCREEN 1 — LOGIN
+   ══════════════════════════════════════════════════════════════════════ */
+#screen-login{
+  align-items:center;justify-content:center;
+  background:linear-gradient(135deg,#1a0000 0%,#3a0000 40%,#1a0000 100%);
+  position:relative;overflow:hidden
+}
+#screen-login::before{
+  content:'';position:absolute;inset:0;
+  background:radial-gradient(ellipse 80% 60% at 50% 0%,rgba(211,47,47,.25),transparent);
+  pointer-events:none
+}
+
+.login-card{
+  background:rgba(255,255,255,.97);
+  border-radius:24px;padding:48px 44px;width:420px;
+  box-shadow:0 32px 80px rgba(0,0,0,.45);
+  position:relative;z-index:1
+}
+.login-logo{
+  display:flex;align-items:center;gap:12px;margin-bottom:32px
+}
+.login-logo-icon{
+  width:44px;height:44px;background:var(--red);border-radius:10px;
+  display:flex;align-items:center;justify-content:center;flex-shrink:0
+}
+.login-logo-text h1{font-size:18px;font-weight:700;color:var(--text);line-height:1.1}
+.login-logo-text p{font-size:11px;color:var(--muted);font-weight:500;
+                   letter-spacing:.5px;text-transform:uppercase;margin-top:1px}
+.login-title{font-size:26px;font-weight:700;color:var(--text);margin-bottom:4px}
+.login-sub{font-size:14px;color:var(--muted);margin-bottom:28px}
+.login-fields{display:flex;flex-direction:column;gap:16px;margin-bottom:24px}
+.login-error{background:#FFF0F0;border:1px solid #FFCDD2;border-radius:var(--r-sm);
+             padding:10px 14px;font-size:13px;color:var(--red);
+             display:none;align-items:center;gap:8px}
+.login-footer{text-align:center;font-size:12px;color:var(--subtle);margin-top:20px}
+.login-footer a{color:var(--red);text-decoration:none;font-weight:600}
+
+/* ══════════════════════════════════════════════════════════════════════
+   SCREEN 2 — CLASS SELECTOR
+   ══════════════════════════════════════════════════════════════════════ */
+#screen-classes{
+  flex-direction:column;background:var(--bg)
+}
+.topbar{
+  background:var(--surface);border-bottom:1px solid var(--border);
+  padding:0 28px;height:62px;display:flex;align-items:center;
+  justify-content:space-between;flex-shrink:0;
+  box-shadow:var(--shadow-sm)
+}
+.topbar-logo{display:flex;align-items:center;gap:10px}
+.topbar-logo-icon{width:34px;height:34px;background:var(--red);border-radius:8px;
+                  display:flex;align-items:center;justify-content:center}
+.topbar-logo-text{font-size:15px;font-weight:700;color:var(--text)}
+.topbar-right{display:flex;align-items:center;gap:12px}
+.instructor-pill{display:flex;align-items:center;gap:8px;padding:6px 12px;
+                 background:var(--bg);border:1px solid var(--border);
+                 border-radius:99px}
+.instructor-avatar{width:26px;height:26px;background:var(--red);border-radius:50%;
+                   display:flex;align-items:center;justify-content:center;
+                   font-size:11px;font-weight:700;color:#fff}
+.instructor-name{font-size:13px;font-weight:600;color:var(--text)}
+
+.classes-body{flex:1;padding:32px 28px;overflow-y:auto}
+.classes-header{margin-bottom:24px}
+.classes-header h2{font-size:22px;font-weight:700;color:var(--text)}
+.classes-header p{font-size:14px;color:var(--muted);margin-top:3px}
+
+.day-tabs{display:flex;gap:6px;margin-bottom:24px;flex-wrap:wrap}
+.day-tab{padding:6px 14px;border-radius:99px;font-size:13px;font-weight:600;
+         cursor:pointer;border:1.5px solid var(--border);background:var(--surface);
+         color:var(--muted);transition:all .18s}
+.day-tab.active{background:var(--red);border-color:var(--red);color:#fff}
+.day-tab.today-marker{border-color:var(--red);color:var(--red)}
+
+.offline-banner{display:flex;align-items:center;gap:10px;padding:12px 16px;
+                background:var(--amber-light);border:1px solid #FFE082;
+                border-radius:var(--r-sm);margin-bottom:20px;font-size:13px;
+                color:var(--amber)}
+
+.class-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px}
+
+.class-card{
+  background:var(--surface);border:1.5px solid var(--border);
+  border-radius:var(--r);padding:20px;cursor:pointer;
+  transition:all .2s ease;position:relative;overflow:hidden
+}
+.class-card::before{
+  content:'';position:absolute;left:0;top:0;bottom:0;width:4px;
+  background:var(--border);transition:background .2s
+}
+.class-card:hover{border-color:var(--red);transform:translateY(-2px);
+                  box-shadow:var(--shadow-md)}
+.class-card:hover::before{background:var(--red)}
+.class-card.today::before{background:var(--red)}
+
+.class-code{font-size:11px;font-weight:700;color:var(--red);letter-spacing:.8px;
+            text-transform:uppercase;margin-bottom:6px;font-family:var(--mono)}
+.class-name{font-size:16px;font-weight:700;color:var(--text);margin-bottom:4px}
+.class-meta{font-size:13px;color:var(--muted)}
+.class-schedule{margin-top:12px;padding-top:12px;border-top:1px solid var(--border);
+                display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)}
+.class-schedule svg{flex-shrink:0}
+
+.empty-state{text-align:center;padding:60px 20px;color:var(--muted)}
+.empty-state svg{opacity:.3;margin-bottom:16px}
+.empty-state p{font-size:15px;font-weight:600;color:var(--text);margin-bottom:4px}
+.empty-state span{font-size:13px}
+
+/* ══════════════════════════════════════════════════════════════════════
+   SCREEN 3 — CAMERA (main kiosk view)
+   ══════════════════════════════════════════════════════════════════════ */
+#screen-camera{
+  flex-direction:column;background:#0D0D0D;color:#fff;height:100vh;overflow:hidden
+}
+
+.cam-topbar{
+  height:56px;padding:0 20px;display:flex;align-items:center;
+  justify-content:space-between;background:#161616;
+  border-bottom:1px solid #2a2a2a;flex-shrink:0
+}
+.cam-class-info{display:flex;align-items:center;gap:12px}
+.cam-class-code{font-family:var(--mono);font-size:13px;font-weight:600;
+                color:var(--red);letter-spacing:.8px}
+.cam-class-name{font-size:14px;font-weight:600;color:#fff}
+.cam-class-sep{color:#444;font-size:16px}
+
+.cam-actions{display:flex;gap:8px;align-items:center}
+.cam-clock{font-family:var(--mono);font-size:13px;color:#888;margin-right:8px}
+
+.cam-body{flex:1;display:flex;overflow:hidden}
+
+/* Feed area */
+.cam-feed-area{
+  flex:1;position:relative;background:#000;display:flex;
+  align-items:center;justify-content:center;overflow:hidden
+}
+.cam-feed{width:100%;height:100%;object-fit:cover}
+.cam-overlay-top{
+  position:absolute;top:0;left:0;right:0;padding:14px 16px;
+  background:linear-gradient(to bottom,rgba(0,0,0,.7),transparent);
+  display:flex;align-items:center;gap:10px
+}
+.cam-live-dot{width:8px;height:8px;background:#EF4444;border-radius:50%;
+              animation:livePulse 1.4s infinite}
+@keyframes livePulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(.85)}}
+.cam-live-label{font-size:12px;font-weight:700;color:#fff;letter-spacing:1px}
+
+.cam-scan-line{
+  position:absolute;width:100%;height:3px;
+  background:linear-gradient(to right,transparent,var(--red),transparent);
+  box-shadow:0 0 12px var(--red);
+  animation:scanLine 2.5s linear infinite;pointer-events:none;z-index:5
+}
+@keyframes scanLine{0%{top:0;opacity:0}10%{opacity:1}90%{opacity:1}100%{top:100%;opacity:0}}
+
+.cam-no-feed{
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:12px;color:#444;text-align:center;padding:32px
+}
+.cam-no-feed svg{opacity:.4}
+.cam-no-feed p{font-size:14px;font-weight:500;color:#666}
+
+/* Side panel */
+.cam-side{
+  width:340px;flex-shrink:0;background:#161616;border-left:1px solid #2a2a2a;
+  display:flex;flex-direction:column;overflow:hidden
+}
+.cam-side-tabs{
+  display:flex;border-bottom:1px solid #2a2a2a;flex-shrink:0
+}
+.cam-side-tab{
+  flex:1;padding:13px;font-size:12px;font-weight:700;text-align:center;
+  cursor:pointer;color:#666;border-bottom:2px solid transparent;
+  transition:all .18s;letter-spacing:.4px;text-transform:uppercase
+}
+.cam-side-tab.active{color:#fff;border-bottom-color:var(--red)}
+
+.cam-side-content{flex:1;overflow-y:auto;padding:14px}
+.cam-side-content::-webkit-scrollbar{width:4px}
+.cam-side-content::-webkit-scrollbar-thumb{background:#333;border-radius:4px}
+
+/* Present list */
+.present-count-bar{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:10px 14px;background:#1E1E1E;border-radius:var(--r-sm);
+  margin-bottom:12px
+}
+.present-count-label{font-size:12px;color:#888;font-weight:600;
+                     text-transform:uppercase;letter-spacing:.4px}
+.present-count-num{font-family:var(--mono);font-size:20px;font-weight:700;color:#fff}
+
+.present-item{
+  display:flex;align-items:center;gap:10px;padding:9px 10px;
+  border-radius:var(--r-sm);margin-bottom:4px;
+  background:#1A1A1A;border:1px solid #252525
+}
+.present-avatar{width:30px;height:30px;border-radius:50%;background:var(--red);
+                display:flex;align-items:center;justify-content:center;
+                font-size:12px;font-weight:700;color:#fff;flex-shrink:0}
+.present-name{font-size:13px;font-weight:600;color:#E5E7EB;flex:1}
+.present-time{font-size:11px;color:#666;font-family:var(--mono)}
+
+/* Students list in side */
+.student-item{
+  display:flex;align-items:center;gap:10px;padding:9px 10px;
+  border-radius:var(--r-sm);margin-bottom:4px;
+  background:#1A1A1A;border:1px solid #252525
+}
+.student-status-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.dot-present{background:#22C55E}
+.dot-absent{background:#444}
+.student-name-txt{font-size:13px;color:#D1D5DB;flex:1}
+
+/* Bottom bar */
+.cam-bottom{
+  height:64px;padding:0 16px;display:flex;align-items:center;
+  justify-content:space-between;background:#161616;
+  border-top:1px solid #2a2a2a;flex-shrink:0;gap:10px
+}
+.cam-source-select{
+  background:#222;border:1px solid #333;color:#aaa;
+  border-radius:var(--r-sm);padding:7px 12px;font-size:13px;
+  font-family:var(--font);cursor:pointer;outline:none
+}
+.cam-source-select:focus{border-color:var(--red)}
+
+/* ══════════════════════════════════════════════════════════════════════
+   MODAL
+   ══════════════════════════════════════════════════════════════════════ */
+.modal-backdrop{
+  position:fixed;inset:0;background:rgba(0,0,0,.55);
+  display:none;align-items:center;justify-content:center;
+  z-index:1000;padding:20px;backdrop-filter:blur(4px)
+}
+.modal-backdrop.open{display:flex}
+.modal{
+  background:var(--surface);border-radius:var(--r-lg);
+  width:100%;max-width:520px;max-height:90vh;overflow-y:auto;
+  box-shadow:var(--shadow-lg);animation:modalIn .22s ease
+}
+@keyframes modalIn{from{opacity:0;transform:scale(.96) translateY(8px)}
+                   to{opacity:1;transform:none}}
+.modal-header{padding:24px 28px 0;display:flex;align-items:center;
+              justify-content:space-between}
+.modal-title{font-size:18px;font-weight:700;color:var(--red)}
+.modal-close{background:none;border:none;cursor:pointer;color:var(--muted);
+             display:flex;padding:4px;border-radius:6px}
+.modal-close:hover{color:var(--text);background:var(--bg)}
+.modal-body{padding:20px 28px 28px;display:flex;flex-direction:column;gap:16px}
+.modal-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.modal-actions{display:flex;gap:10px;justify-content:flex-end;padding-top:8px}
+
+/* File upload */
+.file-upload-area{
+  border:2px dashed var(--border);border-radius:var(--r-sm);padding:16px;
+  text-align:center;cursor:pointer;transition:all .18s;background:#FAFAFA
+}
+.file-upload-area:hover{border-color:var(--red);background:var(--red-light)}
+.file-upload-area.has-file{border-color:var(--green);background:var(--green-light)}
+.file-upload-area p{font-size:13px;color:var(--muted);margin-top:4px}
+.file-upload-area .filename{font-size:12px;font-weight:600;color:var(--green);
+                             margin-top:4px;display:none}
+
+/* ══════════════════════════════════════════════════════════════════════
+   SESSION SUMMARY MODAL
+   ══════════════════════════════════════════════════════════════════════ */
+#modal-summary .modal{max-width:440px}
+.summary-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;
+               margin:16px 0}
+.summary-stat{text-align:center;padding:16px;border-radius:var(--r-sm);
+              border:1px solid var(--border)}
+.summary-stat-num{font-size:28px;font-weight:700;line-height:1}
+.summary-stat-label{font-size:11px;font-weight:600;color:var(--muted);
+                    margin-top:4px;text-transform:uppercase;letter-spacing:.4px}
+.stat-present .summary-stat-num{color:var(--green)}
+.stat-late .summary-stat-num{color:var(--amber)}
+.stat-absent .summary-stat-num{color:var(--red)}
+
+/* ══════════════════════════════════════════════════════════════════════
+   TOAST
+   ══════════════════════════════════════════════════════════════════════ */
+#toast-container{position:fixed;bottom:24px;right:24px;z-index:9999;
+                 display:flex;flex-direction:column;gap:8px}
+.toast{padding:12px 18px;border-radius:var(--r-sm);font-size:13px;font-weight:600;
+       color:#fff;box-shadow:var(--shadow-md);animation:toastIn .25s ease;
+       display:flex;align-items:center;gap:8px;max-width:320px}
+.toast-success{background:var(--green)}
+.toast-error{background:var(--red)}
+.toast-info{background:#1E40AF}
+@keyframes toastIn{from{opacity:0;transform:translateX(20px)}to{opacity:1;transform:none}}
+</style>
+</head>
+<body>
+
+<!-- ═══ SCREEN 1: LOGIN ═══════════════════════════════════════════════════ -->
+<div id="screen-login" class="screen active">
+  <div class="login-card">
+    <div class="login-logo">
+      <div class="login-logo-icon">
+        <svg width="22" height="22" fill="none" viewBox="0 0 24 24">
+          <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" fill="#fff"/>
+        </svg>
+      </div>
+      <div class="login-logo-text">
+        <h1>ATTENDANCE</h1>
+        <p>Local Station · BatStateU</p>
+      </div>
+    </div>
+
+    <h2 class="login-title">Welcome back</h2>
+    <p class="login-sub">Sign in with your instructor credentials</p>
+
+    <div id="login-error" class="login-error">
+      <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
+        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/>
+      </svg>
+      <span id="login-error-text"></span>
+    </div>
+
+    <div class="login-fields">
+      <div class="field">
+        <label class="field-label">Email Address</label>
+        <input id="inp-email" class="input" type="email"
+               placeholder="your@email.com" autocomplete="email">
+      </div>
+      <div class="field">
+        <label class="field-label">Password</label>
+        <input id="inp-password" class="input" type="password"
+               placeholder="••••••••" autocomplete="current-password">
+      </div>
+    </div>
+
+    <button class="btn btn-primary btn-full btn-lg" id="btn-login">
+      Sign In
+    </button>
+
+    <p class="login-footer">
+      Account issues? Visit
+      <a href="https://attendance-system-xapv.onrender.com" target="_blank">
+        the web portal
+      </a>
+    </p>
+  </div>
+</div>
+
+<!-- ═══ SCREEN 2: CLASS SELECTOR ═════════════════════════════════════════ -->
+<div id="screen-classes" class="screen">
+  <!-- Topbar -->
+  <div class="topbar">
+    <div class="topbar-logo">
+      <div class="topbar-logo-icon">
+        <svg width="18" height="18" fill="#fff" viewBox="0 0 24 24">
+          <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+        </svg>
+      </div>
+      <span class="topbar-logo-text">Attendance · Local</span>
+    </div>
+    <div class="topbar-right">
+      <div class="instructor-pill">
+        <div class="instructor-avatar" id="topbar-avatar">K</div>
+        <span class="instructor-name" id="topbar-name">Instructor</span>
+      </div>
+      <button class="btn btn-ghost btn-sm" id="btn-logout">
+        <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/>
+        </svg>
+        Sign Out
+      </button>
+    </div>
+  </div>
+
+  <!-- Body -->
+  <div class="classes-body">
+    <div class="classes-header">
+      <h2 id="classes-greeting">Good morning</h2>
+      <p id="classes-date" class="muted"></p>
+    </div>
+
+    <!-- Offline warning -->
+    <div id="offline-banner" class="offline-banner hidden">
+      <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
+        <path d="M1 9l2 2c4.97-4.97 13.03-4.97 18 0l2-2C16.93 2.93 7.08 2.93 1 9zm8 8l3 3 3-3c-1.65-1.66-4.34-1.66-6 0zm-4-4l2 2c2.76-2.76 7.24-2.76 10 0l2-2C15.14 9.14 8.87 9.14 5 13z"/>
+      </svg>
+      Offline mode — showing cached class list
+    </div>
+
+    <!-- Day filter tabs -->
+    <div class="day-tabs" id="day-tabs">
+      <button class="day-tab" data-day="ALL">All Classes</button>
+      <button class="day-tab" data-day="MON">Mon</button>
+      <button class="day-tab" data-day="TUE">Tue</button>
+      <button class="day-tab" data-day="WED">Wed</button>
+      <button class="day-tab" data-day="THU">Thu</button>
+      <button class="day-tab" data-day="FRI">Fri</button>
+      <button class="day-tab" data-day="SAT">Sat</button>
+    </div>
+
+    <!-- Class grid -->
+    <div id="class-grid" class="class-grid">
+      <div class="empty-state">
+        <svg width="48" height="48" fill="none" stroke="currentColor" stroke-width="1" viewBox="0 0 24 24">
+          <path d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" stroke-linecap="round"/>
+        </svg>
+        <p>Loading classes…</p>
+        <span>Please wait</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ SCREEN 3: CAMERA ══════════════════════════════════════════════════ -->
+<div id="screen-camera" class="screen">
+  <!-- Top bar -->
+  <div class="cam-topbar">
+    <div class="cam-class-info">
+      <button class="btn-icon" id="btn-back-to-classes" style="border-color:#333;color:#888">
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+          <path d="M19 12H5M12 5l-7 7 7 7" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </button>
+      <span class="cam-class-code" id="cam-class-code">GED-144</span>
+      <span class="cam-class-sep">·</span>
+      <span class="cam-class-name" id="cam-class-name">Subject Name</span>
+    </div>
+    <div class="cam-actions">
+      <span class="cam-clock mono" id="cam-clock">00:00:00</span>
+      <button class="btn btn-sm" id="btn-open-register"
+              style="background:#1E1E1E;border:1px solid #333;color:#ccc">
+        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        Register Student
+      </button>
+      <button class="btn btn-green btn-sm" id="btn-save-attendance">
+        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+          <path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        Save Attendance
+      </button>
+    </div>
+  </div>
+
+  <!-- Main body -->
+  <div class="cam-body">
+    <!-- Feed -->
+    <div class="cam-feed-area">
+      <div class="cam-scan-line" id="cam-scan-line" style="display:none"></div>
+      <div class="cam-overlay-top" id="cam-overlay-top" style="display:none">
+        <div class="cam-live-dot"></div>
+        <span class="cam-live-label">LIVE</span>
+      </div>
+
+      <!-- No-camera placeholder -->
+      <div class="cam-no-feed" id="cam-no-feed">
+        <svg width="56" height="56" fill="none" stroke="currentColor" stroke-width="1" viewBox="0 0 24 24">
+          <path d="M15 10l4.553-2.069A1 1 0 0121 8.868v6.264a1 1 0 01-1.447.894L15 14M3 8a2 2 0 012-2h10a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V8z" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <p>Camera not started</p>
+        <p style="font-size:12px;color:#555">Select a source below and press Start Camera</p>
+      </div>
+
+      <img id="cam-feed" class="cam-feed hidden" src="/video_feed" alt="Camera feed"
+           onerror="this.classList.add('hidden');document.getElementById('cam-no-feed').style.display='flex'">
+    </div>
+
+    <!-- Side panel -->
+    <div class="cam-side">
+      <div class="cam-side-tabs">
+        <div class="cam-side-tab active" data-tab="present">Present</div>
+        <div class="cam-side-tab" data-tab="students">All Students</div>
+      </div>
+
+      <!-- Present tab -->
+      <div class="cam-side-content" id="tab-present">
+        <div class="present-count-bar">
+          <span class="present-count-label">Detected</span>
+          <span class="present-count-num" id="present-count">0</span>
+        </div>
+        <div id="present-list"></div>
+      </div>
+
+      <!-- Students tab -->
+      <div class="cam-side-content hidden" id="tab-students">
+        <div id="students-list"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bottom bar -->
+  <div class="cam-bottom">
+    <div class="flex gap8 center">
+      <svg width="14" height="14" fill="#666" viewBox="0 0 24 24">
+        <path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/>
+      </svg>
+      <select class="cam-source-select" id="cam-source-select">
+        <option value="0">Webcam (Built-in)</option>
+        <option value="1">Webcam (External)</option>
+        <option value="rtsp">IP Camera (RTSP)</option>
+      </select>
+      <input id="cam-rtsp-input" class="input hidden"
+             placeholder="rtsp://user:pass@192.168.1.x:554/..."
+             style="width:280px;background:#222;border-color:#333;color:#ccc;font-size:13px">
+    </div>
+    <div class="flex gap8">
+      <button class="btn btn-sm" id="btn-start-camera"
+              style="background:#D32F2F;color:#fff;border:none">
+        <svg width="13" height="13" fill="currentColor" viewBox="0 0 24 24">
+          <path d="M8 5v14l11-7z"/>
+        </svg>
+        Start Camera
+      </button>
+      <button class="btn btn-sm hidden" id="btn-stop-camera"
+              style="background:#333;color:#aaa;border:1px solid #444">
+        <svg width="13" height="13" fill="currentColor" viewBox="0 0 24 24">
+          <path d="M6 6h12v12H6z"/>
+        </svg>
+        Stop
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ MODAL: STUDENT REGISTRATION ══════════════════════════════════════ -->
+<div id="modal-register" class="modal-backdrop">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title">Register Student</span>
+      <button class="modal-close" onclick="closeModal('modal-register')">
+        <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path d="M6 18L18 6M6 6l12 12" stroke-linecap="round"/>
+        </svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <div class="field">
+        <label class="field-label">Full Name</label>
+        <input class="input" id="reg-name" placeholder="Last Name, First Name">
+      </div>
+      <div class="modal-grid">
+        <div class="field">
+          <label class="field-label">SR Code</label>
+          <input class="input" id="reg-sr" placeholder="23-XXXXX">
+        </div>
+        <div class="field">
+          <label class="field-label">Age</label>
+          <input class="input" id="reg-age" type="number" placeholder="18">
+        </div>
+      </div>
+      <div class="modal-grid">
+        <div class="field">
+          <label class="field-label">Contact Number</label>
+          <input class="input" id="reg-number" placeholder="09XX XXX XXXX">
+        </div>
+        <div class="field">
+          <label class="field-label">Sex</label>
+          <select class="input" id="reg-sex">
+            <option value="">Select</option>
+            <option>Male</option>
+            <option>Female</option>
+          </select>
+        </div>
+      </div>
+      <div class="field">
+        <label class="field-label">Email Address</label>
+        <input class="input" id="reg-email" type="email" placeholder="student@email.com">
+      </div>
+      <div class="field">
+        <label class="field-label">Address</label>
+        <input class="input" id="reg-address" placeholder="City, Province">
+      </div>
+
+      <!-- Photo upload -->
+      <div class="field">
+        <label class="field-label">Student Photo (for face recognition)</label>
+        <div class="file-upload-area" id="photo-upload-area"
+             onclick="document.getElementById('reg-photo').click()">
+          <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24" style="opacity:.4">
+            <path d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" stroke-linecap="round"/>
+            <circle cx="12" cy="13" r="3" stroke-linecap="round"/>
+          </svg>
+          <p>Click to choose photo</p>
+          <span class="filename" id="photo-filename"></span>
+        </div>
+        <input type="file" id="reg-photo" accept="image/*" class="hidden"
+               onchange="handleFileSelect('reg-photo','photo-upload-area','photo-filename')">
+      </div>
+
+      <!-- Signature upload -->
+      <div class="field">
+        <label class="field-label">E-Signature (appears on attendance sheet)</label>
+        <div class="file-upload-area" id="sig-upload-area"
+             onclick="document.getElementById('reg-sig').click()">
+          <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24" style="opacity:.4">
+            <path d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" stroke-linecap="round"/>
+          </svg>
+          <p>Click to choose signature image</p>
+          <span class="filename" id="sig-filename"></span>
+        </div>
+        <input type="file" id="reg-sig" accept="image/*" class="hidden"
+               onchange="handleFileSelect('reg-sig','sig-upload-area','sig-filename')">
+      </div>
+
+      <div class="modal-actions">
+        <button class="btn btn-ghost" onclick="closeModal('modal-register')">Cancel</button>
+        <button class="btn btn-primary" id="btn-submit-reg">Register Student</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ MODAL: SESSION SUMMARY ════════════════════════════════════════════ -->
+<div id="modal-summary" class="modal-backdrop">
+  <div class="modal" style="max-width:440px">
+    <div class="modal-header">
+      <span class="modal-title">Session Summary</span>
+    </div>
+    <div class="modal-body">
+      <p style="font-size:14px;color:var(--muted)">
+        Review before saving. Absent students are those enrolled but not detected.
+      </p>
+      <div class="summary-stats">
+        <div class="summary-stat stat-present">
+          <div class="summary-stat-num" id="sum-present">0</div>
+          <div class="summary-stat-label">Present</div>
+        </div>
+        <div class="summary-stat stat-late">
+          <div class="summary-stat-num" id="sum-late">0</div>
+          <div class="summary-stat-label">Late</div>
+        </div>
+        <div class="summary-stat stat-absent">
+          <div class="summary-stat-num" id="sum-absent">0</div>
+          <div class="summary-stat-label">Absent</div>
+        </div>
+      </div>
+      <div id="sum-detail" style="max-height:200px;overflow-y:auto;
+           border:1px solid var(--border);border-radius:var(--r-sm);padding:10px"></div>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" onclick="closeModal('modal-summary')">
+          Keep Scanning
+        </button>
+        <button class="btn btn-green" id="btn-confirm-save">
+          <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+            <path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          Confirm & Save
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Toast container -->
+<div id="toast-container"></div>
+
+<script>
+/* ═══════════════════════════════════════════════════════════════════════
+   STATE
+   ═══════════════════════════════════════════════════════════════════════ */
+const STATE = {
+  email:        '',
+  name:         '',
+  classes:      [],
+  schedules:    [],
+  allSchedules: [],
+  activeDay:    'TODAY',
+  currentClass: null,
+  students:     [],
+  cameraOn:     false,
+};
+
+/* ═══════════════════════════════════════════════════════════════════════
+   SCREEN NAVIGATION
+   ═══════════════════════════════════════════════════════════════════════ */
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   TOAST
+   ═══════════════════════════════════════════════════════════════════════ */
+function toast(msg, type = 'info', duration = 3000) {
+  const t = document.createElement('div');
+  t.className = `toast toast-${type}`;
+  t.textContent = msg;
+  document.getElementById('toast-container').appendChild(t);
+  setTimeout(() => t.remove(), duration);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   MODAL
+   ═══════════════════════════════════════════════════════════════════════ */
+function openModal(id)  { document.getElementById(id).classList.add('open') }
+function closeModal(id) { document.getElementById(id).classList.remove('open') }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   FILE UPLOAD DISPLAY
+   ═══════════════════════════════════════════════════════════════════════ */
+function handleFileSelect(inputId, areaId, filenameId) {
+  const f = document.getElementById(inputId).files[0];
+  if (!f) return;
+  const area = document.getElementById(areaId);
+  const fn   = document.getElementById(filenameId);
+  area.classList.add('has-file');
+  fn.textContent = f.name;
+  fn.style.display = 'block';
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   CLOCK
+   ═══════════════════════════════════════════════════════════════════════ */
+function startClock() {
+  const el = document.getElementById('cam-clock');
+  setInterval(() => {
+    el.textContent = new Date().toLocaleTimeString('en-PH', {hour12: false});
+  }, 1000);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   LOGIN
+   ═══════════════════════════════════════════════════════════════════════ */
+document.getElementById('btn-login').addEventListener('click', doLogin);
+document.getElementById('inp-password').addEventListener('keydown', e => {
+  if (e.key === 'Enter') doLogin();
+});
+
+async function doLogin() {
+  const email = document.getElementById('inp-email').value.trim();
+  const pwd   = document.getElementById('inp-password').value.trim();
+  const errEl = document.getElementById('login-error');
+  const errTx = document.getElementById('login-error-text');
+  const btn   = document.getElementById('btn-login');
+
+  errEl.style.display = 'none';
+  if (!email || !pwd) {
+    errEl.style.display = 'flex';
+    errTx.textContent = 'Please enter your email and password.';
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = 'Signing in…';
+
+  try {
+    const res  = await fetch('/api/local/login', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({email, password: pwd})
+    });
+    const data = await res.json();
+
+    if (!res.ok) {
+      errEl.style.display = 'flex';
+      errTx.textContent = data.error || 'Login failed.';
+      return;
+    }
+
+    STATE.email = data.email;
+    STATE.name  = data.name;
+    await loadClasses();
+    showScreen('screen-classes');
+    initClassesScreen();
+
+  } catch (err) {
+    errEl.style.display = 'flex';
+    errTx.textContent = 'Cannot reach the server. Check your connection.';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Sign In';
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   CLASSES SCREEN
+   ═══════════════════════════════════════════════════════════════════════ */
+async function loadClasses() {
+  const res  = await fetch('/api/local/classes', {
+    headers: {'X-Instructor-Email': STATE.email}
+  });
+  const data = await res.json();
+
+  STATE.classes      = data.all_classes    || [];
+  STATE.schedules    = data.today_schedules|| [];
+  STATE.allSchedules = data.all_schedules  || [];
+  STATE.today        = data.today;         // "MON" / "TUE" etc.
+
+  if (data.offline) {
+    document.getElementById('offline-banner').classList.remove('hidden');
+  }
+}
+
+function initClassesScreen() {
+  // Greeting
+  const h = new Date().getHours();
+  const greeting = h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
+  document.getElementById('classes-greeting').textContent =
+    `${greeting}, ${STATE.name.split(' ')[0]}`;
+
+  // Date
+  document.getElementById('classes-date').textContent =
+    new Date().toLocaleDateString('en-PH', {weekday:'long', year:'numeric',
+      month:'long', day:'numeric'});
+
+  // Avatar
+  document.getElementById('topbar-avatar').textContent =
+    STATE.name.charAt(0).toUpperCase();
+  document.getElementById('topbar-name').textContent = STATE.name;
+
+  // Mark today tab
+  document.querySelectorAll('.day-tab').forEach(tab => {
+    tab.classList.remove('active', 'today-marker');
+    if (tab.dataset.day === STATE.today) tab.classList.add('today-marker');
+    if (tab.dataset.day === STATE.today) tab.classList.add('active');
+    // default: show today's classes
+    if (tab.dataset.day === 'ALL' && !STATE.today) tab.classList.add('active');
+  });
+
+  renderClassGrid(STATE.today || 'ALL');
+}
+
+function renderClassGrid(dayFilter) {
+  STATE.activeDay = dayFilter;
+  const grid = document.getElementById('class-grid');
+
+  let filtered = STATE.classes;
+  if (dayFilter !== 'ALL') {
+    const scheduled = new Set(
+      STATE.allSchedules
+        .filter(s => (s.day || '').toUpperCase() === dayFilter)
+        .map(s => s.class_code)
+    );
+    filtered = STATE.classes.filter(c => scheduled.has(c.class_code));
+  }
+
+  if (!filtered.length) {
+    grid.innerHTML = `
+      <div class="empty-state" style="grid-column:1/-1">
+        <svg width="48" height="48" fill="none" stroke="currentColor" stroke-width="1" viewBox="0 0 24 24" style="opacity:.25;margin:0 auto 12px">
+          <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" stroke-linecap="round"/>
+        </svg>
+        <p>No classes ${dayFilter === 'ALL' ? '' : 'on ' + dayFilter}</p>
+        <span>Try a different day or check Render for schedules</span>
+      </div>`;
+    return;
+  }
+
+  grid.innerHTML = filtered.map(cls => {
+    // Find schedule for this class on this day
+    const sched = STATE.allSchedules.find(s =>
+      s.class_code === cls.class_code &&
+      (dayFilter === 'ALL' || (s.day || '').toUpperCase() === dayFilter)
+    );
+    const schedHtml = sched
+      ? `<div class="class-schedule">
+           <svg width="12" height="12" fill="currentColor" viewBox="0 0 24 24">
+             <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2zm.5 5H11v6l5.2 3.2.8-1.3-4.5-2.7V7z"/>
+           </svg>
+           ${sched.time || ''} · ${sched.room || 'TBA'}
+         </div>`
+      : '';
+    const isToday = STATE.allSchedules.some(s =>
+      s.class_code === cls.class_code && (s.day||'').toUpperCase() === STATE.today
+    );
+    return `
+      <div class="class-card ${isToday ? 'today' : ''}"
+           onclick="openCameraScreen('${cls.class_code}')">
+        <div class="class-code">${cls.class_code}</div>
+        <div class="class-name">${cls.subject || '—'}</div>
+        <div class="class-meta">${cls.section || ''}</div>
+        ${schedHtml}
+      </div>`;
+  }).join('');
+}
+
+// Day tab clicks
+document.getElementById('day-tabs').addEventListener('click', e => {
+  const tab = e.target.closest('.day-tab');
+  if (!tab) return;
+  document.querySelectorAll('.day-tab').forEach(t => t.classList.remove('active'));
+  tab.classList.add('active');
+  renderClassGrid(tab.dataset.day);
+});
+
+// Logout
+document.getElementById('btn-logout').addEventListener('click', () => {
+  STATE.email = ''; STATE.name = ''; STATE.classes = [];
+  showScreen('screen-login');
+  document.getElementById('inp-email').value = '';
+  document.getElementById('inp-password').value = '';
+});
+
+/* ═══════════════════════════════════════════════════════════════════════
+   CAMERA SCREEN
+   ═══════════════════════════════════════════════════════════════════════ */
+async function openCameraScreen(classCode) {
+  const cls = STATE.classes.find(c => c.class_code === classCode);
+  if (!cls) return;
+  STATE.currentClass = cls;
+
+  document.getElementById('cam-class-code').textContent = cls.class_code;
+  document.getElementById('cam-class-name').textContent = cls.subject || '';
+
+  // Load students for this class
+  try {
+    const res = await fetch(`/api/local/students/${classCode}`,{
+      headers: {'X-Instructor-Email': STATE.email}
+    });
+    STATE.students = await res.json();
+  } catch {
+    STATE.students = [];
+  }
+
+  renderStudentsList();
+  showScreen('screen-camera');
+  startClock();
+  startPresentPoll();
+}
+
+// Back to classes
+document.getElementById('btn-back-to-classes').addEventListener('click', async () => {
+  if (STATE.cameraOn) {
+    await stopCamera();
+  }
+  stopPresentPoll();
+  showScreen('screen-classes');
+});
+
+/* ── Camera controls ──────────────────────────────────────────────────── */
+document.getElementById('cam-source-select').addEventListener('change', function() {
+  const rtsp = document.getElementById('cam-rtsp-input');
+  if (this.value === 'rtsp') rtsp.classList.remove('hidden');
+  else rtsp.classList.add('hidden');
+});
+
+document.getElementById('btn-start-camera').addEventListener('click', startCamera);
+document.getElementById('btn-stop-camera').addEventListener('click', stopCamera);
+
+async function startCamera() {
+  const sel    = document.getElementById('cam-source-select');
+  const source = sel.value === 'rtsp'
+    ? document.getElementById('cam-rtsp-input').value.trim()
+    : sel.value;
+
+  if (sel.value === 'rtsp' && !source) {
+    toast('Enter the RTSP URL first.', 'error'); return;
+  }
+
+  const cls = STATE.currentClass;
+  try {
+    const res = await fetch('/api/local/start_camera', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Instructor-Email': STATE.email
+      },
+      body: JSON.stringify({
+        source,
+        class_code: cls.class_code,
+        section:    cls.section || '',
+        subject:    cls.subject || '',
+      })
+    });
+    const data = await res.json();
+    if (!res.ok) { toast(data.error || 'Camera failed.', 'error'); return; }
+
+    setCameraUI(true);
+    toast('Camera started', 'success');
+  } catch {
+    toast('Could not connect to camera.', 'error');
+  }
+}
+
+async function stopCamera() {
+  try {
+    await fetch('/api/local/stop_camera', {
+      method: 'POST',
+      headers: {'X-Instructor-Email': STATE.email}
+    });
+  } catch {}
+  setCameraUI(false);
+}
+
+function setCameraUI(on) {
+  STATE.cameraOn = on;
+  const feed  = document.getElementById('cam-feed');
+  const noFd  = document.getElementById('cam-no-feed');
+  const scan  = document.getElementById('cam-scan-line');
+  const live  = document.getElementById('cam-overlay-top');
+  const btnSt = document.getElementById('btn-start-camera');
+  const btnSp = document.getElementById('btn-stop-camera');
+
+  if (on) {
+    feed.src = '/video_feed?' + Date.now(); // bust cache
+    feed.classList.remove('hidden');
+    noFd.style.display = 'none';
+    scan.style.display = 'block';
+    live.style.display = 'flex';
+    btnSt.classList.add('hidden');
+    btnSp.classList.remove('hidden');
+  } else {
+    feed.classList.add('hidden');
+    noFd.style.display = 'flex';
+    scan.style.display = 'none';
+    live.style.display = 'none';
+    btnSt.classList.remove('hidden');
+    btnSp.classList.add('hidden');
+  }
+}
+
+/* ── Present list polling ─────────────────────────────────────────────── */
+let _pollInterval = null;
+
+function startPresentPoll() {
+  _pollInterval = setInterval(fetchPresent, 2000);
+}
+function stopPresentPoll() {
+  clearInterval(_pollInterval);
+  _pollInterval = null;
+}
+
+async function fetchPresent() {
+  try {
+    const [presRes, logRes] = await Promise.all([
+      fetch('/api/local/present_students'),
+      fetch('/api/local/scan_log')
+    ]);
+    const present = await presRes.json();
+    const scanLog = await logRes.json();
+    renderPresentList(present, scanLog);
+    renderStudentsList(present);
+  } catch {}
+}
+
+function renderPresentList(present, scanLog) {
+  document.getElementById('present-count').textContent = present.length;
+  const list = document.getElementById('present-list');
+  if (!present.length) {
+    list.innerHTML = `<p style="color:#555;font-size:13px;text-align:center;padding:20px">
+      No students detected yet</p>`;
+    return;
+  }
+  list.innerHTML = present.map(name => {
+    const ts   = scanLog[name] ? new Date(scanLog[name]*1000)
+      .toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit'}) : '';
+    const init = name.charAt(0).toUpperCase();
+    const disp = name.replace(/_/g,' ');
+    return `
+      <div class="present-item">
+        <div class="present-avatar">${init}</div>
+        <span class="present-name">${disp}</span>
+        ${ts ? `<span class="present-time">${ts}</span>` : ''}
+      </div>`;
+  }).join('');
+}
+
+function renderStudentsList(present = []) {
+  const presentSet = new Set(present.map(n => n.toLowerCase().replace(/_/g,' ')));
+  const list = document.getElementById('students-list');
+  if (!STATE.students.length) {
+    list.innerHTML = `<p style="color:#555;font-size:13px;text-align:center;padding:20px">
+      No students enrolled</p>`;
+    return;
+  }
+  list.innerHTML = STATE.students
+    .filter(s => s.status === 'Enrolled')
+    .map(s => {
+      const isPresent = presentSet.has((s.name||'').toLowerCase());
+      return `
+        <div class="student-item">
+          <div class="student-status-dot ${isPresent ? 'dot-present' : 'dot-absent'}"></div>
+          <span class="student-name-txt">${s.name}</span>
+          ${isPresent
+            ? '<span style="font-size:11px;color:#22C55E;font-weight:600">Present</span>'
+            : '<span style="font-size:11px;color:#555">—</span>'}
+        </div>`;
+    }).join('');
+}
+
+/* ── Side tabs ────────────────────────────────────────────────────────── */
+document.querySelectorAll('.cam-side-tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.cam-side-tab').forEach(t => t.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById('tab-present').classList.add('hidden');
+    document.getElementById('tab-students').classList.add('hidden');
+    document.getElementById(`tab-${tab.dataset.tab}`).classList.remove('hidden');
+  });
+});
+
+/* ═══════════════════════════════════════════════════════════════════════
+   REGISTRATION
+   ═══════════════════════════════════════════════════════════════════════ */
+document.getElementById('btn-open-register').addEventListener('click', () => {
+  openModal('modal-register');
+});
+
+document.getElementById('btn-submit-reg').addEventListener('click', async () => {
+  const name = document.getElementById('reg-name').value.trim();
+  if (!name) { toast('Full name is required.', 'error'); return; }
+
+  const fd = new FormData();
+  fd.append('class_code', STATE.currentClass.class_code);
+  fd.append('name',       name);
+  fd.append('sr_code',    document.getElementById('reg-sr').value.trim());
+  fd.append('age',        document.getElementById('reg-age').value.trim());
+  fd.append('number',     document.getElementById('reg-number').value.trim());
+  fd.append('sex',        document.getElementById('reg-sex').value);
+  fd.append('email',      document.getElementById('reg-email').value.trim());
+  fd.append('address',    document.getElementById('reg-address').value.trim());
+
+  const photo = document.getElementById('reg-photo').files[0];
+  const sig   = document.getElementById('reg-sig').files[0];
+  if (photo) fd.append('photo',     photo);
+  if (sig)   fd.append('signature', sig);
+
+  const btn = document.getElementById('btn-submit-reg');
+  btn.disabled = true; btn.textContent = 'Registering…';
+
+  try {
+    const res  = await fetch('/api/local/register_student', {
+      method: 'POST',
+      headers: {'X-Instructor-Email': STATE.email},
+      body: fd
+    });
+    const data = await res.json();
+    if (!res.ok) { toast(data.error || 'Registration failed.', 'error'); return; }
+
+    toast(`${name} registered successfully`, 'success');
+    closeModal('modal-register');
+
+    // Reload students list
+    const sRes = await fetch(`/api/local/students/${STATE.currentClass.class_code}`,{
+      headers: {'X-Instructor-Email': STATE.email}
+    });
+    STATE.students = await sRes.json();
+    renderStudentsList();
+
+    // Clear form
+    ['reg-name','reg-sr','reg-age','reg-number','reg-email','reg-address'].forEach(id => {
+      document.getElementById(id).value = '';
+    });
+    document.getElementById('reg-sex').value = '';
+    document.getElementById('reg-photo').value = '';
+    document.getElementById('reg-sig').value   = '';
+    ['photo-upload-area','sig-upload-area'].forEach(id => {
+      document.getElementById(id).classList.remove('has-file');
+    });
+    ['photo-filename','sig-filename'].forEach(id => {
+      document.getElementById(id).style.display = 'none';
+    });
+  } catch {
+    toast('Network error during registration.', 'error');
+  } finally {
+    btn.disabled = false; btn.textContent = 'Register Student';
+  }
+});
+
+/* ═══════════════════════════════════════════════════════════════════════
+   SAVE ATTENDANCE — shows summary modal first
+   ═══════════════════════════════════════════════════════════════════════ */
+document.getElementById('btn-save-attendance').addEventListener('click', async () => {
+  // Fetch final scan log
+  let scanLog = {};
+  try {
+    const r = await fetch('/api/local/scan_log');
+    scanLog = await r.json();
+  } catch {}
+
+  const presentNames = new Set(
+    Object.keys(scanLog).map(n => n.replace(/_/g,' ').toLowerCase())
+  );
+
+  // Build records: enrolled students → Present or Absent
+  const enrolled = STATE.students.filter(s => s.status === 'Enrolled');
+  const records  = enrolled.map(s => ({
+    name:    s.name,
+    sr_code: s.sr_code || '',
+    status:  presentNames.has((s.name||'').toLowerCase()) ? 'Present' : 'Absent',
+  }));
+
+  const presentCnt = records.filter(r => r.status === 'Present').length;
+  const absentCnt  = records.filter(r => r.status === 'Absent').length;
+
+  // Populate summary modal
+  document.getElementById('sum-present').textContent = presentCnt;
+  document.getElementById('sum-late').textContent    = 0;
+  document.getElementById('sum-absent').textContent  = absentCnt;
+  document.getElementById('sum-detail').innerHTML    = records.map(r => `
+    <div style="display:flex;align-items:center;gap:8px;padding:5px 0;
+         border-bottom:1px solid #F3F4F6;font-size:13px">
+      <div style="width:8px;height:8px;border-radius:50%;flex-shrink:0;
+           background:${r.status==='Present' ? '#22C55E' : '#E5E7EB'}"></div>
+      <span style="flex:1">${r.name}</span>
+      <span style="font-weight:600;color:${r.status==='Present'
+        ? 'var(--green)' : 'var(--muted)'};font-size:12px">${r.status}</span>
+    </div>`).join('');
+
+  // Store records for confirm button
+  window._pendingSave = { records, presentCnt, absentCnt };
+  openModal('modal-summary');
+});
+
+document.getElementById('btn-confirm-save').addEventListener('click', async () => {
+  const { records } = window._pendingSave || {};
+  if (!records) return;
+
+  const cls         = STATE.currentClass;
+  const sessionTime = new Date().toLocaleTimeString('en-PH',{hour12:false});
+  const sched       = STATE.allSchedules.find(s => s.class_code === cls.class_code);
+
+  const btn = document.getElementById('btn-confirm-save');
+  btn.disabled = true; btn.textContent = 'Saving…';
+
+  try {
+    const res = await fetch('/api/local/save_attendance', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Instructor-Email': STATE.email
+      },
+      body: JSON.stringify({
+        class_code:   cls.class_code,
+        section:      cls.section   || '',
+        subject:      cls.subject   || '',
+        session_time: sched?.time   || sessionTime,
+        records,
+      })
+    });
+    const data = await res.json();
+    if (!res.ok) { toast(data.error || 'Save failed.', 'error'); return; }
+
+    closeModal('modal-summary');
+    await stopCamera();
+    stopPresentPoll();
+    toast(
+      `Saved ✓  ${data.present} Present · ${data.absent} Absent`,
+      'success', 4000
+    );
+    // Return to class list
+    setTimeout(() => showScreen('screen-classes'), 1800);
+  } catch {
+    toast('Network error. Try again.', 'error');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = `<svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+      <path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round"/></svg> Confirm & Save`;
+  }
+});
+
+/* close modals on backdrop click */
+document.querySelectorAll('.modal-backdrop').forEach(bd => {
+  bd.addEventListener('click', e => {
+    if (e.target === bd) bd.classList.remove('open');
+  });
+});
+</script>
+</body>
+</html>

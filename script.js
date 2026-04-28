@@ -85,6 +85,128 @@ function isLocalEnvironment() {
     return host === '127.0.0.1' || host === 'localhost';
 }
 
+// ── LOCAL STATION PING ─────────────────────────────────────────────────────
+// Detects whether the local .exe is running.
+// Probes ports 5000-5002 (fallback chain from local_app.py).
+// window._localStationReady is read by updateLocalBanner() to swap UI state.
+
+window._localStationReady = false;
+window._localPort         = 5000;
+
+async function _pingLocalStation() {
+    for (const port of [5000, 5001, 5002]) {
+        try {
+            const ctrl = new AbortController();
+            const tid  = setTimeout(() => ctrl.abort(), 1200);
+            const res  = await fetch(`http://127.0.0.1:${port}/ping`,
+                                     { mode: 'cors', signal: ctrl.signal });
+            clearTimeout(tid);
+            if (res.ok) {
+                window._localStationReady = true;
+                window._localPort         = port;
+                if (document.getElementById('local-station-banner')) updateLocalBanner();
+                return true;
+            }
+        } catch { /* port not open */ }
+    }
+    window._localStationReady = false;
+    if (document.getElementById('local-station-banner')) updateLocalBanner();
+    return false;
+}
+
+// Probe immediately and every 15 s so banner updates when .exe starts mid-session
+_pingLocalStation();
+setInterval(_pingLocalStation, 15000);
+
+// ── BANNER & BUTTON RENDERER ───────────────────────────────────────────────
+// Reads window._localStationReady and rewrites #local-station-banner plus
+// enables/disables the Registration and Open Camera cloud buttons.
+
+function updateLocalBanner() {
+    const banner = document.getElementById('local-station-banner');
+    const regBtn = document.getElementById('cloud-reg-btn');
+    const camBtn = document.getElementById('cloud-cam-btn');
+    if (!banner) return;
+
+    const ready   = window._localStationReady;
+    const port    = window._localPort || 5000;
+    const baseUrl = `http://127.0.0.1:${port}`;
+    const EXE_DL  = '/download/local_station.exe'; // served by Render
+
+    if (ready) {
+        banner.className = 'mt-4 rounded-2xl px-5 py-3 border bg-green-50 border-green-200';
+        banner.innerHTML = `
+          <div class="flex items-start space-x-3">
+            <svg class="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+            </svg>
+            <div class="flex-1">
+              <p class="text-[11px] font-black text-green-700 uppercase tracking-widest">Local Station Connected</p>
+              <p class="text-[10px] text-green-600 mt-0.5">Running on port ${port}. Camera and Registration are ready.</p>
+            </div>
+            <a href="${baseUrl}" target="_blank"
+               class="text-[10px] font-black text-green-700 underline whitespace-nowrap mt-0.5 hover:text-green-900">
+               Open Station →
+            </a>
+          </div>`;
+
+        // Activate Registration button → opens local station in new tab
+        if (regBtn) {
+            regBtn.disabled  = false;
+            regBtn.className = regBtn.className
+                .replace('opacity-40','').replace('cursor-not-allowed','')
+                .replace('text-gray-300','text-gray-700');
+            regBtn.onclick   = () => window.open(baseUrl, '_blank');
+        }
+        // Activate Camera button → opens local station in new tab
+        if (camBtn) {
+            camBtn.disabled  = false;
+            camBtn.className = camBtn.className
+                .replace('opacity-40','').replace('cursor-not-allowed','')
+                .replace('bg-gray-200','bg-black').replace('text-gray-300','text-white');
+            camBtn.onclick   = () => window.open(baseUrl, '_blank');
+        }
+    } else {
+        banner.className = 'mt-4 rounded-2xl px-5 py-3 border bg-amber-50 border-amber-200';
+        banner.innerHTML = `
+          <div class="flex items-start space-x-3">
+            <svg class="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" fill="none"
+                 viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M13 16h-1v-4h-1m1-4h.01M12 2a10 10 0 110 20A10 10 0 0112 2z"/>
+            </svg>
+            <div class="flex-1">
+              <p class="text-[11px] font-black text-amber-700 uppercase tracking-widest">Local Station Not Running</p>
+              <p class="text-[10px] text-amber-600 mt-0.5">
+                Camera and Registration require the Local Station app on this classroom PC.
+              </p>
+              <div class="flex items-center gap-3 mt-2 flex-wrap">
+                <a href="${EXE_DL}" download
+                   onclick="localStorage.setItem('localExeDownloaded','1')"
+                   class="inline-flex items-center gap-1 bg-amber-600 text-white
+                          text-[10px] font-black uppercase px-3 py-1.5 rounded-lg
+                          hover:bg-amber-700 transition">
+                  <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/>
+                  </svg>
+                  Download Local Station
+                </a>
+                <span class="text-[10px] text-amber-500">
+                  Already installed?
+                  <a href="http://127.0.0.1:5000" target="_blank"
+                     class="underline font-bold hover:text-amber-700">Open it here</a>
+                </span>
+              </div>
+            </div>
+          </div>`;
+
+        if (regBtn) { regBtn.disabled = true; regBtn.title = 'Start the Local Station app first.'; }
+        if (camBtn) { camBtn.disabled = true; camBtn.title = 'Start the Local Station app first.'; }
+    }
+}
+
+
+
 function updateTime() {
     const clockEl = document.getElementById('clock');
     const dateEl  = document.getElementById('date');
@@ -137,7 +259,11 @@ function showPage(pageId, btn) {
     if (pageId === 'profile') {
         if (profilePage) profilePage.classList.remove('hidden');
         loadProfileData();
-        setTimeout(() => { lucide.createIcons(); }, 100);
+        setTimeout(() => {
+            lucide.createIcons();
+            updateLocalBanner(); // refresh ping-aware banner & buttons
+        }, 100);
+
     } else {
         if (contentArea) contentArea.classList.remove('hidden');
         if (pageId === 'home')         renderDashboard();
@@ -1085,24 +1211,18 @@ function renderFolderView(cls, class_code, students) {
             <div class="flex space-x-3">
                 ${isLocalEnvironment()
                     ? `<button onclick="openRegModal()" class="bg-gray-100 text-gray-600 px-8 py-4 rounded-2xl text-[10px] font-black uppercase hover:bg-gray-200 transition">Registration</button>`
-                    : `<button disabled title="Registration is only available on the local classroom PC." class="bg-gray-100 text-gray-300 px-8 py-4 rounded-2xl text-[10px] font-black uppercase cursor-not-allowed opacity-40 flex items-center space-x-2"><span>Registration</span></button>`}
+                            : `<button id="cloud-reg-btn" disabled title="Start the Local Station app first." class="bg-gray-100 text-gray-300 px-8 py-4 rounded-2xl text-[10px] font-black uppercase cursor-not-allowed opacity-40 flex items-center space-x-2"><span>Registration</span></button>`}
                 ${isLocalEnvironment()
                     ? (hasStudents
                         ? `<button onclick="openCamera()" class="bg-black text-white px-8 py-4 rounded-2xl text-[10px] font-black uppercase flex items-center space-x-2 hover:bg-gray-800 transition"><i data-lucide="camera" class="w-4 h-4"></i> <span>Open Camera</span></button>`
                         : `<button disabled title="Register at least one student before scanning." class="bg-gray-200 text-gray-400 px-8 py-4 rounded-2xl text-[10px] font-black uppercase flex items-center space-x-2 cursor-not-allowed opacity-60"><i data-lucide="camera" class="w-4 h-4"></i> <span>Open Camera</span></button>`)
-                    : `<button disabled title="Camera is only available on the local classroom PC." class="bg-gray-200 text-gray-300 px-8 py-4 rounded-2xl text-[10px] font-black uppercase flex items-center space-x-2 cursor-not-allowed opacity-40"><i data-lucide="camera" class="w-4 h-4"></i> <span>Open Camera</span></button>`}
+                    : `<button id="cloud-cam-btn" disabled title="Start the Local Station app first." class="bg-gray-200 text-gray-300 px-8 py-4 rounded-2xl text-[10px] font-black uppercase flex items-center space-x-2 cursor-not-allowed opacity-40"><i data-lucide="camera" class="w-4 h-4"></i> <span>Open Camera</span></button>`}
             </div>
         </div>
         <h1 class="text-4xl font-black text-gray-900 tracking-tighter uppercase">${cls.subject || class_code}</h1>
         <p class="text-gray-400 font-bold text-sm uppercase tracking-widest mt-1">${cls.section || ''} • ${cls.course_code || ''}</p>
         ${!isLocalEnvironment() ? `
-        <div class="mt-4 flex items-start space-x-3 bg-amber-50 border border-amber-200 rounded-2xl px-5 py-3">
-            <svg class="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M12 2a10 10 0 110 20A10 10 0 0112 2z"/></svg>
-            <div>
-                <p class="text-[11px] font-black text-amber-700 uppercase tracking-widest">Online View Only</p>
-                <p class="text-[10px] text-amber-600 mt-0.5">Registration and Camera are only available on the local classroom PC at 127.0.0.1:5000. Student records and attendance history are visible here.</p>
-            </div>
-        </div>` : ''}
+            <div id="local-station-banner" class="mt-4 rounded-2xl px-5 py-3 border transition-all"></div>` : ''}
 
         <!-- Status Filters -->
         <div class="flex gap-2 mt-6 mb-3">
