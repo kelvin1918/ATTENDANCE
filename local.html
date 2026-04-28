@@ -840,15 +840,38 @@ async function doLogin() {
    CLASSES SCREEN
    ═══════════════════════════════════════════════════════════════════════ */
 async function loadClasses() {
-  const res  = await fetch('/api/local/classes', {
-    headers: {'X-Instructor-Email': STATE.email}
-  });
-  const data = await res.json();
+  const headers = {'X-Instructor-Email': STATE.email};
+  const [classRes, roomRes] = await Promise.all([
+    fetch('/api/local/classes', { headers }),
+    fetch('/api/local/rooms',   { headers }),
+  ]);
+  const data     = await classRes.json();
+  const roomData = roomRes.ok ? await roomRes.json() : { rooms: [] };
+
 
   STATE.classes      = data.all_classes    || [];
   STATE.schedules    = data.today_schedules|| [];
   STATE.allSchedules = data.all_schedules  || [];
-  STATE.today        = data.today;         // "MON" / "TUE" etc.
+  STATE.today        = data.today;
+  STATE.rooms        = roomData.rooms      || [];
+
+  // Rebuild source dropdown with admin-configured rooms
+  const sel = document.getElementById('cam-source-select');
+  // Keep built-in options, remove any previously injected room options
+  sel.querySelectorAll('option[data-room]').forEach(o => o.remove());
+  if (STATE.rooms.length) {
+    const grp = document.createElement('optgroup');
+    grp.label = 'IP Camera Rooms';
+    STATE.rooms.forEach(r => {
+      const opt = document.createElement('option');
+      opt.value        = r.rtsp_url;
+      opt.dataset.room = '1';
+      opt.textContent  = r.room_name;
+      grp.appendChild(opt);
+    });
+    sel.appendChild(grp);
+  }
+
 
   if (data.offline) {
     document.getElementById('offline-banner').classList.remove('hidden');
@@ -994,6 +1017,7 @@ document.getElementById('btn-back-to-classes').addEventListener('click', async (
 /* ── Camera controls ──────────────────────────────────────────────────── */
 document.getElementById('cam-source-select').addEventListener('change', function() {
   const rtsp = document.getElementById('cam-rtsp-input');
+    // Show manual RTSP input only for the generic 'rtsp' option, not named rooms
   if (this.value === 'rtsp') rtsp.classList.remove('hidden');
   else rtsp.classList.add('hidden');
 });
@@ -1002,7 +1026,11 @@ document.getElementById('btn-start-camera').addEventListener('click', startCamer
 document.getElementById('btn-stop-camera').addEventListener('click', stopCamera);
 
 async function startCamera() {
-  const sel    = document.getElementById('cam-source-select');
+  const sel = document.getElementById('cam-source-select');
+  // If "IP Camera (RTSP)" generic option → use the manual text input
+  // If a named room option → value IS already the rtsp:// URL
+  // If webcam → value is "0" or "1"
+
   const source = sel.value === 'rtsp'
     ? document.getElementById('cam-rtsp-input').value.trim()
     : sel.value;
@@ -1010,6 +1038,11 @@ async function startCamera() {
   if (sel.value === 'rtsp' && !source) {
     toast('Enter the RTSP URL first.', 'error'); return;
   }
+
+    if (!source) {
+    toast('Select a camera source first.', 'error'); return;
+  }
+
 
   const cls = STATE.currentClass;
   try {
