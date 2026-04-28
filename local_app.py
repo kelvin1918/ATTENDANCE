@@ -199,7 +199,7 @@ def api_local_classes():
     instructor_id = instructor["id"]
 
     try:
-        classes   = [dict(r) for r in db.get_all_classes(instructor_id=instructor_id)]
+        classes   = [{ **dict(r), "class_code": r["id"] } for r in db.get_all_classes(instructor_id=instructor_id)]
         schedules = [dict(r) for r in db.get_schedules(instructor_id=instructor_id)]
         _save_cache(email, classes, schedules)
         all_ok = True
