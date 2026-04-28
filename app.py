@@ -22,7 +22,7 @@ from email.mime.text import MIMEText
 from datetime import datetime
 from flask import (
     Flask, request,
-    jsonify, send_file, Response
+    jsonify, send_file, send_from_directory, Response, abort
 )
 from werkzeug.utils import secure_filename
 
@@ -620,6 +620,33 @@ def api_download_pdf(class_code, date):
     # Filter to only Present and Late (university format excludes absences)
     attended = [r for r in records if r["status"] != "Absent"]
 
+    # ── Enrich each record with the student's e-signature path ───────────────
+    # Look up the student by sr_code (preferred) then by name within the class.
+    # The signature column in the students table stores the relative file path
+    # e.g. "uploads/signatures/JohnDoe.png".  We attach it as "sig_path" so
+    # pdf_generator can embed the actual image instead of the "Present" text.
+    students_map = {}
+    for s in db.get_students(class_code):
+        key = (s["sr_code"] or "").strip()
+        if key:
+            students_map[key] = s.get("signature", "") or ""
+        # also index by name as fallback
+        name_key = (s["name"] or "").strip().lower()
+        if name_key not in students_map:
+            students_map[name_key] = s.get("signature", "") or ""
+
+    for rec in attended:
+        sig = ""
+        sr  = (rec.get("sr_code") or "").strip()
+        if sr and sr in students_map:
+            sig = students_map[sr]
+        else:
+            nk = (rec.get("name") or "").strip().lower()
+            sig = students_map.get(nk, "")
+        rec["sig_path"] = sig   # absolute-ish local path like "uploads/signatures/X.png"
+
+
+
     filepath = generate_attendance_pdf(
         class_id     = class_code,
         subject      = cls["subject"],
@@ -639,6 +666,22 @@ def api_download_pdf(class_code, date):
         mimetype      = "application/pdf"
     )
 
+
+
+# ════════════════════════════════════════════════════════════════════════════════
+# SIGNATURE FILE SERVING
+# ════════════════════════════════════════════════════════════════════════════════
+
+@app.route("/api/signature/<path:filename>")
+def serve_signature(filename):
+    """Safely serve a student e-signature image from uploads/signatures/.
+    Used by the web viewer to render the actual signature image instead of
+    the plain Present/Late text in the attendance sheet preview."""
+    sig_dir   = os.path.join(os.getcwd(), "uploads", "signatures")
+    safe_name = os.path.basename(filename)
+    if not safe_name:
+        abort(404)
+    return send_from_directory(sig_dir, safe_name)
 
 
 # ════════════════════════════════════════════════════════════════════════════════

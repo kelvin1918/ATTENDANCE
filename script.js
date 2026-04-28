@@ -838,27 +838,42 @@ async function viewAndPrintPDF(class_code, date, session_time) {
             const numL = i + 1;
             const numR = i + ROWS_PER_COL + 1;
 
-        // Show Present/Late status in signature column; empty if no student in slot
+        // Show e-signature image if available, fall back to coloured status text
+        // sig_path is enriched by /api/download_pdf → stored in rec.sig_path
+        // For the web viewer we hit /api/signature/<filename> to serve the file.
 
-            const sigL = sL
-                ? `<span style="font-weight:bold;color:${statusColor(sL.status)};">${sL.status}</span>`
-                : '';
-            const sigR = sR
-                ? `<span style="font-weight:bold;color:${statusColor(sR.status)};">${sR.status}</span>`
-                : '';
+            const _sigHtml = (student) => {
+                if (!student) return '';
+                const p = student.sig_path || '';
+                if (p) {
+                    // Extract just the filename so the route stays clean
+                    const fname = p.split(/[\\/]/).pop();
+                    const col   = statusColor(student.status);
+                    return `<img src="/api/signature/${encodeURIComponent(fname)}"
+                                 alt="${student.status}"
+                                 onerror="this.style.display='none';this.nextElementSibling.style.display='inline';"
+                                 style="max-height:20px;max-width:90%;object-fit:contain;display:block;margin:0 auto;">
+                            <span style="display:none;font-weight:bold;color:${col};font-size:10px;">${student.status}</span>`;
+                }
+                const col = statusColor(student.status);
+                return `<span style="font-weight:bold;color:${col};">${student.status}</span>`;
+            };
+
+            const sigL = _sigHtml(sL);
+            const sigR = _sigHtml(sR);
 
             return `
             <tr>
                 <td style="border:1px solid black;padding:3px 8px;height:25px;font-size:11px;font-family:'Times New Roman',serif;">
                     ${numL}. ${sL ? sL.name : ''}
                 </td>
-                <td style="border:1px solid black;text-align:center;font-size:11px;padding:3px;">
+                <td style="border:1px solid black;text-align:center;font-size:11px;padding:3px;height:25px;overflow:hidden;max-width:0;">
                     ${sigL}
                 </td>
                 <td style="border:1px solid black;padding:3px 8px;height:25px;font-size:11px;font-family:'Times New Roman',serif;">
                     ${numR}.${sR ? ' ' + sR.name : ''}
                 </td>
-                <td style="border:1px solid black;text-align:center;font-size:11px;padding:3px;">
+                <td style="border:1px solid black;text-align:center;font-size:11px;padding:3px;height:25px;overflow:hidden;max-width:0;">
                     ${sigR}
                 </td>
             </tr>`;

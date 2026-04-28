@@ -107,6 +107,54 @@ def _no_top(extra=None):
     return cmds
 
 
+# ── SIGNATURE CELL HELPER ──────────────────────────────────────────────────────
+#
+# The SIGNATURE column is ~15% of usable width (R_SIG pts).
+# We scale-fit the student's uploaded e-signature image to fill the cell.
+# Falls back to coloured "Present"/"Late" text if no image is found on disk.
+
+SIG_MAX_W = R_SIG - 6   # ~57 pt — leave 3 pt padding each side
+SIG_MAX_H = 12           # row height is 14 pt; keep 1 pt top/bottom clearance
+
+
+def _sig_cell(sig_path, status, sig_col, norm9c_style, ps_fn):
+    """
+    Return a ReportLab flowable for the SIGNATURE column cell.
+
+    Priority:
+      1. Valid file on disk  → scale-fit RLImage embedded in the PDF.
+      2. No file / error     → coloured text fallback ("Present" / "Late").
+
+    Parameters
+    ----------
+    sig_path     : str  — relative path stored in students.signature
+                          e.g. "uploads/signatures/JohnDoe.png"
+    status       : str  — "Present" or "Late"
+    sig_col      : str  — hex colour for the text fallback
+    norm9c_style : ParagraphStyle — centred 9 pt style
+    ps_fn        : callable — ps() factory (unused but kept for symmetry)
+    """
+    if sig_path and os.path.isfile(sig_path):
+        try:
+            img = RLImage(sig_path)
+            nat_w, nat_h = img.imageWidth, img.imageHeight
+            if nat_w > 0 and nat_h > 0:
+                scale          = min(SIG_MAX_W / nat_w, SIG_MAX_H / nat_h, 1.0)
+                img.drawWidth  = nat_w * scale
+                img.drawHeight = nat_h * scale
+                img.hAlign     = "CENTER"
+                return img
+        except Exception:
+            pass   # fall through to text fallback
+
+    # Text fallback
+    return Paragraph(
+        f'<font color="{sig_col}" size="8">{status}</font>',
+        norm9c_style
+    )
+
+
+
 # ── MAIN ENTRY POINT ─────────────────────────────────────────────────────────
 
 def generate_attendance_pdf(class_id, subject, section, room, date,
@@ -279,26 +327,26 @@ def generate_attendance_pdf(class_id, subject, section, room, date,
 
         # ── left half ────────────────────────────────────────────────────────
         if left_r:
-            st   = left_r["status"]
-            tag  = " (Late)" if st == "Late" else ""
-            col  = BLACK     if st == "Present" else ORANGE
-            sig_col = BLACK if st == "Present" else "#E65100"
-            l_nm = Paragraph(f"{i+1}. {left_r['name']}{tag}",
-                             ps(f"ln{i}", fontSize=9, fontName=TNR, textColor=col))
-            l_sg = Paragraph(f"<font color='{sig_col}' size='8'>{st}</font>", norm9c)
+            st      = left_r["status"]
+            tag     = " (Late)" if st == "Late" else ""
+            col     = BLACK if st == "Present" else ORANGE
+            sig_col = "#1B5E20" if st == "Present" else "#E65100"
+            l_nm    = Paragraph(f"{i+1}. {left_r['name']}{tag}",
+                                ps(f"ln{i}", fontSize=9, fontName=TNR, textColor=col))
+            l_sg    = _sig_cell(left_r.get("sig_path", ""), st, sig_col, norm9c, ps)
         else:
             l_nm = Paragraph(f"{i+1}.", ps(f"le{i}", fontSize=9, fontName=TNR))
             l_sg = Paragraph("", norm9)
 
         # ── right half ───────────────────────────────────────────────────────
         if right_r:
-            st   = right_r["status"]
-            tag  = " (Late)" if st == "Late" else ""
-            col  = BLACK if st == "Present" else ORANGE
-            sig_col = BLACK if st == "Present" else "#E65100"
-            r_nm = Paragraph(f"{i+1+ROWS_PER_COL}. {right_r['name']}{tag}",
-                             ps(f"rn{i}", fontSize=9, fontName=TNR, textColor=col))
-            r_sg = Paragraph(f"<font color='{sig_col}' size='8'>{st}</font>", norm9c)
+            st      = right_r["status"]
+            tag     = " (Late)" if st == "Late" else ""
+            col     = BLACK if st == "Present" else ORANGE
+            sig_col = "#1B5E20" if st == "Present" else "#E65100"
+            r_nm    = Paragraph(f"{i+1+ROWS_PER_COL}. {right_r['name']}{tag}",
+                                ps(f"rn{i}", fontSize=9, fontName=TNR, textColor=col))
+            r_sg    = _sig_cell(right_r.get("sig_path", ""), st, sig_col, norm9c, ps)
         else:
             r_nm = Paragraph(f"{i+1+ROWS_PER_COL}.", ps(f"re{i}", fontSize=9, fontName=TNR))
             r_sg = Paragraph("", norm9)
