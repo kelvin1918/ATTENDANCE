@@ -226,6 +226,23 @@ def api_local_classes():
 
 
 # ══════════════════════════════════════════════════════════════════════════════
+# CAMERA ROOMS — returns admin-configured room names + RTSP URLs
+# ══════════════════════════════════════════════════════════════════════════════
+
+@app.route("/api/local/rooms")
+def api_local_rooms():
+    """Return all campus_rooms so the frontend can build a named dropdown."""
+    email = request.headers.get("X-Instructor-Email", "")
+    if not email:
+        return jsonify({"error": "unauthorized"}), 401
+    try:
+        rooms = [dict(r) for r in db.get_all_rooms()]
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    return jsonify({"rooms": rooms})
+
+
+# ══════════════════════════════════════════════════════════════════════════════
 # STUDENTS — for selected class
 # ══════════════════════════════════════════════════════════════════════════════
 
