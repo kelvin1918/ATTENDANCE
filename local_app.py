@@ -59,28 +59,84 @@ CORS(app, origins="*")   # allow Render to ping us
 ALLOWED_EXT = {"jpg", "jpeg", "png"}
 CACHE_FILE  = "local_cache.json"
 
+# Base folders — class subfolders are created at registration/camera-start time
 for folder in ["uploads/students", "uploads/signatures", "faces", "pdf"]:
     os.makedirs(folder, exist_ok=True)
 
 db.init_db()
 
-# ── FACE RECOGNIZER STATE ────────────────────────────────────────────────────
-if CAMERA_ENABLED:
-    known_enc, known_names = load_known_faces("faces")
-    recognizer = FaceRecognizer(known_enc, known_names)
-else:
-    known_enc, known_names, recognizer = [], [], None
+# ── FACE RECOGNIZER STATE ─────────────────────────────────────────────────────
+# Faces are NOT loaded at startup anymore.
+# They are loaded per-class when the camera starts (class-scoped folder).
+# This means startup is instant regardless of how many students are enrolled.
 
-_camera_active = False
+known_enc, known_names = [], []
+recognizer             = None
+_camera_active         = False
+_current_class_code    = None   # tracks which class folder is loaded
 
 
-def reload_recognizer():
-    global known_enc, known_names, recognizer, _camera_active
-    if not CAMERA_ENABLED:
+def _class_faces_dir(class_code: str) -> str:
+    """Return the faces subfolder for a specific class. Creates it if missing."""
+    path = os.path.join("faces", _safe_code(class_code))
+    os.makedirs(path, exist_ok=True)
+    return path
+
+
+def _class_students_dir(class_code: str) -> str:
+    path = os.path.join("uploads", "students", _safe_code(class_code))
+    os.makedirs(path, exist_ok=True)
+    return path
+
+
+def _class_signatures_dir(class_code: str) -> str:
+    path = os.path.join("uploads", "signatures", _safe_code(class_code))
+    os.makedirs(path, exist_ok=True)
+    return path
+
+
+def _safe_code(class_code: str) -> str:
+    """Sanitise class code for use as a folder name."""
+    return "".join(c if c.isalnum() or c in "-_" else "_" for c in class_code)
+
+
+def _load_class_faces(class_code: str):
+    """
+    Load face encodings for ONE class only.
+    Called when camera starts — not at boot, not at registration.
+    Returns (encodings_list, names_list).
+    """
+    faces_dir = _class_faces_dir(class_code)
+    if CAMERA_ENABLED:
+        return load_known_faces(faces_dir)
+    return [], []
+
+
+def _add_single_face(image_path: str, display_name: str):
+    """
+    Encode ONE new face image and append it to the live recognizer.
+    Called after student registration — no full reload needed.
+    Runs in a background thread so the HTTP response returns immediately.
+    """
+    if not CAMERA_ENABLED or recognizer is None:
         return
-    known_enc, known_names = load_known_faces("faces")
-    recognizer             = FaceRecognizer(known_enc, known_names)
-    _camera_active         = False
+
+    def _encode():
+        import face_recognition as _fr
+        try:
+            img  = _fr.load_image_file(image_path)
+            encs = _fr.face_encodings(img)
+            if encs:
+                with recognizer._lock:
+                    recognizer.known_encodings.append(encs[0])
+                    recognizer.known_names.append(display_name)
+                print(f"[FACES] ✓ Added {display_name} to live recognizer")
+            else:
+                print(f"[FACES] ✗ No face found in {image_path}")
+        except Exception as e:
+            print(f"[FACES] ✗ Encode error for {display_name}: {e}")
+
+    threading.Thread(target=_encode, daemon=True).start()
 
 
 def allowed(filename):
@@ -266,30 +322,47 @@ def api_local_register_student():
     if not class_code or not name:
         return jsonify({"error": "class_code and name are required."}), 400
 
-    # ── Photo ─────────────────────────────────────────────────────────────────
+    safe_name_base = secure_filename(name.replace(" ", "_"))
+
+    # ── Photo → faces/<CLASS_CODE>/ and uploads/students/<CLASS_CODE>/ ────────
+    # Saved to the class-scoped folder so the recognizer only loads this class.
+    # NO full reload — _add_single_face() encodes just this one image in the
+    # background, appending it to the live recognizer instantly.
     photo_path = ""
+    face_path  = ""
     if "photo" in request.files:
         f = request.files["photo"]
         if f and f.filename and allowed(f.filename):
             ext        = os.path.splitext(secure_filename(f.filename))[1]
-            safe_name  = secure_filename(name.replace(" ", "_") + ext)
-            photo_path = os.path.join("uploads/students", safe_name)
+            safe_name  = safe_name_base + ext
+
+            # Class-scoped student photo folder
+            students_dir = _class_students_dir(class_code)
+            photo_path   = os.path.join(students_dir, safe_name)
             f.save(photo_path)
-            face_path  = os.path.join("faces", safe_name)
+
+            # Class-scoped face folder — copy for face_recognition
+            faces_dir = _class_faces_dir(class_code)
+            face_path = os.path.join(faces_dir, safe_name)
             if not os.path.exists(face_path):
                 shutil.copy(photo_path, face_path)
-                reload_recognizer()
 
-    # ── Signature ─────────────────────────────────────────────────────────────
+            # ── LAZY ENCODE: append to live recognizer without full reload ──
+            # Uses the display name (spaces) so it matches the DB name exactly.
+            _add_single_face(face_path, name)
+
+    # ── Signature → uploads/signatures/<CLASS_CODE>/ ──────────────────────────
     sig_path = ""
     if "signature" in request.files:
         f = request.files["signature"]
         if f and f.filename and allowed(f.filename):
-            fname    = secure_filename(f.filename)
-            sig_path = os.path.join("uploads/signatures", fname)
+            ext      = os.path.splitext(secure_filename(f.filename))[1]
+            sig_name = safe_name_base + "_sig" + ext
+            sig_dir  = _class_signatures_dir(class_code)
+            sig_path = os.path.join(sig_dir, sig_name)
             f.save(sig_path)
 
-    # ── Save to DB (Neon via database.py) ────────────────────────────────────
+    # ── Save to DB (Neon via database.py) ─────────────────────────────────────
     try:
         db.add_student(
             class_code = class_code,
@@ -315,7 +388,7 @@ def api_local_register_student():
 
 @app.route("/api/local/start_camera", methods=["POST"])
 def api_local_start_camera():
-    global _camera_active, recognizer, known_enc, known_names
+    global _camera_active, recognizer, known_enc, known_names, _current_class_code
 
     if not CAMERA_ENABLED:
         return jsonify({"error": "Camera not available on this machine."}), 503
@@ -330,13 +403,29 @@ def api_local_start_camera():
     email      = request.headers.get("X-Instructor-Email", "")
 
     try:
-        if _camera_active:
+        # Stop any running camera first
+        if _camera_active and recognizer:
             recognizer.stop_and_reset()
+
+        # ── CLASS-SCOPED FACE LOAD ────────────────────────────────────────────
+        # Only load faces from faces/<CLASS_CODE>/.
+        # Students from other classes are never in memory — no cross-class hits.
+        known_enc, known_names = _load_class_faces(class_code)
+        face_count             = len(known_names)
+        _current_class_code    = class_code
+
+        print(f"[CAMERA] Loading class {class_code} — {face_count} face(s) enrolled")
+
         recognizer = FaceRecognizer(known_enc, known_names)
         recognizer.set_session(email, class_code, section, subject)
         recognizer.start(source)
         _camera_active = True
-        return jsonify({"status": "ok", "source": str(source)})
+
+        return jsonify({
+            "status":     "ok",
+            "source":     str(source),
+            "faces_loaded": face_count,
+        })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -494,11 +583,29 @@ def api_local_save_attendance():
 
 @app.route("/api/signature/<path:filename>")
 def serve_signature(filename):
-    sig_dir   = os.path.join(os.getcwd(), "uploads", "signatures")
-    safe_name = os.path.basename(filename)
-    if not safe_name:
-        abort(404)
-    return send_from_directory(sig_dir, safe_name)
+    """
+    Serve signature images from class-scoped subfolders.
+    Accepts both:
+      /api/signature/BET-241/JohnDoe_sig.png   (new class-scoped path)
+      /api/signature/JohnDoe_sig.png            (legacy flat path fallback)
+    """
+    # Sanitise — prevent path traversal
+    parts     = [p for p in filename.replace("\\", "/").split("/") if p and p != ".."]
+    safe_path = os.path.join("uploads", "signatures", *parts)
+
+    if os.path.isfile(safe_path):
+        directory = os.path.dirname(os.path.abspath(safe_path))
+        fname     = os.path.basename(safe_path)
+        return send_from_directory(directory, fname)
+
+    # Flat fallback — search all class subfolders
+    base_name = os.path.basename(filename)
+    sig_root  = os.path.join(os.getcwd(), "uploads", "signatures")
+    for root, dirs, files in os.walk(sig_root):
+        if base_name in files:
+            return send_from_directory(root, base_name)
+
+    abort(404)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
