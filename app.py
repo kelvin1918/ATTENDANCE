@@ -720,7 +720,27 @@ def api_get_sessions_by_class(class_code):
 def api_get_attendance(class_code, date):
     session_time = request.args.get("session_time")
     rows = db.get_attendance_session(class_code, date, session_time)
-    return jsonify([dict(r) for r in rows])
+    records = [dict(r) for r in rows]
+
+    # ── Enrich with sig_path so the web viewer can render e-signature images ──
+    students_map = {}
+    for s in db.get_students(class_code):
+        sr_key = (s["sr_code"] or "").strip()
+        if sr_key:
+            students_map[sr_key] = s.get("signature", "") or ""
+        name_key = (s["name"] or "").strip().lower()
+        if name_key not in students_map:
+            students_map[name_key] = s.get("signature", "") or ""
+
+    for rec in records:
+        sr  = (rec.get("sr_code") or "").strip()
+        sig = students_map.get(sr, "") if sr else ""
+        if not sig:
+            nk  = (rec.get("name") or "").strip().lower()
+            sig = students_map.get(nk, "")
+        rec["sig_path"] = sig
+
+    return jsonify(records)
 
 
 # ════════════════════════════════════════════════════════════════════════════════

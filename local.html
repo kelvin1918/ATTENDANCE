@@ -1195,11 +1195,7 @@ document.getElementById('btn-submit-reg').addEventListener('click', async () => 
   fd.append('class_code', STATE.currentClass.class_code);
   fd.append('name',       name);
   fd.append('sr_code',    document.getElementById('reg-sr').value.trim());
-  fd.append('age',        document.getElementById('reg-age').value.trim());
-  fd.append('number',     document.getElementById('reg-number').value.trim());
-  fd.append('sex',        document.getElementById('reg-sex').value);
   fd.append('email',      document.getElementById('reg-email').value.trim());
-  fd.append('address',    document.getElementById('reg-address').value.trim());
 
   const photo = document.getElementById('reg-photo').files[0];
   const sig   = document.getElementById('reg-sig').files[0];
@@ -1229,10 +1225,9 @@ document.getElementById('btn-submit-reg').addEventListener('click', async () => 
     renderStudentsList();
 
     // Clear form
-    ['reg-name','reg-sr','reg-age','reg-number','reg-email','reg-address'].forEach(id => {
+    ['reg-name','reg-sr','reg-email'].forEach(id => {
       document.getElementById(id).value = '';
     });
-    document.getElementById('reg-sex').value = '';
     document.getElementById('reg-photo').value = '';
     document.getElementById('reg-sig').value   = '';
     ['photo-upload-area','sig-upload-area'].forEach(id => {
