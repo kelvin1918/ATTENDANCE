@@ -386,6 +386,25 @@ def api_local_register_student():
 # CAMERA — start / stop / feed / present list
 # ══════════════════════════════════════════════════════════════════════════════
 
+@app.route("/api/local/face_count/<path:class_code>")
+def api_local_face_count(class_code):
+    """
+    Fast pre-check: count enrolled face images for a class WITHOUT encoding.
+    Used by the UI to show the loading message before start_camera is called.
+    """
+    faces_dir = _class_faces_dir(class_code)
+    try:
+        files = [
+            f for f in os.listdir(faces_dir)
+            if f.lower().endswith((".jpg", ".jpeg", ".png"))
+        ]
+        return jsonify({"count": len(files), "names": [
+            os.path.splitext(f)[0].replace("_", " ") for f in sorted(files)
+        ]})
+    except Exception as e:
+        return jsonify({"count": 0, "names": [], "error": str(e)})
+
+
 @app.route("/api/local/start_camera", methods=["POST"])
 def api_local_start_camera():
     global _camera_active, recognizer, known_enc, known_names, _current_class_code
