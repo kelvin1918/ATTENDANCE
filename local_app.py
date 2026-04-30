@@ -100,6 +100,83 @@ def _safe_code(class_code: str) -> str:
     return "".join(c if c.isalnum() or c in "-_" else "_" for c in class_code)
 
 
+# ── PROGRESSIVE LOAD STATE ────────────────────────────────────────────────────
+# Shared between the background encoding thread and the /api/local/load_progress
+# poll endpoint so the frontend can show a live counter.
+_load_progress = {"loaded": 0, "total": 0, "done": True, "error": None}
+_load_lock     = threading.Lock()
+
+
+def _load_class_faces_bg(class_code, session_meta):
+    """
+    Background thread — encodes faces one-by-one for this class only.
+    Updates _load_progress after each image.
+    Starts the camera automatically when all faces are encoded.
+    """
+    global known_enc, known_names, recognizer, _camera_active
+    global _current_class_code, _load_progress
+
+    import face_recognition as _fr
+
+    faces_dir   = _class_faces_dir(class_code)
+    image_files = [
+        f for f in os.listdir(faces_dir)
+        if f.lower().endswith((".jpg", ".jpeg", ".png"))
+    ] if os.path.isdir(faces_dir) else []
+
+    total = len(image_files)
+    with _load_lock:
+        _load_progress = {"loaded": 0, "total": total, "done": False, "error": None}
+
+    enc_list  = []
+    name_list = []
+
+    for i, filename in enumerate(image_files):
+        path         = os.path.join(faces_dir, filename)
+        display_name = os.path.splitext(filename)[0].replace("_", " ")
+        try:
+            img  = _fr.load_image_file(path)
+            encs = _fr.face_encodings(img)
+            if encs:
+                enc_list.append(encs[0])
+                name_list.append(display_name)
+                print(f"[FACES] ✓ {display_name} ({i+1}/{total})")
+            else:
+                print(f"[FACES] ✗ No face in {filename}")
+        except Exception as e:
+            print(f"[FACES] ✗ Error {filename}: {e}")
+
+        with _load_lock:
+            _load_progress["loaded"] = i + 1
+
+    # All encoded — start the camera now
+    try:
+        source  = session_meta["source"]
+        email   = session_meta["email"]
+        section = session_meta["section"]
+        subject = session_meta["subject"]
+
+        if _camera_active and recognizer:
+            recognizer.stop_and_reset()
+
+        known_enc, known_names = enc_list, name_list
+        _current_class_code    = class_code
+        recognizer             = FaceRecognizer(known_enc, known_names)
+        recognizer.set_session(email, class_code, section, subject)
+        recognizer.start(source)
+        _camera_active = True
+        print(f"[CAMERA] Started — {len(known_names)} face(s) for {class_code}")
+
+        with _load_lock:
+            _load_progress["done"] = True
+
+    except Exception as e:
+        with _load_lock:
+            _load_progress["done"]  = True
+            _load_progress["error"] = str(e)
+        print(f"[CAMERA] Start error: {e}")
+
+
 def _load_class_faces(class_code: str):
     """
     Load face encodings for ONE class only.
@@ -388,46 +465,65 @@ def api_local_register_student():
 
 @app.route("/api/local/start_camera", methods=["POST"])
 def api_local_start_camera():
-    global _camera_active, recognizer, known_enc, known_names, _current_class_code
+    """
+    Starts face encoding in a background thread and returns immediately.
+    Frontend polls /api/local/load_progress until done=true,
+    at which point the camera is already running.
+    """
+    global _load_progress
 
     if not CAMERA_ENABLED:
         return jsonify({"error": "Camera not available on this machine."}), 503
 
     data       = request.json or {}
     source_raw = data.get("source", "0")
-    source     = int(source_raw) if source_raw in ("0", "1") else source_raw
+    source     = int(source_raw) if str(source_raw) in ("0", "1") else source_raw
 
     class_code = data.get("class_code", "")
     section    = data.get("section", "")
     subject    = data.get("subject", "")
     email      = request.headers.get("X-Instructor-Email", "")
 
-    try:
-        # Stop any running camera first
-        if _camera_active and recognizer:
-            recognizer.stop_and_reset()
+    if not class_code:
+        return jsonify({"error": "class_code required"}), 400
 
-        # ── CLASS-SCOPED FACE LOAD ────────────────────────────────────────────
-        # Only load faces from faces/<CLASS_CODE>/.
-        # Students from other classes are never in memory — no cross-class hits.
-        known_enc, known_names = _load_class_faces(class_code)
-        face_count             = len(known_names)
-        _current_class_code    = class_code
+    # Count faces so frontend can show total before encoding starts
+    faces_dir  = _class_faces_dir(class_code)
+    face_files = [
+        f for f in os.listdir(faces_dir)
+        if f.lower().endswith((".jpg", ".jpeg", ".png"))
+    ] if os.path.isdir(faces_dir) else []
+    total = len(face_files)
 
-        print(f"[CAMERA] Loading class {class_code} — {face_count} face(s) enrolled")
+    # Reset progress immediately — poll endpoint is correct from frame 1
+    with _load_lock:
+        _load_progress = {"loaded": 0, "total": total, "done": False, "error": None}
 
-        recognizer = FaceRecognizer(known_enc, known_names)
-        recognizer.set_session(email, class_code, section, subject)
-        recognizer.start(source)
-        _camera_active = True
+    session_meta = {
+        "source":  source,
+        "email":   email,
+        "section": section,
+        "subject": subject,
+    }
 
-        return jsonify({
-            "status":     "ok",
-            "source":     str(source),
-            "faces_loaded": face_count,
-        })
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    threading.Thread(
+        target=_load_class_faces_bg,
+        args=(class_code, session_meta),
+        daemon=True
+    ).start()
+
+    return jsonify({"status": "loading", "total": total, "class_code": class_code})
+
+
+@app.route("/api/local/load_progress")
+def api_load_progress():
+    """
+    Polled by the frontend every 300 ms during face loading.
+    Returns { loaded, total, done, error }.
+    When done=true the camera is already running — frontend shows the feed.
+    """
+    with _load_lock:
+        return jsonify(dict(_load_progress))
 
 
 @app.route("/api/local/stop_camera", methods=["POST"])

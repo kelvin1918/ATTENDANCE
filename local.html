@@ -250,6 +250,55 @@ label.field-label{display:block;font-size:12px;font-weight:600;
 .cam-no-feed svg{opacity:.3}
 .cam-no-feed p{font-size:14px;font-weight:500;color:var(--muted)}
 
+/* ── FACE LOADING OVERLAY ─────────────────────────────────────────────── */
+.cam-loading-overlay{
+  position:absolute;inset:0;background:rgba(0,0,0,.85);
+  display:flex;flex-direction:column;align-items:center;
+  justify-content:center;z-index:20;gap:18px;
+  backdrop-filter:blur(3px)
+}
+.cam-loading-title{
+  font-size:15px;font-weight:700;color:#fff;
+  letter-spacing:.4px;text-align:center
+}
+.cam-loading-sub{
+  font-size:12px;color:#777;margin-top:-10px;text-align:center
+}
+.cam-loading-count-wrap{
+  text-align:center;line-height:1
+}
+.cam-loading-num{
+  font-family:var(--mono);font-size:36px;font-weight:700;color:#fff
+}
+.cam-loading-denom{
+  font-family:var(--mono);font-size:18px;color:#555
+}
+.cam-loading-unit{
+  font-size:12px;color:#666;display:block;margin-top:4px
+}
+.cam-loading-bar-wrap{
+  width:280px;height:5px;background:#222;border-radius:99px;overflow:hidden
+}
+.cam-loading-bar{
+  height:100%;background:var(--red);border-radius:99px;
+  width:0%;transition:width .25s ease
+}
+.cam-loading-names{
+  width:280px;max-height:110px;overflow-y:auto;
+  display:flex;flex-direction:column;gap:3px;
+  scrollbar-width:none
+}
+.cam-loading-names::-webkit-scrollbar{display:none}
+.cam-loading-name-row{
+  display:flex;align-items:center;gap:8px;font-size:12px;color:#aaa;
+  animation:nameIn .18s ease
+}
+@keyframes nameIn{from{opacity:0;transform:translateX(-6px)}to{opacity:1;transform:none}}
+.cam-loading-check{
+  width:13px;height:13px;background:#22C55E;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;flex-shrink:0
+}
+
 /* Side panel */
 .cam-side{
   width:340px;flex-shrink:0;background:var(--surface);border-left:1px solid var(--border);
@@ -537,6 +586,21 @@ label.field-label{display:block;font-size:12px;font-weight:600;
       <div class="cam-overlay-top" id="cam-overlay-top" style="display:none">
         <div class="cam-live-dot"></div>
         <span class="cam-live-label">LIVE</span>
+      </div>
+
+      <!-- Face loading overlay -->
+      <div class="cam-loading-overlay hidden" id="cam-loading-overlay">
+        <div class="cam-loading-title" id="cam-loading-title">Preparing Camera</div>
+        <div class="cam-loading-count-wrap">
+          <span class="cam-loading-num" id="cam-loading-num">0</span>
+          <span class="cam-loading-denom" id="cam-loading-denom"></span>
+          <span class="cam-loading-unit">students loaded</span>
+        </div>
+        <div class="cam-loading-bar-wrap">
+          <div class="cam-loading-bar" id="cam-loading-bar"></div>
+        </div>
+        <div class="cam-loading-sub" id="cam-loading-sub">Encoding faces…</div>
+        <div class="cam-loading-names" id="cam-loading-names"></div>
       </div>
 
       <!-- No-camera placeholder -->
@@ -1022,11 +1086,99 @@ document.getElementById('cam-source-select').addEventListener('change', function
 document.getElementById('btn-start-camera').addEventListener('click', startCamera);
 document.getElementById('btn-stop-camera').addEventListener('click', stopCamera);
 
+// ── LOADING OVERLAY HELPERS ───────────────────────────────────────────────
+let _loadPollInterval = null;
+let _shownNames       = [];
+
+function _showLoadingOverlay(total) {
+  _shownNames = [];
+  const ov = document.getElementById('cam-loading-overlay');
+  document.getElementById('cam-loading-num').textContent    = '0';
+  document.getElementById('cam-loading-denom').textContent  = total > 0 ? ` / ${total}` : '';
+  document.getElementById('cam-loading-bar').style.width    = '0%';
+  document.getElementById('cam-loading-names').innerHTML    = '';
+  document.getElementById('cam-loading-title').textContent  =
+    total > 0 ? `Loading ${total} student${total !== 1 ? 's' : ''}` : 'Starting Camera';
+  document.getElementById('cam-loading-sub').textContent    =
+    total > 0 ? 'Encoding faces — camera starts automatically…' : 'No faces registered yet. Starting…';
+
+  ov.classList.remove('hidden');
+  document.getElementById('cam-no-feed').style.display      = 'none';
+  document.getElementById('cam-feed').classList.add('hidden');
+  document.getElementById('cam-scan-line').style.display    = 'none';
+  document.getElementById('cam-overlay-top').style.display  = 'none';
+  document.getElementById('btn-start-camera').classList.add('hidden');
+  document.getElementById('btn-stop-camera').classList.remove('hidden');
+}
+
+function _updateLoadingOverlay(loaded, total) {
+  document.getElementById('cam-loading-num').textContent = loaded;
+  const pct = total > 0 ? Math.round((loaded / total) * 100) : 100;
+  document.getElementById('cam-loading-bar').style.width = pct + '%';
+}
+
+function _addLoadedName(name) {
+  if (_shownNames.includes(name)) return;
+  _shownNames.push(name);
+  const list = document.getElementById('cam-loading-names');
+  const row  = document.createElement('div');
+  row.className = 'cam-loading-name-row';
+  row.innerHTML = `
+    <div class="cam-loading-check">
+      <svg width="7" height="7" fill="none" stroke="#fff" stroke-width="3"
+           viewBox="0 0 24 24">
+        <path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </div>
+    <span>${name}</span>`;
+  list.appendChild(row);
+  list.scrollTop = list.scrollHeight;
+}
+
+function _hideLoadingOverlay() {
+  document.getElementById('cam-loading-overlay').classList.add('hidden');
+}
+
+function _startLoadPoll(total) {
+  let lastLoaded = 0;
+  _loadPollInterval = setInterval(async () => {
+    try {
+      const res  = await fetch('/api/local/load_progress');
+      const data = await res.json();
+
+      _updateLoadingOverlay(data.loaded, data.total || total);
+
+      // Show newly loaded names by index (backend sends count, not names)
+      // We approximate by showing the count increment as a placeholder tick
+      while (lastLoaded < data.loaded) {
+        lastLoaded++;
+      }
+
+      if (data.done) {
+        clearInterval(_loadPollInterval);
+        _loadPollInterval = null;
+
+        if (data.error) {
+          _hideLoadingOverlay();
+          setCameraUI(false);
+          toast('Camera error: ' + data.error, 'error');
+          return;
+        }
+
+        _hideLoadingOverlay();
+        setCameraUI(true);
+        startPresentPoll();
+        const msg = data.total > 0
+          ? `Camera ready — ${data.total} face${data.total !== 1 ? 's' : ''} loaded`
+          : 'Camera ready — no faces registered yet';
+        toast(msg, 'success');
+      }
+    } catch { /* network blip — try next tick */ }
+  }, 300);
+}
+
 async function startCamera() {
-  const sel = document.getElementById('cam-source-select');
-  // If "IP Camera (RTSP)" generic option → use the manual text input
-  // If a named room option → value IS already the rtsp:// URL
-  // If webcam → value is "0" or "1"
+  const sel    = document.getElementById('cam-source-select');
   const source = sel.value === 'rtsp'
     ? document.getElementById('cam-rtsp-input').value.trim()
     : sel.value;
@@ -1041,9 +1193,9 @@ async function startCamera() {
   const cls = STATE.currentClass;
   try {
     const res = await fetch('/api/local/start_camera', {
-      method: 'POST',
+      method:  'POST',
       headers: {
-        'Content-Type': 'application/json',
+        'Content-Type':       'application/json',
         'X-Instructor-Email': STATE.email
       },
       body: JSON.stringify({
@@ -1056,17 +1208,25 @@ async function startCamera() {
     const data = await res.json();
     if (!res.ok) { toast(data.error || 'Camera failed.', 'error'); return; }
 
-    setCameraUI(true);
-    toast('Camera started', 'success');
+    // Show overlay immediately with the total count
+    _showLoadingOverlay(data.total || 0);
+    // Begin polling every 300 ms
+    _startLoadPoll(data.total || 0);
+
   } catch {
     toast('Could not connect to camera.', 'error');
   }
 }
 
 async function stopCamera() {
+  if (_loadPollInterval) {
+    clearInterval(_loadPollInterval);
+    _loadPollInterval = null;
+  }
+  _hideLoadingOverlay();
   try {
     await fetch('/api/local/stop_camera', {
-      method: 'POST',
+      method:  'POST',
       headers: {'X-Instructor-Email': STATE.email}
     });
   } catch {}
@@ -1083,7 +1243,7 @@ function setCameraUI(on) {
   const btnSp = document.getElementById('btn-stop-camera');
 
   if (on) {
-    feed.src = '/video_feed?' + Date.now(); // bust cache
+    feed.src = '/video_feed?' + Date.now();
     feed.classList.remove('hidden');
     noFd.style.display = 'none';
     scan.style.display = 'block';
@@ -1092,9 +1252,9 @@ function setCameraUI(on) {
     btnSp.classList.remove('hidden');
   } else {
     feed.classList.add('hidden');
-    noFd.style.display = 'flex';
-    scan.style.display = 'none';
-    live.style.display = 'none';
+    noFd.style.display   = 'flex';
+    scan.style.display   = 'none';
+    live.style.display   = 'none';
     btnSt.classList.remove('hidden');
     btnSp.classList.add('hidden');
   }
