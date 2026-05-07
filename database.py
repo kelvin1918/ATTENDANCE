@@ -9,9 +9,9 @@ Matches the updated schema:
     schedules  — class_code (FK)
 
 Requirements:
-    pip install psycopg2-binary
+    pip install psycopg2-binary python-dotenv
 
-Update DB_CONFIG below to match your PostgreSQL setup.
+Credentials are loaded from .env — never hardcoded here.
 """
 
 import psycopg2
@@ -19,25 +19,26 @@ import psycopg2.extras
 from datetime import datetime
 import os
 
+# Load .env file if present (local dev). On Render, env vars are set in dashboard.
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass  # python-dotenv not installed — env vars must be set another way
+
 
 # ── CONNECTION CONFIG ─────────────────────────────────────────────────────────
-# Change these to match your PostgreSQL / pgAdmin setup
+# All values come from environment variables.
+# Local: set in .env file.  Render: set in dashboard Environment tab.
+# NEVER hardcode credentials in this file.
 
 DB_CONFIG = {
-    "host":     os.environ.get("DB_HOST",     "ep-cool-darkness-ao4fnwdj-pooler.c-2.ap-southeast-1.aws.neon.tech"),
+    "host":     os.environ.get("DB_HOST",     ""),
     "port":     int(os.environ.get("DB_PORT", 5432)),
-    "database": os.environ.get("DB_NAME",     "neondb"),
-    "user":     os.environ.get("DB_USER",     "neondb_owner"),
-    "password": os.environ.get("DB_PASSWORD", "npg_WI7TMFYw0vOe"),
+    "database": os.environ.get("DB_NAME",     ""),
+    "user":     os.environ.get("DB_USER",     ""),
+    "password": os.environ.get("DB_PASSWORD", ""),
     "sslmode":  "require"
-}
-
-DB_CONFIG_LOCAL = {
-    "host":     "localhost",
-    "port":     5432,
-    "database": "attendance_fr",   # the database you created in pgAdmin
-    "user":     "postgres",        # default PostgreSQL username
-    "password": "kelvin123",   # your pgAdmin/PostgreSQL password
 }
 
 
@@ -324,11 +325,52 @@ def edit_student(student_db_id, name=None, address=None, number=None,
 
 
 def delete_student(student_db_id):
+    """
+    Delete a student row and return their photo/signature paths so the
+    caller can clean up Cloudinary and local disk files.
+    Returns dict with keys: photo, signature, name, class_code (or None).
+    """
     conn = get_db()
     cur  = get_cursor(conn)
+    # Fetch first so caller can clean up files
+    cur.execute(
+        "SELECT name, class_code, photo, signature FROM students WHERE id = %s",
+        (student_db_id,)
+    )
+    row = cur.fetchone()
     cur.execute("DELETE FROM students WHERE id = %s", (student_db_id,))
     conn.commit()
     cur.close(); conn.close()
+    return dict(row) if row else None
+
+
+def get_instructor_face_urls(instructor_id: str) -> list:
+    """
+    Return all students across all classes belonging to an instructor.
+    Used by the local sync route to download missing face images from Cloudinary.
+
+    Returns list of dicts:
+        [{"id": 1, "name": "John Doe", "class_code": "BET_241",
+          "photo": "https://res.cloudinary.com/...",
+          "signature": "https://res.cloudinary.com/..."}, ...]
+    """
+    conn = get_db()
+    cur  = get_cursor(conn)
+    cur.execute(
+        """
+        SELECT s.id, s.name, s.class_code, s.photo, s.signature
+        FROM   students s
+        JOIN   classes  c ON c.id = s.class_code
+        WHERE  c.instructor_id = %s
+          AND  s.photo IS NOT NULL
+          AND  s.photo <> ''
+        ORDER  BY s.class_code, s.name
+        """,
+        (instructor_id,)
+    )
+    rows = cur.fetchall()
+    cur.close(); conn.close()
+    return [dict(r) for r in rows]
 
 
 # ── ATTENDANCE ────────────────────────────────────────────────────────────────

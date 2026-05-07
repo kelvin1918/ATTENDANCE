@@ -482,6 +482,60 @@ label.field-label{display:block;font-size:12px;font-weight:600;
   </div>
 </div>
 
+<!-- ═══ SCREEN 1.5: FACE SYNC ════════════════════════════════════════════ -->
+<div id="screen-sync" class="screen">
+  <div style="display:flex;flex-direction:column;align-items:center;
+              justify-content:center;height:100vh;gap:28px;
+              background:var(--bg);padding:32px;text-align:center">
+
+    <!-- Spinner -->
+    <div style="width:56px;height:56px;border:5px solid var(--border);
+                border-top-color:var(--red);border-radius:50%;
+                animation:spin .9s linear infinite"></div>
+
+    <div>
+      <div style="font-size:20px;font-weight:700;color:var(--text);margin-bottom:8px"
+           id="sync-title">Syncing Student Faces</div>
+      <div style="font-size:14px;color:var(--muted);max-width:340px;line-height:1.6"
+           id="sync-subtitle">Checking for missing face images…</div>
+    </div>
+
+    <!-- Counter card -->
+    <div style="display:flex;gap:20px;flex-wrap:wrap;justify-content:center">
+      <div style="background:var(--surface);border:1px solid var(--border);
+                  border-radius:12px;padding:16px 28px;min-width:100px">
+        <div id="sync-num-downloaded"
+             style="font-size:32px;font-weight:800;color:var(--red);font-family:var(--mono)">0</div>
+        <div style="font-size:11px;color:var(--muted);text-transform:uppercase;
+                    letter-spacing:.8px;margin-top:4px">Downloaded</div>
+      </div>
+      <div style="background:var(--surface);border:1px solid var(--border);
+                  border-radius:12px;padding:16px 28px;min-width:100px">
+        <div id="sync-num-total"
+             style="font-size:32px;font-weight:800;color:var(--text);font-family:var(--mono)">—</div>
+        <div style="font-size:11px;color:var(--muted);text-transform:uppercase;
+                    letter-spacing:.8px;margin-top:4px">Total Students</div>
+      </div>
+      <div style="background:var(--surface);border:1px solid var(--border);
+                  border-radius:12px;padding:16px 28px;min-width:100px">
+        <div id="sync-num-deleted"
+             style="font-size:32px;font-weight:800;color:#6B7280;font-family:var(--mono)">0</div>
+        <div style="font-size:11px;color:var(--muted);text-transform:uppercase;
+                    letter-spacing:.8px;margin-top:4px">Orphans Cleaned</div>
+      </div>
+    </div>
+
+    <!-- Status message -->
+    <div id="sync-status"
+         style="font-size:13px;color:var(--muted);max-width:380px;
+                min-height:20px;line-height:1.5"></div>
+
+    <!-- Skip button — lets instructor proceed even if sync is slow/offline -->
+    <button class="btn btn-ghost" id="btn-sync-skip" style="display:none"
+            onclick="syncProceed()">Skip and Continue →</button>
+  </div>
+</div>
+
 <!-- ═══ SCREEN 2: CLASS SELECTOR ═════════════════════════════════════════ -->
 <div id="screen-classes" class="screen">
   <!-- Topbar -->
@@ -886,9 +940,10 @@ async function doLogin() {
 
     STATE.email = data.email;
     STATE.name  = data.name;
-    await loadClasses();
-    showScreen('screen-classes');
-    initClassesScreen();
+
+    // ── Show sync screen THEN load faces, THEN load classes ──────────────────
+    showScreen('screen-sync');
+    await runSync();
 
   } catch (err) {
     errEl.style.display = 'flex';
@@ -897,6 +952,75 @@ async function doLogin() {
     btn.disabled = false;
     btn.textContent = 'Sign In';
   }
+}
+
+async function runSync() {
+  /* Called after login — downloads missing face images from Cloudinary,
+     removes orphan face files, then proceeds to the class screen. */
+  const title    = document.getElementById('sync-title');
+  const subtitle = document.getElementById('sync-subtitle');
+  const status   = document.getElementById('sync-status');
+  const numDl    = document.getElementById('sync-num-downloaded');
+  const numTot   = document.getElementById('sync-num-total');
+  const numDel   = document.getElementById('sync-num-deleted');
+  const skipBtn  = document.getElementById('btn-sync-skip');
+
+  // Show skip button after 8 seconds in case connection is slow
+  const skipTimer = setTimeout(() => skipBtn.style.display = 'inline-flex', 8000);
+
+  try {
+    const res  = await fetch('/api/local/sync_faces', {
+      method:  'POST',
+      headers: { 'X-Instructor-Email': STATE.email }
+    });
+    clearTimeout(skipTimer);
+
+    if (!res.ok) {
+      // Sync failed — not fatal, proceed anyway
+      subtitle.textContent = 'Sync unavailable (no internet?). Proceeding with cached data.';
+      status.textContent   = '';
+      await new Promise(r => setTimeout(r, 1800));
+      await syncProceed();
+      return;
+    }
+
+    const d = await res.json();
+    numDl.textContent  = d.downloaded ?? 0;
+    numTot.textContent = d.total      ?? 0;
+    numDel.textContent = d.deleted    ?? 0;
+
+    if (d.failed > 0) {
+      status.textContent = `⚠ ${d.failed} image${d.failed !== 1 ? 's' : ''} could not be downloaded. Check your connection.`;
+    } else if (d.downloaded > 0) {
+      status.textContent = `✓ ${d.downloaded} new face${d.downloaded !== 1 ? 's' : ''} synced successfully.`;
+    } else {
+      status.textContent = '✓ All faces are up to date.';
+    }
+
+    title.textContent    = 'Sync Complete';
+    subtitle.textContent = 'Loading your classes…';
+
+    await new Promise(r => setTimeout(r, 1000)); // brief pause so instructor can see result
+    await syncProceed();
+
+  } catch {
+    clearTimeout(skipTimer);
+    subtitle.textContent = 'Could not reach server. Proceeding offline.';
+    await new Promise(r => setTimeout(r, 1800));
+    await syncProceed();
+  }
+}
+
+async function syncProceed() {
+  /* Finish login — load classes and show class screen. */
+  document.getElementById('btn-sync-skip').style.display = 'none';
+  document.getElementById('sync-title').textContent      = 'Loading Classes…';
+  document.getElementById('sync-subtitle').textContent   = '';
+  try {
+    await loadClasses();
+  } catch { /* loadClasses has its own error handling */ }
+  showScreen('screen-classes');
+  initClassesScreen();
 }
 
 /* ═══════════════════════════════════════════════════════════════════════

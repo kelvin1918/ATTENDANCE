@@ -250,8 +250,47 @@ def api_edit_student(student_id):
 
 @app.route("/api/delete_student/<int:student_id>", methods=["DELETE"])
 def api_delete_student(student_id):
-    db.delete_student(student_id)
-    return jsonify({"status": "ok"})
+    """
+    Delete a student and clean up:
+      1. Cloudinary photo + signature (if URLs stored)
+      2. DB row
+    Local face files are managed by the local station — it syncs deletions
+    via /api/local/sync_faces on next login (orphan detection).
+    """
+    # Fetch paths BEFORE deleting the row
+    info = db.delete_student(student_id)  # now returns the row dict or None
+
+    if info:
+        # ── Cloudinary cleanup ────────────────────────────────────────────────
+        try:
+            import cloudinary
+            import cloudinary.uploader
+            _cn = os.environ.get("CLOUDINARY_CLOUD_NAME", "")
+            _ck = os.environ.get("CLOUDINARY_API_KEY", "")
+            _cs = os.environ.get("CLOUDINARY_API_SECRET", "")
+            if _cn and _ck and _cs:
+                cloudinary.config(cloud_name=_cn, api_key=_ck, api_secret=_cs)
+                safe_class = "".join(
+                    c if c.isalnum() or c in "-_" else "_"
+                    for c in (info.get("class_code") or "")
+                )
+                safe_base = (info.get("name") or "").replace(" ", "_")
+
+                photo_val = info.get("photo") or ""
+                sig_val   = info.get("signature") or ""
+
+                if photo_val.startswith("http"):
+                    cloudinary.uploader.destroy(f"students/{safe_class}/{safe_base}")
+                    print(f"[DELETE] Cloudinary photo removed: {safe_base}")
+
+                if sig_val.startswith("http"):
+                    cloudinary.uploader.destroy(f"signatures/{safe_class}/{safe_base}_sig")
+                    print(f"[DELETE] Cloudinary signature removed: {safe_base}")
+        except Exception as e:
+            print(f"[DELETE] Cloudinary cleanup error (non-fatal): {e}")
+
+    return jsonify({"status": "ok", "deleted": bool(info)})
+
 
 
 # ════════════════════════════════════════════════════════════════════════════════

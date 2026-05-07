@@ -473,6 +473,112 @@ def api_local_rooms():
 
 
 # ══════════════════════════════════════════════════════════════════════════════
+# FACE SYNC — download missing face images from Cloudinary on login
+# ══════════════════════════════════════════════════════════════════════════════
+
+@app.route("/api/local/sync_faces", methods=["POST"])
+def api_local_sync_faces():
+    """
+    Called once after login, before the class list is shown.
+
+    Steps:
+      1. Fetch all students belonging to this instructor from DB.
+      2. For each student whose photo is a Cloudinary URL:
+           - Check if faces/<CLASS_CODE>/<Name>.jpg already exists locally.
+           - If NOT → download the image and save it.
+      3. Delete local face files that have NO matching DB record
+         (student was deleted — orphan cleanup).
+      4. Return a summary so the UI can show a progress screen.
+
+    Response:
+        { downloaded: N, skipped: N, deleted: N, failed: N,
+          total: N, errors: ["..."] }
+    """
+    email = request.headers.get("X-Instructor-Email", "")
+    if not email:
+        return jsonify({"error": "unauthorized"}), 401
+
+    instructor = db.get_instructor_by_email(email)
+    if not instructor:
+        return jsonify({"error": "instructor not found"}), 404
+
+    instructor_id = instructor["id"]
+
+    try:
+        students = db.get_instructor_face_urls(instructor_id)
+    except Exception as e:
+        return jsonify({"error": f"DB error: {e}"}), 500
+
+    # Build a set of expected local filenames: faces/<CLASS>/<Name>.jpg
+    expected_files = set()   # absolute paths that SHOULD exist
+    downloaded = skipped = failed = deleted = 0
+    errors = []
+
+    import urllib.request as _urllib
+
+    for s in students:
+        photo_url  = (s.get("photo") or "").strip()
+        class_code = (s.get("class_code") or "").strip()
+        name       = (s.get("name") or "").strip()
+
+        if not photo_url or not class_code or not name:
+            continue
+
+        safe_name  = name.replace(" ", "_")
+        faces_dir  = _class_faces_dir(class_code)
+        local_path = os.path.join(faces_dir, safe_name + ".jpg")
+        expected_files.add(os.path.abspath(local_path))
+
+        # Only download if it's a URL and file is missing
+        if not photo_url.startswith("http"):
+            skipped += 1
+            continue
+
+        if os.path.isfile(local_path):
+            skipped += 1
+            continue
+
+        # Download from Cloudinary
+        try:
+            _urllib.urlretrieve(photo_url, local_path)
+            downloaded += 1
+            print(f"[SYNC] ✓ Downloaded: {name} → {local_path}")
+        except Exception as e:
+            failed += 1
+            errors.append(f"{name}: {e}")
+            print(f"[SYNC] ✗ Failed: {name} — {e}")
+
+    # ── Orphan cleanup: delete local face files with no DB record ─────────────
+    # Scan every faces/<CLASS>/ folder this instructor owns
+    class_codes = {s.get("class_code") for s in students if s.get("class_code")}
+    for cc in class_codes:
+        faces_dir = _class_faces_dir(cc)
+        if not os.path.isdir(faces_dir):
+            continue
+        for fname in os.listdir(faces_dir):
+            if not fname.lower().endswith((".jpg", ".jpeg", ".png")):
+                continue
+            abs_path = os.path.abspath(os.path.join(faces_dir, fname))
+            if abs_path not in expected_files:
+                try:
+                    os.remove(abs_path)
+                    deleted += 1
+                    print(f"[SYNC] 🗑 Orphan removed: {fname}")
+                except Exception as e:
+                    errors.append(f"delete {fname}: {e}")
+
+    total = len(students)
+    return jsonify({
+        "total":      total,
+        "downloaded": downloaded,
+        "skipped":    skipped,
+        "deleted":    deleted,
+        "failed":     failed,
+        "errors":     errors,
+    })
+
+
+# ══════════════════════════════════════════════════════════════════════════════
 # STUDENTS — for selected class
 # ══════════════════════════════════════════════════════════════════════════════
 
