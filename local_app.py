@@ -40,6 +40,9 @@ from werkzeug.utils import secure_filename
 import database as db
 from pdf_generator import generate_attendance_pdf
 
+from dotenv import load_dotenv
+load_dotenv()
+
 # ── CLOUDINARY CONFIG ─────────────────────────────────────────────────────────
 # Credentials are read from environment variables — never hardcode these.
 # Set them in a .env file locally, or in the Render dashboard for cloud.
