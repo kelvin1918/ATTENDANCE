@@ -40,6 +40,39 @@ from werkzeug.utils import secure_filename
 import database as db
 from pdf_generator import generate_attendance_pdf
 
+# ── CLOUDINARY CONFIG ─────────────────────────────────────────────────────────
+# Credentials are read from environment variables — never hardcode these.
+# Set them in a .env file locally, or in the Render dashboard for cloud.
+#
+#   CLOUDINARY_CLOUD_NAME = your_cloud_name
+#   CLOUDINARY_API_KEY    = your_api_key
+#   CLOUDINARY_API_SECRET = your_api_secret
+#
+# If any are missing, Cloudinary uploads are skipped and files remain local-only.
+
+try:
+    import cloudinary
+    import cloudinary.uploader
+    _CLOUDINARY_CLOUD = os.environ.get("CLOUDINARY_CLOUD_NAME", "")
+    _CLOUDINARY_KEY   = os.environ.get("CLOUDINARY_API_KEY",    "")
+    _CLOUDINARY_SEC   = os.environ.get("CLOUDINARY_API_SECRET", "")
+
+    if _CLOUDINARY_CLOUD and _CLOUDINARY_KEY and _CLOUDINARY_SEC:
+        cloudinary.config(
+            cloud_name = _CLOUDINARY_CLOUD,
+            api_key    = _CLOUDINARY_KEY,
+            api_secret = _CLOUDINARY_SEC,
+            secure     = True,
+        )
+        CLOUDINARY_ENABLED = True
+        print("[CLOUD] Cloudinary configured ✓")
+    else:
+        CLOUDINARY_ENABLED = False
+        print("[CLOUD] Cloudinary credentials missing — uploads will be local only")
+except ImportError:
+    CLOUDINARY_ENABLED = False
+    print("[CLOUD] cloudinary package not installed — pip install cloudinary")
+
 # ── CAMERA ───────────────────────────────────────────────────────────────────
 try:
     from face_recognition_a import FaceRecognizer, load_known_faces
@@ -214,6 +247,67 @@ def _add_single_face(image_path: str, display_name: str):
             print(f"[FACES] ✗ Encode error for {display_name}: {e}")
 
     threading.Thread(target=_encode, daemon=True).start()
+
+
+def _cloudinary_upload(local_path: str, public_id: str, folder: str) -> str:
+    """
+    Upload a file to Cloudinary and return its secure public URL.
+    Returns "" if Cloudinary is disabled, credentials are missing, or upload fails.
+    Caller should fall back to the local path in that case.
+    """
+    if not CLOUDINARY_ENABLED:
+        return ""
+    try:
+        result = cloudinary.uploader.upload(
+            local_path,
+            public_id     = public_id,
+            folder        = folder,
+            overwrite     = True,
+            resource_type = "image",
+            transformation = [{"flags": "strip_profile", "angle": "exif"}],
+        )
+        url = result.get("secure_url", "")
+        print(f"[CLOUD] ✓ {public_id} → {url}")
+        return url
+    except Exception as e:
+        print(f"[CLOUD] ✗ Upload failed {public_id}: {e}")
+        return ""
+
+
+def _register_bg(class_code, name, safe_base, photo_local, face_local, sig_local, form_data):
+    """
+    Background thread for student registration:
+      1. Lazy face encode (appends to live recognizer, no full reload)
+      2. Upload photo + signature to Cloudinary
+      3. Save student record to Neon DB (Cloudinary URL preferred, local fallback)
+    HTTP response is already returned before this runs.
+    """
+    # Step 1 — lazy encode
+    if face_local:
+        _add_single_face(face_local, name)
+
+    # Step 2 — Cloudinary
+    safe_class = _safe_code(class_code)
+    photo_url  = _cloudinary_upload(photo_local, safe_base,         f"students/{safe_class}")  if photo_local else ""
+    sig_url    = _cloudinary_upload(sig_local,   safe_base + "_sig", f"signatures/{safe_class}") if sig_local   else ""
+
+    # Step 3 — DB
+    try:
+        db.add_student(
+            class_code = class_code,
+            name       = name,
+            address    = form_data.get("address", ""),
+            number     = form_data.get("number",  ""),
+            sr_code    = form_data.get("sr_code", ""),
+            age        = int(form_data.get("age") or 0),
+            sex        = form_data.get("sex",     ""),
+            email      = form_data.get("email",   ""),
+            photo      = photo_url  or photo_local or "",
+            signature  = sig_url    or sig_local   or "",
+        )
+        print(f"[REG] ✓ {name} saved — sig={'Cloudinary' if sig_url else 'local'}")
+    except Exception as e:
+        print(f"[REG] ✗ DB error for {name}: {e}")
 
 
 def allowed(filename):
@@ -392,6 +486,18 @@ def api_local_students(class_code):
 
 @app.route("/api/local/register_student", methods=["POST"])
 def api_local_register_student():
+    """
+    Registers a student and returns immediately.
+    Heavy work (face encoding + Cloudinary upload + DB save) runs in background.
+
+    File flow:
+      Photo  → saved locally to uploads/students/<CLASS>/ AND faces/<CLASS>/
+             → uploaded to Cloudinary  students/<CLASS>/
+             → Cloudinary URL stored in DB  (fallback: local path)
+      Sig    → saved locally to uploads/signatures/<CLASS>/
+             → uploaded to Cloudinary  signatures/<CLASS>/
+             → Cloudinary URL stored in DB  (fallback: local path)
+    """
     form       = request.form
     class_code = form.get("class_code", "").strip()
     name       = form.get("name", "").strip()
@@ -399,62 +505,40 @@ def api_local_register_student():
     if not class_code or not name:
         return jsonify({"error": "class_code and name are required."}), 400
 
-    safe_name_base = secure_filename(name.replace(" ", "_"))
+    safe_base = secure_filename(name.replace(" ", "_"))
 
-    # ── Photo → faces/<CLASS_CODE>/ and uploads/students/<CLASS_CODE>/ ────────
-    # Saved to the class-scoped folder so the recognizer only loads this class.
-    # NO full reload — _add_single_face() encodes just this one image in the
-    # background, appending it to the live recognizer instantly.
-    photo_path = ""
-    face_path  = ""
+    # ── Save files to disk immediately (before background thread) ─────────────
+    # Files must be saved synchronously because request.files is not
+    # accessible after the HTTP response is returned.
+
+    photo_local = ""
+    face_local  = ""
     if "photo" in request.files:
         f = request.files["photo"]
         if f and f.filename and allowed(f.filename):
-            ext        = os.path.splitext(secure_filename(f.filename))[1]
-            safe_name  = safe_name_base + ext
+            ext          = os.path.splitext(secure_filename(f.filename))[1]
+            photo_local  = os.path.join(_class_students_dir(class_code), safe_base + ext)
+            f.save(photo_local)
+            face_local   = os.path.join(_class_faces_dir(class_code), safe_base + ext)
+            if not os.path.exists(face_local):
+                shutil.copy(photo_local, face_local)
 
-            # Class-scoped student photo folder
-            students_dir = _class_students_dir(class_code)
-            photo_path   = os.path.join(students_dir, safe_name)
-            f.save(photo_path)
-
-            # Class-scoped face folder — copy for face_recognition
-            faces_dir = _class_faces_dir(class_code)
-            face_path = os.path.join(faces_dir, safe_name)
-            if not os.path.exists(face_path):
-                shutil.copy(photo_path, face_path)
-
-            # ── LAZY ENCODE: append to live recognizer without full reload ──
-            # Uses the display name (spaces) so it matches the DB name exactly.
-            _add_single_face(face_path, name)
-
-    # ── Signature → uploads/signatures/<CLASS_CODE>/ ──────────────────────────
-    sig_path = ""
+    sig_local = ""
     if "signature" in request.files:
         f = request.files["signature"]
         if f and f.filename and allowed(f.filename):
-            ext      = os.path.splitext(secure_filename(f.filename))[1]
-            sig_name = safe_name_base + "_sig" + ext
-            sig_dir  = _class_signatures_dir(class_code)
-            sig_path = os.path.join(sig_dir, sig_name)
-            f.save(sig_path)
+            ext       = os.path.splitext(secure_filename(f.filename))[1]
+            sig_local = os.path.join(_class_signatures_dir(class_code), safe_base + "_sig" + ext)
+            f.save(sig_local)
 
-    # ── Save to DB (Neon via database.py) ─────────────────────────────────────
-    try:
-        db.add_student(
-            class_code = class_code,
-            name       = name,
-            address    = form.get("address", ""),
-            number     = form.get("number", ""),
-            sr_code    = form.get("sr_code", ""),
-            age        = int(form.get("age") or 0),
-            sex        = form.get("sex", ""),
-            email      = form.get("email", ""),
-            photo      = photo_path,
-            signature  = sig_path,
-        )
-    except Exception as e:
-        return jsonify({"error": f"DB error: {e}"}), 500
+    # ── Offload encoding + Cloudinary + DB to background thread ───────────────
+    # HTTP response returns immediately — instructor sees "Registered ✓" at once.
+    threading.Thread(
+        target  = _register_bg,
+        args    = (class_code, name, safe_base,
+                   photo_local, face_local, sig_local, dict(form)),
+        daemon  = True,
+    ).start()
 
     return jsonify({"status": "ok", "name": name})
 

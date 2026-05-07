@@ -32,6 +32,8 @@ from reportlab.platypus import (
     SimpleDocTemplate, Table, TableStyle,
     Paragraph, Spacer, Image as RLImage
 )
+from io import BytesIO
+import urllib.request
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.enums import TA_CENTER, TA_LEFT
 
@@ -105,54 +107,6 @@ def _no_top(extra=None):
     if extra:
         cmds.extend(extra)
     return cmds
-
-
-# ── SIGNATURE CELL HELPER ──────────────────────────────────────────────────────
-#
-# The SIGNATURE column is ~15% of usable width (R_SIG pts).
-# We scale-fit the student's uploaded e-signature image to fill the cell.
-# Falls back to coloured "Present"/"Late" text if no image is found on disk.
-
-SIG_MAX_W = R_SIG - 6   # ~57 pt — leave 3 pt padding each side
-SIG_MAX_H = 12           # row height is 14 pt; keep 1 pt top/bottom clearance
-
-
-def _sig_cell(sig_path, status, sig_col, norm9c_style, ps_fn):
-    """
-    Return a ReportLab flowable for the SIGNATURE column cell.
-
-    Priority:
-      1. Valid file on disk  → scale-fit RLImage embedded in the PDF.
-      2. No file / error     → coloured text fallback ("Present" / "Late").
-
-    Parameters
-    ----------
-    sig_path     : str  — relative path stored in students.signature
-                          e.g. "uploads/signatures/JohnDoe.png"
-    status       : str  — "Present" or "Late"
-    sig_col      : str  — hex colour for the text fallback
-    norm9c_style : ParagraphStyle — centred 9 pt style
-    ps_fn        : callable — ps() factory (unused but kept for symmetry)
-    """
-    if sig_path and os.path.isfile(sig_path):
-        try:
-            img = RLImage(sig_path)
-            nat_w, nat_h = img.imageWidth, img.imageHeight
-            if nat_w > 0 and nat_h > 0:
-                scale          = min(SIG_MAX_W / nat_w, SIG_MAX_H / nat_h, 1.0)
-                img.drawWidth  = nat_w * scale
-                img.drawHeight = nat_h * scale
-                img.hAlign     = "CENTER"
-                return img
-        except Exception:
-            pass   # fall through to text fallback
-
-    # Text fallback
-    return Paragraph(
-        f'<font color="{sig_col}" size="8">{status}</font>',
-        norm9c_style
-    )
-
 
 
 # ── MAIN ENTRY POINT ─────────────────────────────────────────────────────────
@@ -294,6 +248,61 @@ def generate_attendance_pdf(class_id, subject, section, room, date,
     story.append(info_tbl)
 
     # ══════════════════════════════════════════════════════════════════════════
+
+# ── SIGNATURE CELL HELPER ────────────────────────────────────────────────────
+# Handles: Cloudinary URL → fetch bytes → RLImage
+#          Local file path → RLImage directly
+#          No image / error → coloured "Present"/"Late" text fallback
+
+SIG_MAX_W = R_SIG - 6    # ~57 pt — 3 pt padding each side
+SIG_MAX_H = 12            # row is 14 pt; 1 pt clearance top + bottom
+
+
+def _fetch_image_bytes(url):
+    """Download image from URL. Returns b'' on failure."""
+    try:
+        import urllib.request as _ur
+        req = _ur.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+        with _ur.urlopen(req, timeout=5) as resp:
+            return resp.read()
+    except Exception as e:
+        print(f"[PDF] Could not fetch signature: {e}")
+        return b""
+
+
+def _sig_cell(sig_path, status, sig_col, norm9c_style):
+    """
+    Return a ReportLab flowable for the SIGNATURE column cell.
+    Tries Cloudinary URL first, then local path, then text fallback.
+    """
+    if sig_path:
+        img_src = None
+        if sig_path.startswith("http://") or sig_path.startswith("https://"):
+            raw = _fetch_image_bytes(sig_path)
+            if raw:
+                img_src = BytesIO(raw)
+        elif os.path.isfile(sig_path):
+            img_src = sig_path
+
+        if img_src is not None:
+            try:
+                img = RLImage(img_src)
+                nat_w, nat_h = img.imageWidth, img.imageHeight
+                if nat_w > 0 and nat_h > 0:
+                    scale          = min(SIG_MAX_W / nat_w, SIG_MAX_H / nat_h, 1.0)
+                    img.drawWidth  = nat_w * scale
+                    img.drawHeight = nat_h * scale
+                    img.hAlign     = "CENTER"
+                    return img
+            except Exception as e:
+                print(f"[PDF] Image render error: {e}")
+
+    return Paragraph(
+        f'<font color="{sig_col}" size="8">{status}</font>',
+        norm9c_style
+    )
+
+
     # TABLE 3 — ATTENDANCE ROSTER
     # 4 columns: NAME (35%) | SIGNATURE (15%) | NAME (35%) | SIGNATURE (15%)
     # Row 0:    header  — WHITE background, bold, centered
@@ -333,7 +342,7 @@ def generate_attendance_pdf(class_id, subject, section, room, date,
             sig_col = "#1B5E20" if st == "Present" else "#E65100"
             l_nm    = Paragraph(f"{i+1}. {left_r['name']}{tag}",
                                 ps(f"ln{i}", fontSize=9, fontName=TNR, textColor=col))
-            l_sg    = _sig_cell(left_r.get("sig_path", ""), st, sig_col, norm9c, ps)
+            l_sg    = _sig_cell(left_r.get("sig_path", ""), st, sig_col, norm9c)
         else:
             l_nm = Paragraph(f"{i+1}.", ps(f"le{i}", fontSize=9, fontName=TNR))
             l_sg = Paragraph("", norm9)
@@ -346,7 +355,7 @@ def generate_attendance_pdf(class_id, subject, section, room, date,
             sig_col = "#1B5E20" if st == "Present" else "#E65100"
             r_nm    = Paragraph(f"{i+1+ROWS_PER_COL}. {right_r['name']}{tag}",
                                 ps(f"rn{i}", fontSize=9, fontName=TNR, textColor=col))
-            r_sg    = _sig_cell(right_r.get("sig_path", ""), st, sig_col, norm9c, ps)
+            r_sg    = _sig_cell(right_r.get("sig_path", ""), st, sig_col, norm9c)
         else:
             r_nm = Paragraph(f"{i+1+ROWS_PER_COL}.", ps(f"re{i}", fontSize=9, fontName=TNR))
             r_sg = Paragraph("", norm9)
