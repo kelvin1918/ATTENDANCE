@@ -731,6 +731,167 @@ def api_local_students(class_code):
 
 
 # ══════════════════════════════════════════════════════════════════════════════
+# EDIT STUDENT — update any field, optionally replace photo/signature
+# ══════════════════════════════════════════════════════════════════════════════
+
+@app.route("/api/local/edit_student/<int:student_id>", methods=["POST"])
+def api_local_edit_student(student_id):
+    """
+    Updates an existing student record.
+    Accepts multipart/form-data (same as registration).
+
+    Rules:
+      - SR code is read-only — ignored even if sent
+      - Photo/signature are optional — omit to keep existing files
+      - If a new photo is uploaded: saves locally to faces/ and uploads to Cloudinary
+      - If a new signature is uploaded: saves locally and uploads to Cloudinary
+      - DB is updated with Cloudinary URLs (fallback to local path)
+    Returns immediately — heavy work runs in background thread.
+    """
+    email = request.headers.get("X-Instructor-Email", "")
+    if not email:
+        return jsonify({"error": "unauthorized"}), 401
+
+    # Fetch existing student so we know current values
+    student = db.get_student(student_id)
+    if not student:
+        return jsonify({"error": "Student not found"}), 404
+
+    student   = dict(student)
+    form      = request.form
+    class_code = student["class_code"]
+    safe_base  = secure_filename(
+        (form.get("name") or student["name"]).replace(" ", "_")
+    )
+
+    # ── Save new files to disk immediately (request closes after response) ──
+    new_photo_local = ""
+    new_face_local  = ""
+    if "photo" in request.files:
+        f = request.files["photo"]
+        if f and f.filename and allowed(f.filename):
+            ext             = os.path.splitext(secure_filename(f.filename))[1]
+            new_photo_local = os.path.join(_class_students_dir(class_code),
+                                           safe_base + ext)
+            f.save(new_photo_local)
+            new_face_local  = os.path.join(_class_faces_dir(class_code),
+                                           safe_base + ext)
+            shutil.copy(new_photo_local, new_face_local)
+
+    new_sig_local = ""
+    if "signature" in request.files:
+        f = request.files["signature"]
+        if f and f.filename and allowed(f.filename):
+            ext           = os.path.splitext(secure_filename(f.filename))[1]
+            new_sig_local = os.path.join(_class_signatures_dir(class_code),
+                                         safe_base + "_sig" + ext)
+            f.save(new_sig_local)
+
+    # ── Build info dict for background thread ────────────────────────────────
+    update_info = {
+        "name":    form.get("name",    "").strip() or None,
+        "address": form.get("address", "").strip() or None,
+        "number":  form.get("number",  "").strip() or None,
+        "age":     int(form.get("age") or 0) or None,
+        "sex":     form.get("sex",     "").strip() or None,
+        "email":   form.get("email",   "").strip() or None,
+    }
+
+    def _edit_bg():
+        safe_class = _safe_code(class_code)
+        new_photo_url = ""
+        new_sig_url   = ""
+
+        # Upload new photo if provided
+        if new_photo_local:
+            _add_single_face(new_face_local,
+                             (update_info["name"] or student["name"]))
+            new_photo_url = _cloudinary_upload(
+                new_photo_local, safe_base,
+                f"students/{safe_class}"
+            )
+
+        # Upload new signature if provided
+        if new_sig_local:
+            new_sig_url = _cloudinary_upload(
+                new_sig_local, safe_base + "_sig",
+                f"signatures/{safe_class}"
+            )
+
+        # Only pass photo/sig to edit_student if we have new values
+        try:
+            db.edit_student(
+                student_id,
+                name      = update_info["name"],
+                address   = update_info["address"],
+                number    = update_info["number"],
+                age       = update_info["age"],
+                sex       = update_info["sex"],
+                email     = update_info["email"],
+                photo     = (new_photo_url or new_photo_local) if new_photo_local else None,
+                signature = (new_sig_url   or new_sig_local)   if new_sig_local   else None,
+            )
+            print(f"[EDIT] ✓ Student {student_id} updated")
+        except Exception as e:
+            print(f"[EDIT] ✗ DB error: {e}")
+
+    threading.Thread(target=_edit_bg, daemon=True).start()
+    return jsonify({"status": "ok", "student_id": student_id})
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# SIGNATURE-ONLY UPLOAD — quick upload without full re-registration
+# ══════════════════════════════════════════════════════════════════════════════
+
+@app.route("/api/local/upload_signature/<int:student_id>", methods=["POST"])
+def api_local_upload_signature(student_id):
+    """
+    Uploads a signature image for an existing student.
+    Does NOT touch the photo or face file.
+    Returns immediately — Cloudinary upload runs in background.
+    """
+    email = request.headers.get("X-Instructor-Email", "")
+    if not email:
+        return jsonify({"error": "unauthorized"}), 401
+
+    student = db.get_student(student_id)
+    if not student:
+        return jsonify({"error": "Student not found"}), 404
+
+    student    = dict(student)
+    class_code = student["class_code"]
+    safe_base  = secure_filename(student["name"].replace(" ", "_"))
+
+    if "signature" not in request.files:
+        return jsonify({"error": "No signature file provided"}), 400
+
+    f = request.files["signature"]
+    if not f or not f.filename or not allowed(f.filename):
+        return jsonify({"error": "Invalid file — JPG or PNG required"}), 400
+
+    ext       = os.path.splitext(secure_filename(f.filename))[1]
+    sig_local = os.path.join(
+        _class_signatures_dir(class_code), safe_base + "_sig" + ext
+    )
+    f.save(sig_local)
+
+    def _sig_bg():
+        safe_class = _safe_code(class_code)
+        sig_url    = _cloudinary_upload(
+            sig_local, safe_base + "_sig",
+            f"signatures/{safe_class}"
+        )
+        try:
+            db.update_signature_only(student_id, sig_url or sig_local)
+            print(f"[SIG] ✓ Signature updated for student {student_id}")
+        except Exception as e:
+            print(f"[SIG] ✗ DB error: {e}")
+
+    threading.Thread(target=_sig_bg, daemon=True).start()
+    return jsonify({"status": "ok", "student_id": student_id})
+
+
+# ══════════════════════════════════════════════════════════════════════════════
 # STUDENT REGISTRATION — photo → /faces/, signature → /uploads/signatures/
 # Also pushes student record to cloud (Neon) via db.add_student
 # ══════════════════════════════════════════════════════════════════════════════

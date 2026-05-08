@@ -380,23 +380,62 @@ def add_student(class_code, name, address, number,
 
 
 def edit_student(student_db_id, name=None, address=None, number=None,
-                 sr_code=None, age=None, sex=None, email=None, status=None):
+                 sr_code=None, age=None, sex=None, email=None,
+                 status=None, photo=None, signature=None):
+    """
+    Update a student record. Only non-None fields are written.
+    photo and signature accept either a local path or a Cloudinary URL.
+    Pass photo=None to leave the existing photo untouched.
+    Pass photo="" to explicitly clear the photo field.
+    """
     conn = get_db()
     cur  = get_cursor(conn)
-    if status and name is None:
-        # Status-only update (from folder view dropdown)
+
+    if status and name is None and photo is None and signature is None:
+        # Status-only update (from folder view dropdown) — fast path
         cur.execute(
             "UPDATE students SET status=%s WHERE id=%s",
             (status, student_db_id)
         )
     else:
+        # Build dynamic SET clause — only update fields that were passed
+        fields = []
+        values = []
+        if name      is not None: fields.append("name=%s");      values.append(name)
+        if address   is not None: fields.append("address=%s");   values.append(address)
+        if number    is not None: fields.append("number=%s");    values.append(number)
+        if age       is not None: fields.append("age=%s");       values.append(age)
+        if sex       is not None: fields.append("sex=%s");       values.append(sex)
+        if email     is not None: fields.append("email=%s");     values.append(email)
+        if status    is not None: fields.append("status=%s");    values.append(status)
+        if photo     is not None: fields.append("photo=%s");     values.append(photo)
+        if signature is not None: fields.append("signature=%s"); values.append(signature)
+
+        if not fields:
+            cur.close(); conn.close()
+            return
+
+        values.append(student_db_id)
         cur.execute(
-            """UPDATE students
-               SET name=%s, address=%s, number=%s,
-                   sr_code=%s, age=%s, sex=%s, email=%s, status=COALESCE(%s, status)
-               WHERE id=%s""",
-            (name, address, number, sr_code, age, sex, email, status, student_db_id)
+            f"UPDATE students SET {', '.join(fields)} WHERE id=%s",
+            values
         )
+
+    conn.commit()
+    cur.close(); conn.close()
+
+
+def update_signature_only(student_db_id, signature_url):
+    """
+    Lightweight helper — updates only the signature field.
+    Called after a quick signature-only upload.
+    """
+    conn = get_db()
+    cur  = get_cursor(conn)
+    cur.execute(
+        "UPDATE students SET signature=%s WHERE id=%s",
+        (signature_url, student_db_id)
+    )
     conn.commit()
     cur.close(); conn.close()
 

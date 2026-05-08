@@ -492,6 +492,29 @@ label.field-label{display:block;font-size:12px;font-weight:600;
 .toast-error{background:var(--red)}
 .toast-info{background:#1E40AF}
 @keyframes toastIn{from{opacity:0;transform:translateX(20px)}to{opacity:1;transform:none}}
+
+/* ── STUDENT STATUS BADGES ─────────────────────────────────────────────── */
+.badge-face-ok{display:inline-flex;align-items:center;gap:3px;padding:1px 7px;
+  border-radius:99px;font-size:10px;font-weight:600;
+  background:#E8F5E9;color:#2E7D32;border:0.5px solid #A5D6A7}
+.badge-face-no{display:inline-flex;align-items:center;gap:3px;padding:1px 7px;
+  border-radius:99px;font-size:10px;font-weight:600;
+  background:#FFF3E0;color:#E65100;border:0.5px solid #FFCC02}
+.badge-sig-ok{display:inline-flex;align-items:center;gap:3px;padding:1px 7px;
+  border-radius:99px;font-size:10px;font-weight:600;
+  background:#E3F2FD;color:#1565C0;border:0.5px solid #90CAF9}
+.badge-sig-no{display:inline-flex;align-items:center;gap:3px;padding:1px 7px;
+  border-radius:99px;font-size:10px;font-weight:600;
+  background:#FCE4EC;color:#C62828;border:0.5px solid #F48FB1}
+
+/* ── EDIT / SIGNATURE MODAL EXTRAS ─────────────────────────────────────── */
+.preview-sig{width:100%;height:60px;border:0.5px solid #2a2a2a;border-radius:var(--r-sm);
+  background:#111;display:flex;align-items:center;justify-content:center;
+  overflow:hidden;margin-top:6px}
+.preview-sig img{max-height:54px;max-width:100%;object-fit:contain}
+.field-note{font-size:11px;color:#666;margin-top:3px}
+.modal-student-pill{display:flex;align-items:center;gap:10px;padding:10px 12px;
+  background:#1A1A1A;border:1px solid #252525;border-radius:var(--r-sm);margin-bottom:4px}
 </style>
 </head>
 <body>
@@ -864,6 +887,147 @@ label.field-label{display:block;font-size:12px;font-weight:600;
             <path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
           Confirm & Save
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ MODAL: EDIT STUDENT ══════════════════════════════════════════════ -->
+<div id="modal-edit-student" class="modal-backdrop">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title">Edit Student</span>
+      <button class="modal-close" onclick="closeModal('modal-edit-student')">
+        <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path d="M6 18L18 6M6 6l12 12" stroke-linecap="round"/>
+        </svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="edit-student-id">
+      <div class="field">
+        <label class="field-label">Full Name</label>
+        <input class="input" id="edit-name" placeholder="Last Name, First Name">
+      </div>
+      <div class="modal-grid">
+        <div class="field">
+          <label class="field-label">SR Code <span style="color:#555;font-size:10px">(read-only)</span></label>
+          <input class="input" id="edit-sr" disabled
+                 style="opacity:.5;cursor:not-allowed">
+        </div>
+        <div class="field">
+          <label class="field-label">Age</label>
+          <input class="input" id="edit-age" type="number">
+        </div>
+      </div>
+      <div class="modal-grid">
+        <div class="field">
+          <label class="field-label">Contact Number</label>
+          <input class="input" id="edit-number">
+        </div>
+        <div class="field">
+          <label class="field-label">Sex</label>
+          <select class="input" id="edit-sex">
+            <option value="">Select</option>
+            <option>Male</option>
+            <option>Female</option>
+          </select>
+        </div>
+      </div>
+      <div class="field">
+        <label class="field-label">Email Address</label>
+        <input class="input" id="edit-email" type="email">
+      </div>
+      <div class="field">
+        <label class="field-label">Address</label>
+        <input class="input" id="edit-address">
+      </div>
+
+      <!-- Photo replace -->
+      <div class="field">
+        <label class="field-label">Replace Photo
+          <span id="edit-photo-status" class="field-note"></span>
+        </label>
+        <div class="file-upload-area" id="edit-photo-area"
+             onclick="document.getElementById('edit-photo-file').click()">
+          <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24" style="opacity:.4">
+            <path d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" stroke-linecap="round"/>
+            <circle cx="12" cy="13" r="3" stroke-linecap="round"/>
+          </svg>
+          <p>Click to replace photo — leave blank to keep current</p>
+          <span class="filename hidden" id="edit-photo-fname"></span>
+        </div>
+        <input type="file" id="edit-photo-file" accept="image/*" class="hidden"
+               onchange="handleFileSelect('edit-photo-file','edit-photo-area','edit-photo-fname')">
+      </div>
+
+      <!-- Signature replace -->
+      <div class="field">
+        <label class="field-label">Replace Signature
+          <span id="edit-sig-status" class="field-note"></span>
+        </label>
+        <div class="file-upload-area" id="edit-sig-area"
+             onclick="document.getElementById('edit-sig-file').click()">
+          <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24" style="opacity:.4">
+            <path d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" stroke-linecap="round"/>
+          </svg>
+          <p>Click to replace signature — leave blank to keep current</p>
+          <span class="filename hidden" id="edit-sig-fname"></span>
+        </div>
+        <input type="file" id="edit-sig-file" accept="image/*" class="hidden"
+               onchange="handleEditSigPreview()">
+        <div class="preview-sig hidden" id="edit-sig-preview">
+          <img id="edit-sig-preview-img" src="" alt="signature preview">
+        </div>
+      </div>
+
+      <div class="modal-actions">
+        <button class="btn btn-ghost" onclick="closeModal('modal-edit-student')">Cancel</button>
+        <button class="btn btn-primary" id="btn-save-edit">Save Changes</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ MODAL: SIGNATURE ONLY ════════════════════════════════════════════ -->
+<div id="modal-sig-only" class="modal-backdrop">
+  <div class="modal" style="max-width:400px">
+    <div class="modal-header">
+      <span class="modal-title" style="color:#1565C0">Upload Signature</span>
+      <button class="modal-close" onclick="closeModal('modal-sig-only')">
+        <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path d="M6 18L18 6M6 6l12 12" stroke-linecap="round"/>
+        </svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="sig-only-student-id">
+      <div class="modal-student-pill" id="sig-only-student-info">
+        <!-- filled by JS -->
+      </div>
+      <div class="field">
+        <label class="field-label">E-Signature Image</label>
+        <div class="file-upload-area" id="sig-only-area"
+             onclick="document.getElementById('sig-only-file').click()">
+          <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24" style="opacity:.4">
+            <path d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" stroke-linecap="round"/>
+          </svg>
+          <p>Click to choose signature image</p>
+          <span class="filename hidden" id="sig-only-fname"></span>
+        </div>
+        <input type="file" id="sig-only-file" accept="image/*" class="hidden"
+               onchange="handleSigOnlyPreview()">
+        <div class="preview-sig hidden" id="sig-only-preview">
+          <img id="sig-only-preview-img" src="" alt="signature preview">
+        </div>
+        <p class="field-note">JPG or PNG · white or transparent background works best</p>
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" onclick="closeModal('modal-sig-only')">Cancel</button>
+        <button class="btn btn-sm" id="btn-upload-sig-only"
+                style="background:#1565C0;color:#fff;border:none;padding:10px 20px;border-radius:var(--r-sm);font-weight:600;cursor:pointer">
+          Upload Signature
         </button>
       </div>
     </div>
@@ -1461,48 +1625,240 @@ function renderPresentList(present, scanLog) {
   }).join('');
 }
 
+function _hasFace(student) {
+  // A student has a face if their photo field is set (URL or local path)
+  return !!(student.photo && student.photo.trim());
+}
+function _hasSig(student) {
+  return !!(student.signature && student.signature.trim());
+}
+
 function renderStudentsList(present = []) {
   const presentSet = new Set(present.map(n => n.toLowerCase().replace(/_/g,' ')));
   const list = document.getElementById('students-list');
-  if (!STATE.students.length) {
+  const enrolled = (STATE.students || []).filter(
+    s => s.status === 'Enrolled' || s.status === 'Unenrolled'
+  );
+  if (!enrolled.length) {
     list.innerHTML = `<p style="color:#555;font-size:13px;text-align:center;padding:20px">
       No students enrolled</p>`;
     return;
   }
-  list.innerHTML = STATE.students
-    .filter(s => s.status === 'Enrolled' || s.status === 'Unenrolled')
-    .map(s => {
-      const isPresent = presentSet.has((s.name||'').toLowerCase());
-      return `
-        <div class="student-item" style="justify-content:space-between">
-          <div style="display:flex;align-items:center;gap:10px;flex:1;min-width:0">
-            <div class="student-status-dot ${isPresent ? 'dot-present' : 'dot-absent'}"></div>
-            <span class="student-name-txt" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
-              ${s.name}
-            </span>
-          </div>
-          <div style="display:flex;align-items:center;gap:6px;flex-shrink:0">
-            ${isPresent
-              ? '<span style="font-size:10px;color:#22C55E;font-weight:600">Present</span>'
-              : '<span style="font-size:10px;color:#555">—</span>'}
-            <button onclick="deleteStudent(${s.id}, '${s.name.replace(/'/g,"\\'")}')"
-                    title="Delete student"
-                    style="background:transparent;border:1px solid #333;color:#555;
-                           width:22px;height:22px;border-radius:4px;cursor:pointer;
-                           display:flex;align-items:center;justify-content:center;
-                           font-size:11px;transition:all .15s;flex-shrink:0"
-                    onmouseover="this.style.borderColor='#D32F2F';this.style.color='#D32F2F'"
-                    onmouseout="this.style.borderColor='#333';this.style.color='#555'">
-              <svg width="10" height="10" fill="none" stroke="currentColor"
-                   stroke-width="2" viewBox="0 0 24 24">
-                <path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                      stroke-linecap="round" stroke-linejoin="round"/>
-              </svg>
-            </button>
-          </div>
-        </div>`;
-    }).join('');
+  list.innerHTML = enrolled.map(s => {
+    const isPresent = presentSet.has((s.name||'').toLowerCase());
+    const hasFace   = _hasFace(s);
+    const hasSig    = _hasSig(s);
+    const sName     = (s.name||'').replace(/'/g,"\\'");
+    return `
+      <div class="student-item" style="flex-direction:column;align-items:stretch;gap:6px;padding:10px">
+        <div style="display:flex;align-items:center;gap:8px">
+          <div class="student-status-dot ${isPresent?'dot-present':'dot-absent'}"></div>
+          <span class="student-name-txt" style="flex:1;overflow:hidden;
+                text-overflow:ellipsis;white-space:nowrap;font-size:12px">
+            ${s.name}
+          </span>
+          ${isPresent
+            ? '<span style="font-size:10px;color:#22C55E;font-weight:600;flex-shrink:0">Present</span>'
+            : '<span style="font-size:10px;color:#555;flex-shrink:0">—</span>'}
+        </div>
+        <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap">
+          <span class="${hasFace?'badge-face-ok':'badge-face-no'}">
+            ${hasFace?'face ✓':'no face'}
+          </span>
+          <span class="${hasSig?'badge-sig-ok':'badge-sig-no'}">
+            ${hasSig?'sig ✓':'no sig'}
+          </span>
+          <div style="flex:1"></div>
+          ${!hasSig ? `
+          <button onclick="openSigOnly(${s.id},'${sName}')"
+            style="font-size:10px;padding:3px 8px;border-radius:4px;
+                   border:0.5px solid #1565C0;background:transparent;
+                   color:#1565C0;cursor:pointer;min-height:auto">
+            + Sig
+          </button>` : ''}
+          <button onclick="openEditStudent(${s.id})"
+            style="font-size:10px;padding:3px 8px;border-radius:4px;
+                   border:0.5px solid #444;background:transparent;
+                   color:#aaa;cursor:pointer;min-height:auto">
+            Edit
+          </button>
+          <button onclick="deleteStudent(${s.id},'${sName}')"
+            style="font-size:10px;padding:3px 6px;border-radius:4px;
+                   border:0.5px solid #333;background:transparent;
+                   color:#555;cursor:pointer;min-height:auto">
+            <svg width="10" height="10" fill="none" stroke="currentColor"
+                 stroke-width="2" viewBox="0 0 24 24">
+              <path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                    stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </button>
+        </div>
+      </div>`;
+  }).join('');
 }
+
+// ═══════════════════════════════════════════════════════════════════════
+// EDIT STUDENT
+// ═══════════════════════════════════════════════════════════════════════
+async function openEditStudent(studentId) {
+  const s = STATE.students.find(x => x.id === studentId);
+  if (!s) return;
+
+  document.getElementById('edit-student-id').value  = studentId;
+  document.getElementById('edit-name').value         = s.name    || '';
+  document.getElementById('edit-sr').value           = s.sr_code || '';
+  document.getElementById('edit-age').value          = s.age     || '';
+  document.getElementById('edit-number').value       = s.number  || '';
+  document.getElementById('edit-sex').value          = s.sex     || '';
+  document.getElementById('edit-email').value        = s.email   || '';
+  document.getElementById('edit-address').value      = s.address || '';
+
+  // Show current photo/sig status
+  document.getElementById('edit-photo-status').textContent =
+    s.photo ? '(current: ✓ on file)' : '(missing — please upload)';
+  document.getElementById('edit-sig-status').textContent =
+    s.signature ? '(current: ✓ on file)' : '(missing — please upload)';
+
+  // Reset file inputs
+  document.getElementById('edit-photo-file').value = '';
+  document.getElementById('edit-sig-file').value   = '';
+  document.getElementById('edit-photo-area').classList.remove('has-file');
+  document.getElementById('edit-sig-area').classList.remove('has-file');
+  document.getElementById('edit-photo-fname').style.display  = 'none';
+  document.getElementById('edit-sig-fname').style.display    = 'none';
+  document.getElementById('edit-sig-preview').classList.add('hidden');
+
+  openModal('modal-edit-student');
+}
+
+function handleEditSigPreview() {
+  const f = document.getElementById('edit-sig-file').files[0];
+  if (!f) return;
+  handleFileSelect('edit-sig-file', 'edit-sig-area', 'edit-sig-fname');
+  const reader = new FileReader();
+  reader.onload = e => {
+    document.getElementById('edit-sig-preview-img').src = e.target.result;
+    document.getElementById('edit-sig-preview').classList.remove('hidden');
+  };
+  reader.readAsDataURL(f);
+}
+
+document.getElementById('btn-save-edit').addEventListener('click', async () => {
+  const id   = document.getElementById('edit-student-id').value;
+  const name = document.getElementById('edit-name').value.trim();
+  if (!name) { toast('Name is required.', 'error'); return; }
+
+  const fd = new FormData();
+  fd.append('name',    name);
+  fd.append('age',     document.getElementById('edit-age').value.trim());
+  fd.append('number',  document.getElementById('edit-number').value.trim());
+  fd.append('sex',     document.getElementById('edit-sex').value);
+  fd.append('email',   document.getElementById('edit-email').value.trim());
+  fd.append('address', document.getElementById('edit-address').value.trim());
+
+  const photo = document.getElementById('edit-photo-file').files[0];
+  const sig   = document.getElementById('edit-sig-file').files[0];
+  if (photo) fd.append('photo',     photo);
+  if (sig)   fd.append('signature', sig);
+
+  const btn = document.getElementById('btn-save-edit');
+  btn.disabled = true; btn.textContent = 'Saving…';
+
+  try {
+    const res  = await fetch(`/api/local/edit_student/${id}`, {
+      method:  'POST',
+      headers: {'X-Instructor-Email': STATE.email},
+      body:    fd
+    });
+    const data = await res.json();
+    if (!res.ok) { toast(data.error || 'Save failed.', 'error'); return; }
+
+    toast(`${name} updated ✓`, 'success');
+    closeModal('modal-edit-student');
+
+    // Refresh student list
+    const sRes = await fetch(`/api/local/students/${STATE.currentClass.class_code}`,
+      {headers: {'X-Instructor-Email': STATE.email}});
+    STATE.students = await sRes.json();
+    renderStudentsList();
+  } catch {
+    toast('Network error.', 'error');
+  } finally {
+    btn.disabled = false; btn.textContent = 'Save Changes';
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// SIGNATURE-ONLY UPLOAD
+// ═══════════════════════════════════════════════════════════════════════
+function openSigOnly(studentId, studentName) {
+  document.getElementById('sig-only-student-id').value = studentId;
+  document.getElementById('sig-only-file').value       = '';
+  document.getElementById('sig-only-fname').style.display = 'none';
+  document.getElementById('sig-only-area').classList.remove('has-file');
+  document.getElementById('sig-only-preview').classList.add('hidden');
+
+  const initials = studentName.split(' ').map(w=>w[0]).join('').substring(0,2).toUpperCase();
+  document.getElementById('sig-only-student-info').innerHTML = `
+    <div style="width:30px;height:30px;border-radius:50%;background:var(--red);
+                display:flex;align-items:center;justify-content:center;
+                font-size:11px;font-weight:700;color:#fff;flex-shrink:0">
+      ${initials}
+    </div>
+    <div>
+      <div style="font-size:13px;font-weight:600;color:#E5E7EB">${studentName}</div>
+      <div style="font-size:11px;color:#666">${STATE.currentClass?.class_code||''}</div>
+    </div>`;
+
+  openModal('modal-sig-only');
+}
+
+function handleSigOnlyPreview() {
+  const f = document.getElementById('sig-only-file').files[0];
+  if (!f) return;
+  handleFileSelect('sig-only-file', 'sig-only-area', 'sig-only-fname');
+  const reader = new FileReader();
+  reader.onload = e => {
+    document.getElementById('sig-only-preview-img').src = e.target.result;
+    document.getElementById('sig-only-preview').classList.remove('hidden');
+  };
+  reader.readAsDataURL(f);
+}
+
+document.getElementById('btn-upload-sig-only').addEventListener('click', async () => {
+  const id  = document.getElementById('sig-only-student-id').value;
+  const sig = document.getElementById('sig-only-file').files[0];
+  if (!sig) { toast('Choose a signature image first.', 'error'); return; }
+
+  const fd = new FormData();
+  fd.append('signature', sig);
+
+  const btn = document.getElementById('btn-upload-sig-only');
+  btn.disabled = true; btn.textContent = 'Uploading…';
+
+  try {
+    const res  = await fetch(`/api/local/upload_signature/${id}`, {
+      method:  'POST',
+      headers: {'X-Instructor-Email': STATE.email},
+      body:    fd
+    });
+    const data = await res.json();
+    if (!res.ok) { toast(data.error || 'Upload failed.', 'error'); return; }
+
+    toast('Signature uploaded ✓', 'success');
+    closeModal('modal-sig-only');
+
+    // Refresh student list
+    const sRes = await fetch(`/api/local/students/${STATE.currentClass.class_code}`,
+      {headers: {'X-Instructor-Email': STATE.email}});
+    STATE.students = await sRes.json();
+    renderStudentsList();
+  } catch {
+    toast('Network error.', 'error');
+  } finally {
+    btn.disabled = false; btn.textContent = 'Upload Signature';
+  }
+});
 
 async function deleteStudent(studentId, studentName) {
   // Confirm before deleting
