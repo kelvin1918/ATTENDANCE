@@ -19,6 +19,14 @@ import psycopg2.extras
 from datetime import datetime
 import os
 
+# Load .env file if present — must happen before reading os.environ below.
+# On Render, variables are set in the dashboard so .env is not needed there.
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass   # python-dotenv not installed — rely on system env vars
+
 
 # ── CONNECTION CONFIG ─────────────────────────────────────────────────────────
 # ALL credentials are read from environment variables.
@@ -35,23 +43,64 @@ import os
 # Optional (falls back to Neon if not set):
 #   DB_HOST_LOCAL, DB_NAME_LOCAL, DB_USER_LOCAL, DB_PASSWORD_LOCAL
 
+# ── Read credentials from environment (populated by .env via dotenv above) ────
+_DB_HOST = os.environ.get("DB_HOST", "").strip()
+_DB_PORT = int(os.environ.get("DB_PORT", 5432))
+_DB_NAME = os.environ.get("DB_NAME", "").strip()
+_DB_USER = os.environ.get("DB_USER", "").strip()
+_DB_PASS = os.environ.get("DB_PASSWORD", "").strip()
+
+# Validate — give a clear error instead of a confusing SSL/localhost crash
+_missing = [k for k, v in {
+    "DB_HOST": _DB_HOST, "DB_NAME": _DB_NAME,
+    "DB_USER": _DB_USER, "DB_PASSWORD": _DB_PASS
+}.items() if not v]
+
+if _missing:
+    raise EnvironmentError(
+        f"\n\n[DATABASE] Missing environment variable(s): {', '.join(_missing)}\n"
+        f"Create a .env file in your project folder with:\n"
+        f"  DB_HOST=your_neon_host\n"
+        f"  DB_NAME=neondb\n"
+        f"  DB_USER=neondb_owner\n"
+        f"  DB_PASSWORD=your_password\n"
+        f"Then run: pip install python-dotenv\n"
+    )
+
 DB_CONFIG = {
-    "host":     os.environ.get("DB_HOST",     ""),
-    "port":     int(os.environ.get("DB_PORT", 5432)),
-    "database": os.environ.get("DB_NAME",     ""),
-    "user":     os.environ.get("DB_USER",     ""),
-    "password": os.environ.get("DB_PASSWORD", ""),
-    "sslmode":  "require"
+    "host":     _DB_HOST,
+    "port":     _DB_PORT,
+    "database": _DB_NAME,
+    "user":     _DB_USER,
+    "password": _DB_PASS,
+    "sslmode":  "require",
 }
+
+print(f"[DB] Connecting to {_DB_HOST} / {_DB_NAME} as {_DB_USER}")
 
 
 # ── CONNECTION ────────────────────────────────────────────────────────────────
 
 def get_db():
-    """Returns a PostgreSQL connection."""
-    conn = psycopg2.connect(**DB_CONFIG)
-
-    return conn
+    """
+    Returns a live PostgreSQL connection to Neon.
+    Raises a clear error if credentials are missing or the host is unreachable.
+    """
+    try:
+        conn = psycopg2.connect(**DB_CONFIG)
+        return conn
+    except psycopg2.OperationalError as e:
+        err = str(e)
+        if "SSL" in err:
+            raise ConnectionError(
+                "\n[DB] SSL error — make sure DB_HOST points to your Neon host,\n"
+                "not localhost. Check your .env file."
+            ) from e
+        if "password" in err.lower():
+            raise ConnectionError(
+                "\n[DB] Authentication failed — check DB_USER and DB_PASSWORD in .env."
+            ) from e
+        raise
 
 
 def get_cursor(conn):

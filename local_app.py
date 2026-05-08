@@ -30,6 +30,17 @@ NOT included (Render handles these)
 
 import os, json, shutil, socket, webbrowser, threading, time
 from datetime import datetime, date
+
+# ── LOAD .env FIRST — before any module that reads os.environ ─────────────────
+# database.py reads DB_HOST/DB_PASSWORD at import time.
+# If load_dotenv() runs after that, the env vars are already missed.
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+    print("[ENV] .env loaded ✓")
+except ImportError:
+    print("[ENV] python-dotenv not installed — using system environment variables")
+
 from flask import (
     Flask, request, jsonify, send_file,
     send_from_directory, Response, abort
@@ -39,9 +50,6 @@ from werkzeug.utils import secure_filename
 
 import database as db
 from pdf_generator import generate_attendance_pdf
-
-from dotenv import load_dotenv
-load_dotenv()
 
 # ── CLOUDINARY CONFIG ─────────────────────────────────────────────────────────
 # Credentials are read from environment variables — never hardcode these.
