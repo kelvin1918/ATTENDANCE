@@ -354,17 +354,25 @@ def _today_abbr():
 
 
 def _filter_today(classes, schedules):
-    """Return classes that have a schedule matching today's weekday."""
+    """
+    Return classes that have a schedule on today's weekday.
+    A class may appear more than once if it has multiple schedule slots today
+    (e.g. Electronic Devices appears twice on Thursday).
+    Both unique classes AND all matching schedule rows are returned so the
+    frontend can show each time slot.
+    """
     today = _today_abbr()
-    scheduled_codes = {
-        s["class_code"] for s in schedules
+    today_scheds = [
+        s for s in schedules
         if (s.get("day") or "").upper() == today
-    }
-    # Return all if none scheduled today (instructor may override)
-    if not scheduled_codes:
+    ]
+    if not today_scheds:
+        # No schedule for today — return all classes so the instructor
+        # can still select any class manually
         return classes, []
-    today_classes = [c for c in classes if c.get("class_code") in scheduled_codes]
-    today_scheds  = [s for s in schedules if s.get("class_code") in scheduled_codes]
+
+    scheduled_codes = {s["class_code"] for s in today_scheds}
+    today_classes   = [c for c in classes if c.get("class_code") in scheduled_codes]
     return today_classes, today_scheds
 
 
@@ -727,7 +735,29 @@ def api_local_delete_student(student_id):
 @app.route("/api/local/students/<class_code>")
 def api_local_students(class_code):
     rows = db.get_students(class_code)
-    return jsonify([dict(r) for r in rows])
+    result = []
+    faces_dir = _class_faces_dir(class_code)
+
+    for r in rows:
+        s = dict(r)
+        # Check if face file actually exists on LOCAL disk
+        # (DB photo field might be a Cloudinary URL but file may not be downloaded yet)
+        name_base = _safe_code((s.get("name") or "").replace(" ", "_"))
+        has_face_local = any(
+            os.path.isfile(os.path.join(faces_dir, name_base + ext))
+            for ext in (".jpg", ".jpeg", ".png")
+        )
+        # Check if signature exists — either local file or Cloudinary URL
+        sig = s.get("signature", "") or ""
+        has_sig = (
+            sig.startswith("http") or
+            (sig and os.path.isfile(sig))
+        )
+        s["has_face_local"] = has_face_local
+        s["has_sig"]        = has_sig
+        result.append(s)
+
+    return jsonify(result)
 
 
 # ══════════════════════════════════════════════════════════════════════════════

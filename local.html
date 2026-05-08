@@ -906,47 +906,25 @@ label.field-label{display:block;font-size:12px;font-weight:600;
     </div>
     <div class="modal-body">
       <input type="hidden" id="edit-student-id">
+
       <div class="field">
         <label class="field-label">Full Name</label>
-        <input class="input" id="edit-name" placeholder="Last Name, First Name">
+        <input class="input" id="edit-name" placeholder="Last Name, First Name Middle I.">
       </div>
-      <div class="modal-grid">
-        <div class="field">
-          <label class="field-label">SR Code <span style="color:#555;font-size:10px">(read-only)</span></label>
-          <input class="input" id="edit-sr" disabled
-                 style="opacity:.5;cursor:not-allowed">
-        </div>
-        <div class="field">
-          <label class="field-label">Age</label>
-          <input class="input" id="edit-age" type="number">
-        </div>
+
+      <div class="field">
+        <label class="field-label">SR Code <span style="color:#555;font-size:10px">(read-only)</span></label>
+        <input class="input" id="edit-sr" disabled style="opacity:.5;cursor:not-allowed">
       </div>
-      <div class="modal-grid">
-        <div class="field">
-          <label class="field-label">Contact Number</label>
-          <input class="input" id="edit-number">
-        </div>
-        <div class="field">
-          <label class="field-label">Sex</label>
-          <select class="input" id="edit-sex">
-            <option value="">Select</option>
-            <option>Male</option>
-            <option>Female</option>
-          </select>
-        </div>
-      </div>
+
       <div class="field">
         <label class="field-label">Email Address</label>
-        <input class="input" id="edit-email" type="email">
-      </div>
-      <div class="field">
-        <label class="field-label">Address</label>
-        <input class="input" id="edit-address">
+        <input class="input" id="edit-email" type="email" placeholder="student@email.com">
       </div>
 
       <!-- Photo replace -->
       <div class="field">
-        <label class="field-label">Replace Photo
+        <label class="field-label">Student Photo
           <span id="edit-photo-status" class="field-note"></span>
         </label>
         <div class="file-upload-area" id="edit-photo-area"
@@ -955,7 +933,7 @@ label.field-label{display:block;font-size:12px;font-weight:600;
             <path d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" stroke-linecap="round"/>
             <circle cx="12" cy="13" r="3" stroke-linecap="round"/>
           </svg>
-          <p>Click to replace photo — leave blank to keep current</p>
+          <p>Click to replace — leave blank to keep current</p>
           <span class="filename hidden" id="edit-photo-fname"></span>
         </div>
         <input type="file" id="edit-photo-file" accept="image/*" class="hidden"
@@ -964,7 +942,7 @@ label.field-label{display:block;font-size:12px;font-weight:600;
 
       <!-- Signature replace -->
       <div class="field">
-        <label class="field-label">Replace Signature
+        <label class="field-label">E-Signature
           <span id="edit-sig-status" class="field-note"></span>
         </label>
         <div class="file-upload-area" id="edit-sig-area"
@@ -972,7 +950,7 @@ label.field-label{display:block;font-size:12px;font-weight:600;
           <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24" style="opacity:.4">
             <path d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" stroke-linecap="round"/>
           </svg>
-          <p>Click to replace signature — leave blank to keep current</p>
+          <p>Click to replace — leave blank to keep current</p>
           <span class="filename hidden" id="edit-sig-fname"></span>
         </div>
         <input type="file" id="edit-sig-file" accept="image/*" class="hidden"
@@ -1313,32 +1291,60 @@ function renderClassGrid(dayFilter) {
     return;
   }
 
-  grid.innerHTML = filtered.map(cls => {
-    // Find schedule for this class on this day
-    const sched = STATE.allSchedules.find(s =>
-      s.class_code === cls.class_code &&
-      (dayFilter === 'ALL' || (s.day || '').toUpperCase() === dayFilter)
+  // Build one card PER SCHEDULE SLOT so classes with multiple today-slots
+  // (e.g. Electronic Devices 10am AND 7am on Thursday) each get their own card.
+  // For "ALL" view, show each class once with all its schedule slots listed.
+  const cards = [];
+
+  if (dayFilter === 'ALL') {
+    filtered.forEach(cls => {
+      const slots = STATE.allSchedules.filter(s => s.class_code === cls.class_code);
+      const schedHtml = slots.length
+        ? slots.map(s => `
+            <div class="class-schedule">
+              <svg width="12" height="12" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2zm.5 5H11v6l5.2 3.2.8-1.3-4.5-2.7V7z"/>
+              </svg>
+              ${s.day || ''} ${s.time || ''} · ${s.room || 'TBA'}
+            </div>`).join('')
+        : '';
+      const isToday = STATE.allSchedules.some(s =>
+        s.class_code === cls.class_code && (s.day||'').toUpperCase() === STATE.today
+      );
+      cards.push(`
+        <div class="class-card ${isToday ? 'today' : ''}"
+             onclick="openCameraScreen('${cls.class_code}')">
+          <div class="class-code">${cls.class_code}</div>
+          <div class="class-name">${cls.subject || '—'}</div>
+          <div class="class-meta">${cls.section || ''}</div>
+          ${schedHtml}
+        </div>`);
+    });
+  } else {
+    // Day filter — one card per matching schedule slot
+    const dayScheds = STATE.allSchedules.filter(
+      s => (s.day || '').toUpperCase() === dayFilter
     );
-    const schedHtml = sched
-      ? `<div class="class-schedule">
-           <svg width="12" height="12" fill="currentColor" viewBox="0 0 24 24">
-             <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2zm.5 5H11v6l5.2 3.2.8-1.3-4.5-2.7V7z"/>
-           </svg>
-           ${sched.time || ''} · ${sched.room || 'TBA'}
-         </div>`
-      : '';
-    const isToday = STATE.allSchedules.some(s =>
-      s.class_code === cls.class_code && (s.day||'').toUpperCase() === STATE.today
-    );
-    return `
-      <div class="class-card ${isToday ? 'today' : ''}"
-           onclick="openCameraScreen('${cls.class_code}')">
-        <div class="class-code">${cls.class_code}</div>
-        <div class="class-name">${cls.subject || '—'}</div>
-        <div class="class-meta">${cls.section || ''}</div>
-        ${schedHtml}
-      </div>`;
-  }).join('');
+    dayScheds.forEach(sched => {
+      const cls = filtered.find(c => c.class_code === sched.class_code);
+      if (!cls) return;
+      cards.push(`
+        <div class="class-card today"
+             onclick="openCameraScreen('${cls.class_code}')">
+          <div class="class-code">${cls.class_code}</div>
+          <div class="class-name">${cls.subject || '—'}</div>
+          <div class="class-meta">${cls.section || ''}</div>
+          <div class="class-schedule">
+            <svg width="12" height="12" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2zm.5 5H11v6l5.2 3.2.8-1.3-4.5-2.7V7z"/>
+            </svg>
+            ${sched.time || ''} · ${sched.room || 'TBA'}
+          </div>
+        </div>`);
+    });
+  }
+
+  grid.innerHTML = cards.join('');
 }
 
 // Day tab clicks
@@ -1626,10 +1632,14 @@ function renderPresentList(present, scanLog) {
 }
 
 function _hasFace(student) {
-  // A student has a face if their photo field is set (URL or local path)
+  // Use the server-computed flag (checks actual disk, not just DB URL)
+  // Falls back to DB photo field for backward compatibility
+  if (student.has_face_local !== undefined) return student.has_face_local;
   return !!(student.photo && student.photo.trim());
 }
 function _hasSig(student) {
+  // Use the server-computed flag which checks both Cloudinary URL and local file
+  if (student.has_sig !== undefined) return student.has_sig;
   return !!(student.signature && student.signature.trim());
 }
 
@@ -1704,28 +1714,29 @@ async function openEditStudent(studentId) {
   const s = STATE.students.find(x => x.id === studentId);
   if (!s) return;
 
-  document.getElementById('edit-student-id').value  = studentId;
-  document.getElementById('edit-name').value         = s.name    || '';
-  document.getElementById('edit-sr').value           = s.sr_code || '';
-  document.getElementById('edit-age').value          = s.age     || '';
-  document.getElementById('edit-number').value       = s.number  || '';
-  document.getElementById('edit-sex').value          = s.sex     || '';
-  document.getElementById('edit-email').value        = s.email   || '';
-  document.getElementById('edit-address').value      = s.address || '';
+  document.getElementById('edit-student-id').value = studentId;
+  document.getElementById('edit-name').value        = s.name    || '';
+  document.getElementById('edit-sr').value          = s.sr_code || '';
+  document.getElementById('edit-email').value       = s.email   || '';
 
-  // Show current photo/sig status
+  // Show real status using server-computed flags
+  const hasFace = _hasFace(s);
+  const hasSig  = _hasSig(s);
   document.getElementById('edit-photo-status').textContent =
-    s.photo ? '(current: ✓ on file)' : '(missing — please upload)';
+    hasFace ? '(current: ✓ face file on disk)' : '(missing — upload to enable face recognition)';
+  document.getElementById('edit-photo-status').style.color = hasFace ? '#2E7D32' : '#E65100';
   document.getElementById('edit-sig-status').textContent =
-    s.signature ? '(current: ✓ on file)' : '(missing — please upload)';
+    hasSig  ? '(current: ✓ signature on file)' : '(missing — upload for attendance sheet)';
+  document.getElementById('edit-sig-status').style.color = hasSig ? '#1565C0' : '#E65100';
 
   // Reset file inputs
   document.getElementById('edit-photo-file').value = '';
   document.getElementById('edit-sig-file').value   = '';
   document.getElementById('edit-photo-area').classList.remove('has-file');
   document.getElementById('edit-sig-area').classList.remove('has-file');
-  document.getElementById('edit-photo-fname').style.display  = 'none';
-  document.getElementById('edit-sig-fname').style.display    = 'none';
+  ['edit-photo-fname','edit-sig-fname'].forEach(id => {
+    document.getElementById(id).style.display = 'none';
+  });
   document.getElementById('edit-sig-preview').classList.add('hidden');
 
   openModal('modal-edit-student');
@@ -1749,12 +1760,8 @@ document.getElementById('btn-save-edit').addEventListener('click', async () => {
   if (!name) { toast('Name is required.', 'error'); return; }
 
   const fd = new FormData();
-  fd.append('name',    name);
-  fd.append('age',     document.getElementById('edit-age').value.trim());
-  fd.append('number',  document.getElementById('edit-number').value.trim());
-  fd.append('sex',     document.getElementById('edit-sex').value);
-  fd.append('email',   document.getElementById('edit-email').value.trim());
-  fd.append('address', document.getElementById('edit-address').value.trim());
+  fd.append('name',  name);
+  fd.append('email', document.getElementById('edit-email').value.trim());
 
   const photo = document.getElementById('edit-photo-file').files[0];
   const sig   = document.getElementById('edit-sig-file').files[0];
