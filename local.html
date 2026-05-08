@@ -131,6 +131,71 @@ label.field-label{display:block;font-size:12px;font-weight:600;
 #screen-classes{
   flex-direction:column;background:var(--bg)
 }
+
+/* ── SYNC SCREEN ──────────────────────────────────────────────────────── */
+#screen-sync{
+  align-items:center;justify-content:center;
+  background:linear-gradient(135deg,#0a0a0a 0%,#1a0000 50%,#0a0a0a 100%);
+  flex-direction:column;gap:28px;position:relative;overflow:hidden
+}
+#screen-sync::before{
+  content:'';position:absolute;inset:0;
+  background:radial-gradient(ellipse 60% 50% at 50% 30%,rgba(211,47,47,.15),transparent);
+  pointer-events:none
+}
+.sync-card{
+  background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);
+  border-radius:20px;padding:40px 44px;width:420px;text-align:center;
+  position:relative;z-index:1
+}
+.sync-icon{
+  width:56px;height:56px;background:rgba(211,47,47,.15);border-radius:50%;
+  display:flex;align-items:center;justify-content:center;margin:0 auto 20px;
+  border:1px solid rgba(211,47,47,.3)
+}
+.sync-title{
+  font-size:18px;font-weight:700;color:#fff;margin-bottom:6px
+}
+.sync-sub{
+  font-size:13px;color:#666;margin-bottom:28px;line-height:1.5
+}
+.sync-count{
+  font-family:var(--mono);font-size:32px;font-weight:700;color:#fff;
+  line-height:1;margin-bottom:4px
+}
+.sync-count-label{
+  font-size:12px;color:#555;margin-bottom:20px
+}
+.sync-bar-wrap{
+  width:100%;height:4px;background:#1a1a1a;border-radius:99px;
+  overflow:hidden;margin-bottom:14px
+}
+.sync-bar{
+  height:100%;background:var(--red);border-radius:99px;
+  width:0%;transition:width .3s ease
+}
+.sync-status{
+  font-size:12px;color:#555;min-height:18px
+}
+.sync-skip-btn{
+  margin-top:24px;background:transparent;border:1px solid #2a2a2a;
+  color:#555;padding:8px 20px;border-radius:var(--r-sm);font-size:12px;
+  font-family:var(--font);cursor:pointer;transition:all .2s
+}
+.sync-skip-btn:hover{border-color:#444;color:#888}
+.sync-names{
+  max-height:80px;overflow-y:auto;margin-top:12px;
+  scrollbar-width:none;text-align:left
+}
+.sync-names::-webkit-scrollbar{display:none}
+.sync-name-row{
+  display:flex;align-items:center;gap:8px;padding:3px 0;
+  font-size:11px;color:#555;animation:nameIn .2s ease
+}
+.sync-check{
+  width:12px;height:12px;background:#22C55E;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;flex-shrink:0
+}
 .topbar{
   background:var(--surface);border-bottom:1px solid var(--border);
   padding:0 28px;height:62px;display:flex;align-items:center;
@@ -482,57 +547,31 @@ label.field-label{display:block;font-size:12px;font-weight:600;
   </div>
 </div>
 
-<!-- ═══ SCREEN 1.5: FACE SYNC ════════════════════════════════════════════ -->
+<!-- ═══ SCREEN 1.5: SYNC ════════════════════════════════════════════════ -->
 <div id="screen-sync" class="screen">
-  <div style="display:flex;flex-direction:column;align-items:center;
-              justify-content:center;height:100vh;gap:28px;
-              background:var(--bg);padding:32px;text-align:center">
-
-    <!-- Spinner -->
-    <div style="width:56px;height:56px;border:5px solid var(--border);
-                border-top-color:var(--red);border-radius:50%;
-                animation:spin .9s linear infinite"></div>
-
-    <div>
-      <div style="font-size:20px;font-weight:700;color:var(--text);margin-bottom:8px"
-           id="sync-title">Syncing Student Faces</div>
-      <div style="font-size:14px;color:var(--muted);max-width:340px;line-height:1.6"
-           id="sync-subtitle">Checking for missing face images…</div>
+  <div class="sync-card">
+    <div class="sync-icon">
+      <svg width="24" height="24" fill="none" stroke="#D32F2F" stroke-width="2"
+           viewBox="0 0 24 24">
+        <path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+              stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
     </div>
-
-    <!-- Counter card -->
-    <div style="display:flex;gap:20px;flex-wrap:wrap;justify-content:center">
-      <div style="background:var(--surface);border:1px solid var(--border);
-                  border-radius:12px;padding:16px 28px;min-width:100px">
-        <div id="sync-num-downloaded"
-             style="font-size:32px;font-weight:800;color:var(--red);font-family:var(--mono)">0</div>
-        <div style="font-size:11px;color:var(--muted);text-transform:uppercase;
-                    letter-spacing:.8px;margin-top:4px">Downloaded</div>
-      </div>
-      <div style="background:var(--surface);border:1px solid var(--border);
-                  border-radius:12px;padding:16px 28px;min-width:100px">
-        <div id="sync-num-total"
-             style="font-size:32px;font-weight:800;color:var(--text);font-family:var(--mono)">—</div>
-        <div style="font-size:11px;color:var(--muted);text-transform:uppercase;
-                    letter-spacing:.8px;margin-top:4px">Total Students</div>
-      </div>
-      <div style="background:var(--surface);border:1px solid var(--border);
-                  border-radius:12px;padding:16px 28px;min-width:100px">
-        <div id="sync-num-deleted"
-             style="font-size:32px;font-weight:800;color:#6B7280;font-family:var(--mono)">0</div>
-        <div style="font-size:11px;color:var(--muted);text-transform:uppercase;
-                    letter-spacing:.8px;margin-top:4px">Orphans Cleaned</div>
-      </div>
+    <div class="sync-title" id="sync-title">Syncing Student Faces</div>
+    <div class="sync-sub" id="sync-sub">
+      Downloading face images for your classes.<br>
+      This only runs for new students — existing files are skipped.
     </div>
-
-    <!-- Status message -->
-    <div id="sync-status"
-         style="font-size:13px;color:var(--muted);max-width:380px;
-                min-height:20px;line-height:1.5"></div>
-
-    <!-- Skip button — lets instructor proceed even if sync is slow/offline -->
-    <button class="btn btn-ghost" id="btn-sync-skip" style="display:none"
-            onclick="syncProceed()">Skip and Continue →</button>
+    <div class="sync-count" id="sync-count">0</div>
+    <div class="sync-count-label" id="sync-count-label">students synced</div>
+    <div class="sync-bar-wrap">
+      <div class="sync-bar" id="sync-bar"></div>
+    </div>
+    <div class="sync-status" id="sync-status">Checking for new faces…</div>
+    <div class="sync-names" id="sync-names"></div>
+    <button class="sync-skip-btn" id="btn-skip-sync">
+      Skip — load classes now
+    </button>
   </div>
 </div>
 
@@ -839,16 +878,17 @@ label.field-label{display:block;font-size:12px;font-weight:600;
    STATE
    ═══════════════════════════════════════════════════════════════════════ */
 const STATE = {
-  email:        '',
-  name:         '',
-  classes:      [],
-  schedules:    [],
-  allSchedules: [],
-  rooms:        [],   // admin-configured camera rooms
-  activeDay:    'TODAY',
-  currentClass: null,
-  students:     [],
-  cameraOn:     false,
+  email:         '',
+  name:          '',
+  instructorId:  null,
+  classes:       [],
+  schedules:     [],
+  allSchedules:  [],
+  rooms:         [],   // admin-configured camera rooms
+  activeDay:     'TODAY',
+  currentClass:  null,
+  students:      [],
+  cameraOn:      false,
 };
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -938,12 +978,14 @@ async function doLogin() {
       return;
     }
 
-    STATE.email = data.email;
-    STATE.name  = data.name;
+    STATE.email         = data.email;
+    STATE.name          = data.name;
+    STATE.instructorId  = data.instructor_id || null;
 
-    // ── Show sync screen THEN load faces, THEN load classes ──────────────────
+    // Go to sync screen first — it polls progress and auto-advances
+    // to class list when sync is done (or when skipped)
     showScreen('screen-sync');
-    await runSync();
+    startSyncPoll();
 
   } catch (err) {
     errEl.style.display = 'flex';
@@ -954,74 +996,63 @@ async function doLogin() {
   }
 }
 
-async function runSync() {
-  /* Called after login — downloads missing face images from Cloudinary,
-     removes orphan face files, then proceeds to the class screen. */
-  const title    = document.getElementById('sync-title');
-  const subtitle = document.getElementById('sync-subtitle');
-  const status   = document.getElementById('sync-status');
-  const numDl    = document.getElementById('sync-num-downloaded');
-  const numTot   = document.getElementById('sync-num-total');
-  const numDel   = document.getElementById('sync-num-deleted');
-  const skipBtn  = document.getElementById('btn-sync-skip');
+/* ═══════════════════════════════════════════════════════════════════════
+   SYNC SCREEN
+   ═══════════════════════════════════════════════════════════════════════ */
+let _syncPollInterval = null;
+let _syncShownCount   = 0;
 
-  // Show skip button after 8 seconds in case connection is slow
-  const skipTimer = setTimeout(() => skipBtn.style.display = 'inline-flex', 8000);
+function startSyncPoll() {
+  _syncShownCount = 0;
+  _syncPollInterval = setInterval(async () => {
+    try {
+      const res  = await fetch('/api/local/sync_progress');
+      const data = await res.json();
 
-  try {
-    const res  = await fetch('/api/local/sync_faces', {
-      method:  'POST',
-      headers: { 'X-Instructor-Email': STATE.email }
-    });
-    clearTimeout(skipTimer);
+      // Update counter and bar
+      const synced = data.synced || 0;
+      const total  = data.total  || 0;
+      document.getElementById('sync-count').textContent = synced;
+      document.getElementById('sync-count-label').textContent =
+        total > 0 ? `of ${total} student${total !== 1 ? 's' : ''} synced` : 'students checked';
 
-    if (!res.ok) {
-      // Sync failed — not fatal, proceed anyway
-      subtitle.textContent = 'Sync unavailable (no internet?). Proceeding with cached data.';
-      status.textContent   = '';
-      await new Promise(r => setTimeout(r, 1800));
-      await syncProceed();
-      return;
-    }
+      const pct = total > 0 ? Math.round((synced / total) * 100) : 100;
+      document.getElementById('sync-bar').style.width = pct + '%';
 
-    const d = await res.json();
-    numDl.textContent  = d.downloaded ?? 0;
-    numTot.textContent = d.total      ?? 0;
-    numDel.textContent = d.deleted    ?? 0;
+      // Status text
+      if (data.done) {
+        document.getElementById('sync-status').textContent =
+          synced > 0
+            ? `✓ ${synced} face${synced !== 1 ? 's' : ''} downloaded`
+            : 'All faces already up to date';
+      } else {
+        document.getElementById('sync-status').textContent =
+          `Downloading… (${data.skipped || 0} already on disk)`;
+      }
 
-    if (d.failed > 0) {
-      status.textContent = `⚠ ${d.failed} image${d.failed !== 1 ? 's' : ''} could not be downloaded. Check your connection.`;
-    } else if (d.downloaded > 0) {
-      status.textContent = `✓ ${d.downloaded} new face${d.downloaded !== 1 ? 's' : ''} synced successfully.`;
-    } else {
-      status.textContent = '✓ All faces are up to date.';
-    }
-
-    title.textContent    = 'Sync Complete';
-    subtitle.textContent = 'Loading your classes…';
-
-    await new Promise(r => setTimeout(r, 1000)); // brief pause so instructor can see result
-    await syncProceed();
-
-  } catch {
-    clearTimeout(skipTimer);
-    subtitle.textContent = 'Could not reach server. Proceeding offline.';
-    await new Promise(r => setTimeout(r, 1800));
-    await syncProceed();
-  }
+      if (data.done) {
+        clearInterval(_syncPollInterval);
+        _syncPollInterval = null;
+        await _advanceToClasses();
+      }
+    } catch { /* poll silently */ }
+  }, 400);
 }
 
-async function syncProceed() {
-  /* Finish login — load classes and show class screen. */
-  document.getElementById('btn-sync-skip').style.display = 'none';
-  document.getElementById('sync-title').textContent      = 'Loading Classes…';
-  document.getElementById('sync-subtitle').textContent   = '';
-  try {
-    await loadClasses();
-  } catch { /* loadClasses has its own error handling */ }
+async function _advanceToClasses() {
+  await loadClasses();
   showScreen('screen-classes');
   initClassesScreen();
 }
+
+// Skip button — go to classes immediately without waiting for sync to finish
+document.getElementById('btn-skip-sync').addEventListener('click', async () => {
+  if (_syncPollInterval) {
+    clearInterval(_syncPollInterval);
+    _syncPollInterval = null;
+  }
+  await _advanceToClasses();
+});
 
 /* ═══════════════════════════════════════════════════════════════════════
    CLASSES SCREEN
@@ -1439,18 +1470,115 @@ function renderStudentsList(present = []) {
     return;
   }
   list.innerHTML = STATE.students
-    .filter(s => s.status === 'Enrolled')
+    .filter(s => s.status === 'Enrolled' || s.status === 'Unenrolled')
     .map(s => {
       const isPresent = presentSet.has((s.name||'').toLowerCase());
       return `
-        <div class="student-item">
-          <div class="student-status-dot ${isPresent ? 'dot-present' : 'dot-absent'}"></div>
-          <span class="student-name-txt">${s.name}</span>
-          ${isPresent
-            ? '<span style="font-size:11px;color:#22C55E;font-weight:600">Present</span>'
-            : '<span style="font-size:11px;color:#555">—</span>'}
+        <div class="student-item" style="justify-content:space-between">
+          <div style="display:flex;align-items:center;gap:10px;flex:1;min-width:0">
+            <div class="student-status-dot ${isPresent ? 'dot-present' : 'dot-absent'}"></div>
+            <span class="student-name-txt" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+              ${s.name}
+            </span>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px;flex-shrink:0">
+            ${isPresent
+              ? '<span style="font-size:10px;color:#22C55E;font-weight:600">Present</span>'
+              : '<span style="font-size:10px;color:#555">—</span>'}
+            <button onclick="deleteStudent(${s.id}, '${s.name.replace(/'/g,"\\'")}')"
+                    title="Delete student"
+                    style="background:transparent;border:1px solid #333;color:#555;
+                           width:22px;height:22px;border-radius:4px;cursor:pointer;
+                           display:flex;align-items:center;justify-content:center;
+                           font-size:11px;transition:all .15s;flex-shrink:0"
+                    onmouseover="this.style.borderColor='#D32F2F';this.style.color='#D32F2F'"
+                    onmouseout="this.style.borderColor='#333';this.style.color='#555'">
+              <svg width="10" height="10" fill="none" stroke="currentColor"
+                   stroke-width="2" viewBox="0 0 24 24">
+                <path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                      stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </button>
+          </div>
         </div>`;
     }).join('');
+}
+
+async function deleteStudent(studentId, studentName) {
+  // Confirm before deleting
+  const confirmed = await showDeleteConfirm(studentName);
+  if (!confirmed) return;
+
+  try {
+    const res  = await fetch(`/api/local/delete_student/${studentId}`, {
+      method:  'DELETE',
+      headers: {'X-Instructor-Email': STATE.email}
+    });
+    const data = await res.json();
+
+    if (!res.ok) {
+      toast(data.error || 'Delete failed.', 'error');
+      return;
+    }
+
+    toast(`${studentName} deleted`, 'success');
+
+    // Refresh student list
+    const sRes = await fetch(
+      `/api/local/students/${STATE.currentClass.class_code}`,
+      { headers: {'X-Instructor-Email': STATE.email} }
+    );
+    STATE.students = await sRes.json();
+    renderStudentsList();
+
+  } catch {
+    toast('Network error during delete.', 'error');
+  }
+}
+
+function showDeleteConfirm(name) {
+  return new Promise(resolve => {
+    // Reuse the existing customConfirm pattern with a simple overlay
+    const overlay = document.createElement('div');
+    overlay.style.cssText = `position:fixed;inset:0;background:rgba(0,0,0,.7);
+      z-index:2000;display:flex;align-items:center;justify-content:center;
+      backdrop-filter:blur(4px)`;
+    overlay.innerHTML = `
+      <div style="background:#1a1a1a;border:1px solid #2a2a2a;border-radius:16px;
+                  padding:28px 32px;width:340px;text-align:center">
+        <div style="width:44px;height:44px;background:rgba(211,47,47,.15);border-radius:50%;
+                    display:flex;align-items:center;justify-content:center;margin:0 auto 16px;
+                    border:1px solid rgba(211,47,47,.3)">
+          <svg width="18" height="18" fill="none" stroke="#D32F2F" stroke-width="2" viewBox="0 0 24 24">
+            <path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                  stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <p style="font-size:15px;font-weight:700;color:#fff;margin-bottom:8px">Delete Student</p>
+        <p style="font-size:13px;color:#777;margin-bottom:24px;line-height:1.5">
+          Remove <strong style="color:#ccc">${name}</strong> from this class?<br>
+          Their face, photo, and signature will also be deleted<br>from local disk and Cloudinary.
+        </p>
+        <div style="display:flex;gap:10px">
+          <button id="del-cancel"
+            style="flex:1;padding:10px;border-radius:8px;border:1px solid #333;
+                   background:transparent;color:#888;font-family:inherit;
+                   font-size:13px;cursor:pointer">
+            Cancel
+          </button>
+          <button id="del-confirm"
+            style="flex:1;padding:10px;border-radius:8px;border:none;
+                   background:#D32F2F;color:#fff;font-family:inherit;
+                   font-weight:700;font-size:13px;cursor:pointer">
+            Delete
+          </button>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+    overlay.querySelector('#del-cancel').onclick  = () => { overlay.remove(); resolve(false); };
+    overlay.querySelector('#del-confirm').onclick = () => { overlay.remove(); resolve(true);  };
+    overlay.onclick = e => { if (e.target === overlay) { overlay.remove(); resolve(false); } };
+  });
 }
 
 /* ── Side tabs ────────────────────────────────────────────────────────── */

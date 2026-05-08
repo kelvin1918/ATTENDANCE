@@ -360,6 +360,101 @@ def _filter_today(classes, schedules):
     return today_classes, today_scheds
 
 
+
+# ══════════════════════════════════════════════════════════════════════════════
+# FACE SYNC — download missing face images from Cloudinary on login
+# ══════════════════════════════════════════════════════════════════════════════
+
+# Shared sync progress (same pattern as _load_progress)
+_sync_progress = {"done": True, "total": 0, "synced": 0, "skipped": 0, "error": None}
+_sync_lock     = threading.Lock()
+
+
+def _sync_faces_bg(instructor_id):
+    """
+    Background thread — runs after login on a fresh or existing PC.
+    For every student in the instructor's classes:
+      1. Check if faces/<CLASS_CODE>/Name.jpg already exists locally
+      2. If missing AND photo is a Cloudinary URL → download it
+      3. Update _sync_progress so the frontend can show a live counter
+    Does NOT re-download files that already exist (incremental sync).
+    """
+    global _sync_progress
+
+    try:
+        students = db.get_students_with_photos(instructor_id)
+    except Exception as e:
+        with _sync_lock:
+            _sync_progress = {"done": True, "total": 0, "synced": 0,
+                              "skipped": 0, "error": str(e)}
+        return
+
+    total   = len(students)
+    synced  = 0
+    skipped = 0
+
+    with _sync_lock:
+        _sync_progress = {"done": False, "total": total,
+                          "synced": 0, "skipped": 0, "error": None}
+
+    import urllib.request as _ur
+
+    for s in students:
+        class_code = s.get("class_code", "")
+        name       = s.get("name", "")
+        photo_url  = s.get("photo", "") or ""
+
+        # Build expected local face path
+        safe_name  = _safe_code(name.replace(" ", "_"))
+        faces_dir  = _class_faces_dir(class_code)
+
+        # Check if ANY image for this student already exists
+        existing = [
+            f for f in os.listdir(faces_dir)
+            if os.path.splitext(f)[0] == safe_name
+        ] if os.path.isdir(faces_dir) else []
+
+        if existing:
+            skipped += 1
+            with _sync_lock:
+                _sync_progress["skipped"] = skipped
+            continue
+
+        # Only download if it's a Cloudinary / HTTPS URL
+        if not photo_url.startswith("http"):
+            skipped += 1
+            with _sync_lock:
+                _sync_progress["skipped"] = skipped
+            continue
+
+        # Determine extension from URL
+        url_path = photo_url.split("?")[0]   # strip query params
+        ext      = os.path.splitext(url_path)[1] or ".jpg"
+        dest     = os.path.join(faces_dir, safe_name + ext)
+
+        try:
+            req = _ur.Request(photo_url, headers={"User-Agent": "Mozilla/5.0"})
+            with _ur.urlopen(req, timeout=10) as resp:
+                with open(dest, "wb") as out:
+                    out.write(resp.read())
+            synced += 1
+            print(f"[SYNC] ✓ {name} → {dest}")
+        except Exception as e:
+            print(f"[SYNC] ✗ {name}: {e}")
+            skipped += 1
+
+        with _sync_lock:
+            _sync_progress["synced"]  = synced
+            _sync_progress["skipped"] = skipped
+
+    with _sync_lock:
+        _sync_progress["done"]    = True
+        _sync_progress["synced"]  = synced
+        _sync_progress["skipped"] = skipped
+
+    print(f"[SYNC] Complete — {synced} downloaded, {skipped} skipped")
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # CORE ROUTES
 # ══════════════════════════════════════════════════════════════════════════════
@@ -408,16 +503,69 @@ def api_local_login():
     if user["status"] == "pending":
         return jsonify({"error": "Account pending approval. See administrator."}), 403
 
+    # ── Trigger face sync in background after successful login ───────────────
+    # This runs on every login but is incremental — already-downloaded faces
+    # are skipped instantly, so it's fast after the first run.
+    instructor_id = user.get("id")
+    if instructor_id:
+        with _sync_lock:
+            global _sync_progress
+            _sync_progress = {"done": False, "total": 0,
+                              "synced": 0, "skipped": 0, "error": None}
+        threading.Thread(
+            target=_sync_faces_bg,
+            args=(instructor_id,),
+            daemon=True
+        ).start()
+
     return jsonify({
-        "status": "ok",
-        "email":  user["email"],
-        "name":   user["name"],
+        "status":        "ok",
+        "email":         user["email"],
+        "name":          user["name"],
+        "instructor_id": instructor_id,
+        "sync_started":  True,
     })
 
 
 # ══════════════════════════════════════════════════════════════════════════════
 # CLASSES — today-filtered, with offline cache fallback
 # ══════════════════════════════════════════════════════════════════════════════
+
+@app.route("/api/local/sync_progress")
+def api_sync_progress():
+    """
+    Polled by the frontend during the post-login sync screen.
+    Returns { done, total, synced, skipped, error }
+    When done=true → proceed to class list.
+    """
+    with _sync_lock:
+        return jsonify(dict(_sync_progress))
+
+
+@app.route("/api/local/sync_faces", methods=["POST"])
+def api_sync_faces():
+    """
+    Manual re-sync trigger (e.g. instructor presses 'Sync Now' button).
+    Kicks off _sync_faces_bg in a background thread and returns immediately.
+    """
+    email = request.headers.get("X-Instructor-Email", "")
+    user  = db.get_instructor_by_email(email) if email else None
+    if not user:
+        return jsonify({"error": "unauthorized"}), 401
+
+    with _sync_lock:
+        global _sync_progress
+        _sync_progress = {"done": False, "total": 0,
+                          "synced": 0, "skipped": 0, "error": None}
+
+    threading.Thread(
+        target=_sync_faces_bg,
+        args=(user["id"],),
+        daemon=True
+    ).start()
+
+    return jsonify({"status": "sync_started"})
+
 
 @app.route("/api/local/classes")
 def api_local_classes():
@@ -473,114 +621,100 @@ def api_local_rooms():
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# FACE SYNC — download missing face images from Cloudinary on login
+# STUDENTS — for selected class
 # ══════════════════════════════════════════════════════════════════════════════
 
-@app.route("/api/local/sync_faces", methods=["POST"])
-def api_local_sync_faces():
+@app.route("/api/local/delete_student/<int:student_id>", methods=["DELETE"])
+def api_local_delete_student(student_id):
     """
-    Called once after login, before the class list is shown.
-
-    Steps:
-      1. Fetch all students belonging to this instructor from DB.
-      2. For each student whose photo is a Cloudinary URL:
-           - Check if faces/<CLASS_CODE>/<Name>.jpg already exists locally.
-           - If NOT → download the image and save it.
-      3. Delete local face files that have NO matching DB record
-         (student was deleted — orphan cleanup).
-      4. Return a summary so the UI can show a progress screen.
-
-    Response:
-        { downloaded: N, skipped: N, deleted: N, failed: N,
-          total: N, errors: ["..."] }
+    Deletes a student completely:
+      1. Fetches photo/signature paths from DB BEFORE deleting
+      2. Deletes the DB row (returns file paths)
+      3. Removes Cloudinary assets (photo + signature)
+      4. Removes local face file from faces/<CLASS_CODE>/
+      5. Removes local student photo and signature files
+    Safe to call even if files don't exist — all steps are individually
+    guarded so one failure doesn't block the others.
     """
     email = request.headers.get("X-Instructor-Email", "")
     if not email:
         return jsonify({"error": "unauthorized"}), 401
 
-    instructor = db.get_instructor_by_email(email)
-    if not instructor:
-        return jsonify({"error": "instructor not found"}), 404
+    # ── Step 1+2: DB delete (returns file info) ───────────────────────────
+    student = db.delete_student(student_id)
+    if not student:
+        return jsonify({"error": "Student not found"}), 404
 
-    instructor_id = instructor["id"]
+    name       = student.get("name", "")
+    class_code = student.get("class_code", "")
+    photo      = student.get("photo", "") or ""
+    signature  = student.get("signature", "") or ""
+    safe_base  = _safe_code(name.replace(" ", "_"))
+    safe_class = _safe_code(class_code)
 
-    try:
-        students = db.get_instructor_face_urls(instructor_id)
-    except Exception as e:
-        return jsonify({"error": f"DB error: {e}"}), 500
+    deleted_cloud = []
+    deleted_local = []
+    errors        = []
 
-    # Build a set of expected local filenames: faces/<CLASS>/<Name>.jpg
-    expected_files = set()   # absolute paths that SHOULD exist
-    downloaded = skipped = failed = deleted = 0
-    errors = []
+    # ── Step 3: Cloudinary cleanup ────────────────────────────────────────
+    if CLOUDINARY_ENABLED:
+        for cld_path, label in [
+            (f"students/{safe_class}/{safe_base}",        "photo"),
+            (f"signatures/{safe_class}/{safe_base}_sig",  "signature"),
+        ]:
+            try:
+                result = cloudinary.uploader.destroy(cld_path)
+                if result.get("result") == "ok":
+                    deleted_cloud.append(label)
+                    print(f"[CLOUD] ✓ Deleted {cld_path}")
+                else:
+                    print(f"[CLOUD] ✗ Not found on Cloudinary: {cld_path}")
+            except Exception as e:
+                errors.append(f"Cloudinary {label}: {e}")
+                print(f"[CLOUD] ✗ Error deleting {cld_path}: {e}")
 
-    import urllib.request as _urllib
+    # ── Step 4: Local face file ───────────────────────────────────────────
+    faces_dir = _class_faces_dir(class_code)
+    for ext in (".jpg", ".jpeg", ".png"):
+        face_path = os.path.join(faces_dir, safe_base + ext)
+        if os.path.isfile(face_path):
+            try:
+                os.remove(face_path)
+                deleted_local.append(f"faces/{safe_base}{ext}")
+                print(f"[LOCAL] ✓ Deleted face: {face_path}")
+            except Exception as e:
+                errors.append(f"face file: {e}")
 
-    for s in students:
-        photo_url  = (s.get("photo") or "").strip()
-        class_code = (s.get("class_code") or "").strip()
-        name       = (s.get("name") or "").strip()
+    # ── Step 5: Local student photo + signature files ─────────────────────
+    for local_path in [photo, signature]:
+        if local_path and not local_path.startswith("http") and os.path.isfile(local_path):
+            try:
+                os.remove(local_path)
+                deleted_local.append(local_path)
+                print(f"[LOCAL] ✓ Deleted: {local_path}")
+            except Exception as e:
+                errors.append(f"local file {local_path}: {e}")
 
-        if not photo_url or not class_code or not name:
-            continue
-
-        safe_name  = name.replace(" ", "_")
-        faces_dir  = _class_faces_dir(class_code)
-        local_path = os.path.join(faces_dir, safe_name + ".jpg")
-        expected_files.add(os.path.abspath(local_path))
-
-        # Only download if it's a URL and file is missing
-        if not photo_url.startswith("http"):
-            skipped += 1
-            continue
-
-        if os.path.isfile(local_path):
-            skipped += 1
-            continue
-
-        # Download from Cloudinary
+    # ── Also remove from live recognizer if camera is running ─────────────
+    if recognizer and name:
         try:
-            _urllib.urlretrieve(photo_url, local_path)
-            downloaded += 1
-            print(f"[SYNC] ✓ Downloaded: {name} → {local_path}")
+            with recognizer._lock:
+                if name in recognizer.known_names:
+                    idx = recognizer.known_names.index(name)
+                    recognizer.known_names.pop(idx)
+                    recognizer.known_encodings.pop(idx)
+                    print(f"[FACES] ✓ Removed {name} from live recognizer")
         except Exception as e:
-            failed += 1
-            errors.append(f"{name}: {e}")
-            print(f"[SYNC] ✗ Failed: {name} — {e}")
+            errors.append(f"recognizer removal: {e}")
 
-    # ── Orphan cleanup: delete local face files with no DB record ─────────────
-    # Scan every faces/<CLASS>/ folder this instructor owns
-    class_codes = {s.get("class_code") for s in students if s.get("class_code")}
-    for cc in class_codes:
-        faces_dir = _class_faces_dir(cc)
-        if not os.path.isdir(faces_dir):
-            continue
-        for fname in os.listdir(faces_dir):
-            if not fname.lower().endswith((".jpg", ".jpeg", ".png")):
-                continue
-            abs_path = os.path.abspath(os.path.join(faces_dir, fname))
-            if abs_path not in expected_files:
-                try:
-                    os.remove(abs_path)
-                    deleted += 1
-                    print(f"[SYNC] 🗑 Orphan removed: {fname}")
-                except Exception as e:
-                    errors.append(f"delete {fname}: {e}")
-
-    total = len(students)
     return jsonify({
-        "total":      total,
-        "downloaded": downloaded,
-        "skipped":    skipped,
-        "deleted":    deleted,
-        "failed":     failed,
-        "errors":     errors,
+        "status":        "deleted",
+        "name":          name,
+        "deleted_cloud": deleted_cloud,
+        "deleted_local": deleted_local,
+        "errors":        errors,
     })
 
-
-# ══════════════════════════════════════════════════════════════════════════════
-# STUDENTS — for selected class
-# ══════════════════════════════════════════════════════════════════════════════
 
 @app.route("/api/local/students/<class_code>")
 def api_local_students(class_code):

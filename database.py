@@ -9,9 +9,9 @@ Matches the updated schema:
     schedules  — class_code (FK)
 
 Requirements:
-    pip install psycopg2-binary python-dotenv
+    pip install psycopg2-binary
 
-Credentials are loaded from .env — never hardcoded here.
+Update DB_CONFIG below to match your PostgreSQL setup.
 """
 
 import psycopg2
@@ -19,18 +19,21 @@ import psycopg2.extras
 from datetime import datetime
 import os
 
-# Load .env file if present (local dev). On Render, env vars are set in dashboard.
-try:
-    from dotenv import load_dotenv
-    load_dotenv()
-except ImportError:
-    pass  # python-dotenv not installed — env vars must be set another way
-
 
 # ── CONNECTION CONFIG ─────────────────────────────────────────────────────────
-# All values come from environment variables.
-# Local: set in .env file.  Render: set in dashboard Environment tab.
-# NEVER hardcode credentials in this file.
+# ALL credentials are read from environment variables.
+# Local development: put these in a .env file (never commit .env to GitHub).
+# Render deployment: set them in the Render dashboard → Environment tab.
+#
+# Required variables:
+#   DB_HOST      = your Neon host
+#   DB_PORT      = 5432
+#   DB_NAME      = neondb
+#   DB_USER      = neondb_owner
+#   DB_PASSWORD  = your Neon password
+#
+# Optional (falls back to Neon if not set):
+#   DB_HOST_LOCAL, DB_NAME_LOCAL, DB_USER_LOCAL, DB_PASSWORD_LOCAL
 
 DB_CONFIG = {
     "host":     os.environ.get("DB_HOST",     ""),
@@ -266,6 +269,31 @@ def get_students(class_code):
     return rows
 
 
+def get_students_with_photos(instructor_id):
+    """
+    Return all students for all classes belonging to this instructor,
+    including their photo and signature URLs/paths.
+    Used by the local sync-on-login to download face images from Cloudinary.
+    Only returns students with a non-empty photo field.
+    """
+    conn = get_db()
+    cur  = get_cursor(conn)
+    cur.execute(
+        """SELECT s.id, s.class_code, s.name, s.sr_code, s.photo, s.signature
+           FROM students s
+           JOIN classes c ON c.id = s.class_code
+           WHERE c.instructor_id = %s
+             AND s.photo IS NOT NULL
+             AND s.photo != ''
+             AND s.status != 'Dropped'
+           ORDER BY s.class_code, s.name""",
+        (instructor_id,)
+    )
+    rows = cur.fetchall()
+    cur.close(); conn.close()
+    return [dict(r) for r in rows]
+
+
 def get_student(student_db_id):
     """Get one student by their auto-increment id."""
     conn = get_db()
@@ -326,51 +354,31 @@ def edit_student(student_db_id, name=None, address=None, number=None,
 
 def delete_student(student_db_id):
     """
-    Delete a student row and return their photo/signature paths so the
-    caller can clean up Cloudinary and local disk files.
-    Returns dict with keys: photo, signature, name, class_code (or None).
+    Delete a student from the DB and return their file paths so the caller
+    can clean up Cloudinary and local disk files.
+
+    Returns dict: { "photo": str, "signature": str, "name": str,
+                    "class_code": str, "sr_code": str }
+    Returns None if student not found.
     """
     conn = get_db()
     cur  = get_cursor(conn)
-    # Fetch first so caller can clean up files
+
+    # Fetch file paths BEFORE deleting so the caller can clean up
     cur.execute(
-        "SELECT name, class_code, photo, signature FROM students WHERE id = %s",
+        "SELECT name, class_code, sr_code, photo, signature FROM students WHERE id = %s",
         (student_db_id,)
     )
-    row = cur.fetchone()
+    student = cur.fetchone()
+
+    if not student:
+        cur.close(); conn.close()
+        return None
+
     cur.execute("DELETE FROM students WHERE id = %s", (student_db_id,))
     conn.commit()
     cur.close(); conn.close()
-    return dict(row) if row else None
-
-
-def get_instructor_face_urls(instructor_id: str) -> list:
-    """
-    Return all students across all classes belonging to an instructor.
-    Used by the local sync route to download missing face images from Cloudinary.
-
-    Returns list of dicts:
-        [{"id": 1, "name": "John Doe", "class_code": "BET_241",
-          "photo": "https://res.cloudinary.com/...",
-          "signature": "https://res.cloudinary.com/..."}, ...]
-    """
-    conn = get_db()
-    cur  = get_cursor(conn)
-    cur.execute(
-        """
-        SELECT s.id, s.name, s.class_code, s.photo, s.signature
-        FROM   students s
-        JOIN   classes  c ON c.id = s.class_code
-        WHERE  c.instructor_id = %s
-          AND  s.photo IS NOT NULL
-          AND  s.photo <> ''
-        ORDER  BY s.class_code, s.name
-        """,
-        (instructor_id,)
-    )
-    rows = cur.fetchall()
-    cur.close(); conn.close()
-    return [dict(r) for r in rows]
+    return dict(student)
 
 
 # ── ATTENDANCE ────────────────────────────────────────────────────────────────
