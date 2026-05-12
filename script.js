@@ -355,7 +355,7 @@ async function renderDashboard() {
 
         <div class="bg-white p-8 rounded-[3rem] border border-gray-100 shadow-sm mb-10">
              <h3 class="text-lg font-black text-gray-800 mb-1 flex items-center"><i data-lucide="pie-chart" class="w-5 h-5 mr-2 text-[#D32F2F]"></i> Absence Rate by Class</h3>
-             <p class="text-[10px] text-gray-400 font-bold uppercase tracking-widest mb-6">3 most recently active classes · avg absence per session</p>
+             <p class="text-[10px] text-gray-400 font-bold uppercase tracking-widest mb-6">3 most recently active classes · average absence per session</p>
              <div id="chartGrid" class="grid grid-cols-1 md:grid-cols-3 gap-6">
                  <div class="flex flex-col items-center">
                      <div class="h-[220px] w-full"><canvas id="absentChart0"></canvas></div>
@@ -493,7 +493,7 @@ function renderRecentActivityList(records, totalCount = null) {
         const dispTime = timeRaw
             ? new Date('1970-01-01T' + timeRaw).toLocaleTimeString([], { hour:'2-digit', minute:'2-digit', second:'2-digit' })
             : '';
-        const filename = `Log_${_mo}-${_dy}-${_yr}${_t ? '_'+_t : ''}_Report.pdf`;
+        const filename = `${_mo}-${_dy}-${_yr}${_t ? '_'+_t : ''}_Report.pdf`;
 
         return `
         <div class="flex items-center justify-between p-4 bg-gray-50 rounded-2xl cursor-pointer hover:bg-red-50 transition group"
@@ -572,7 +572,7 @@ function initCharts(data = []) {
                 c.font = '700 8px Inter, sans-serif';
                 c.fillStyle = '#9CA3AF';
                 c.textAlign = 'center';
-                c.fillText('AVG ABSENCE', cx, cy + 11);
+                c.fillText('AVERAGE ABSENCE', cx, cy + 11);
                 c.restore();
             }
         };
@@ -605,7 +605,7 @@ function initCharts(data = []) {
                             title: () => d.name,
                             label: item => item.dataIndex === 0 ? [
                                 `  Absence Rate : ${pct}%`,
-                                `  Avg / Session: ${d.avg_absent} students`,
+                                `  Average / Session: ${d.avg_absent} students`,
                                 `  Total Absences: ${d.total_absent}`,
                                 `  Sessions      : ${d.total_sessions}`
                             ] : [`  Present Rate : ${Math.round(100-pct)}%`]
