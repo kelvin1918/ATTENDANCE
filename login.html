@@ -20,7 +20,6 @@
             padding-right: 18%;
         }
 
-        /* Modal Card */
         .modal-card { 
             background: white; 
             padding: 45px; 
@@ -32,120 +31,47 @@
         }
 
         @media (max-width: 768px) {
-            body {
-                justify-content: center !important;
-                align-items: center !important;
-                padding: 24px !important;
-            }
-            .modal-card {
-                width: 100% !important;
-                max-width: 420px !important;
-                padding: 32px 24px !important;
-                border-radius: 20px !important;
-            }
-            input {
-                font-size: 16px !important;
-            }
+            body { justify-content: center !important; align-items: center !important; padding: 24px !important; }
+            .modal-card { width: 100% !important; max-width: 420px !important; padding: 32px 24px !important; border-radius: 20px !important; }
+            input { font-size: 16px !important; }
         }
 
-        .logo { 
-            color: var(--red); 
-            font-weight: 800; 
-            font-size: 2rem; 
-            margin-bottom: 5px; 
-            letter-spacing: 1px;
-        }
-
-        h2 { 
-            margin-bottom: 30px; 
-            color: #333; 
-            font-weight: 600;
-            font-size: 1.2rem;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-        }
+        .logo { color: var(--red); font-weight: 800; font-size: 2rem; margin-bottom: 5px; letter-spacing: 1px; }
+        h2 { margin-bottom: 30px; color: #333; font-weight: 600; font-size: 1.2rem; text-transform: uppercase; letter-spacing: 1px; }
 
         input { 
-            width: 100%; 
-            padding: 14px; 
-            margin: 10px 0; 
-            border: 1px solid #eee; 
-            border-radius: 12px; 
-            box-sizing: border-box; 
-            background: #f9f9f9;
-            font-size: 1rem;
-            outline: none;
-            transition: 0.3s;
+            width: 100%; padding: 14px; margin: 10px 0; 
+            border: 1px solid #eee; border-radius: 12px; 
+            box-sizing: border-box; background: #f9f9f9;
+            font-size: 1rem; outline: none; transition: 0.3s;
         }
-
-        input:focus {
-            border-color: var(--red);
-            background: white;
-            box-shadow: 0 0 0 4px rgba(211, 47, 47, 0.05);
-        }
+        input:focus { border-color: var(--red); background: white; box-shadow: 0 0 0 4px rgba(211,47,47,0.05); }
 
         .btn-red { 
-            width: 100%; 
-            padding: 14px; 
-            background: var(--red); 
-            color: white; 
-            border: none; 
-            border-radius: 12px; 
-            cursor: pointer; 
-            font-weight: bold; 
-            margin-top: 20px; 
-            font-size: 1rem;
-            transition: 0.3s;
+            width: 100%; padding: 14px; background: var(--red); 
+            color: white; border: none; border-radius: 12px; 
+            cursor: pointer; font-weight: bold; margin-top: 20px; 
+            font-size: 1rem; transition: 0.3s;
         }
-
         .btn-red:hover { background: #b71c1c; transform: translateY(-2px); }
+        .btn-red:disabled { background: #ccc; cursor: not-allowed; transform: none; }
 
-        .btn-link { 
-            width: 100%; 
-            background: none; 
-            border: none; 
-            color: #888; 
-            margin-top: 20px; 
-            cursor: pointer; 
-            text-decoration: none; 
-            font-size: 0.85rem; 
-        }
-
+        .btn-link { width: 100%; background: none; border: none; color: #888; margin-top: 20px; cursor: pointer; text-decoration: none; font-size: 0.85rem; }
+        .forgot-link { display: block; margin-top: 10px; font-size: 0.8rem; color: #888; cursor: pointer; text-decoration: underline; }
         .hidden { display: none !important; }
-
         .fade-in { animation: fadeIn 0.4s ease-out; }
-        @keyframes fadeIn {
-            from { opacity: 0; transform: scale(0.95); }
-            to   { opacity: 1; transform: scale(1); }
-        }
 
-        /* Forgot Password link */
-        .forgot-link {
-            display: block;
-            margin-top: 10px;
-            font-size: 0.8rem;
-            color: #888;
-            cursor: pointer;
-            text-decoration: underline;
-        }
+        @keyframes fadeIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
 
         /* Floating Alert */
         #custom-alert {
-            position: fixed;
-            top: 20px;
-            left: 50%;
+            position: fixed; top: 20px; left: 50%;
             transform: translateX(-50%) translateY(-100px);
-            background: #333;
-            color: white;
-            padding: 12px 25px;
-            border-radius: 10px;
-            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
-            z-index: 9999;
-            transition: transform 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            font-weight: 500;
+            background: #333; color: white; padding: 12px 25px;
+            border-radius: 10px; box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+            z-index: 9999; transition: transform 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+            display: flex; align-items: center; gap: 10px; font-weight: 500;
+            max-width: 90vw; text-align: center;
         }
         #custom-alert.show { transform: translateX(-50%) translateY(0); }
         .alert-success { border-left: 5px solid #4caf50; }
@@ -154,17 +80,16 @@
 
         /* OTP Boxes */
         .otp-in {
-            width: 45px; 
-            height: 50px; 
-            text-align: center; 
-            font-size: 1.2rem; 
-            font-weight: bold;
-            border: 2px solid #ddd;
-            border-radius: 8px;
-            outline: none;
-            transition: border-color 0.3s;
+            width: 45px; height: 50px; text-align: center; 
+            font-size: 1.2rem; font-weight: bold;
+            border: 2px solid #ddd; border-radius: 8px;
+            outline: none; transition: border-color 0.3s;
         }
         .otp-in:focus { border-color: var(--red); }
+
+        /* OTP timer */
+        #otp-timer { font-size: 0.78rem; color: #888; margin-top: 10px; }
+        #otp-timer span { color: var(--red); font-weight: bold; }
     </style>
 </head>
 <body>
@@ -174,18 +99,15 @@
         <span id="alert-msg"></span>
     </div>
 
-    <!-- ALL VIEWS ARE INSIDE THE CARD -->
     <div class="modal-card fade-in" id="main-card">
 
         <!-- LOGIN VIEW -->
         <div id="view-login">
             <div class="logo">LOG IN</div>
             <h2>Instructor</h2>
-            <input type="email" id="ins-email" placeholder="Email Address"
-                autocomplete="off" spellcheck="false">
-            <input type="password" id="ins-pass" placeholder="Password"
-                autocomplete="new-password">
-            <button class="btn-red" onclick="handleLogin()">Sign In</button>
+            <input type="email" id="ins-email" placeholder="Email Address" autocomplete="off" spellcheck="false">
+            <input type="password" id="ins-pass" placeholder="Password" autocomplete="new-password">
+            <button class="btn-red" id="btn-signin" onclick="handleLogin()">Sign In</button>
             <button class="btn-link" onclick="toggleMainView('reg')">Don't have an account? <b>Register</b></button>
             <a class="forgot-link" onclick="toggleMainView('forgot-email')">Forgot Password?</a>
         </div>
@@ -194,35 +116,25 @@
         <div id="view-reg" class="hidden">
             <div class="logo">REGISTER</div>
             <h2>New Instructor</h2>
-            <p style="font-size: 0.8rem; color: #888; margin-bottom: 15px;">Admin approval required.</p>
-            <input type="text"  id="reg-name"  placeholder="Full Name">
-            <input type="email" id="reg-email" placeholder="Email Address">
-            <input type="password" id="reg-pass" placeholder="Password">
+            <p style="font-size:0.8rem;color:#888;margin-bottom:15px;">Admin approval required.</p>
+            <input type="text"     id="reg-name"  placeholder="Full Name">
+            <input type="email"    id="reg-email" placeholder="Email Address">
+            <input type="password" id="reg-pass"  placeholder="Password">
             <button class="btn-red" onclick="handleRegister()">Register</button>
             <button class="btn-link" onclick="toggleMainView('login')">Already have an account? <b>Login</b></button>
         </div>
 
-        <!-- FORGOT PASSWORD — EMAIL -->
+        <!-- FORGOT PASSWORD — EMAIL INPUT -->
         <div id="view-forgot-email" class="hidden">
             <div class="logo" style="font-size:1.4rem;">FORGOT?</div>
-            <h2 style="margin-bottom:10px;">Reset via Email</h2>
+            <h2 style="margin-bottom:10px;">Reset Password</h2>
+            <p style="font-size:0.8rem;color:#888;margin-bottom:10px;">
+                Enter your registered email address.<br>We'll send a one-time code to verify it's you.
+            </p>
             <input type="email" id="reset-email-input" placeholder="Enter Email Address">
-            <button class="btn-red" style="margin-top:10px;" onclick="triggerOTP('email')">RESET PASSWORD</button>
-            <div style="display:flex; justify-content:space-between; margin-top:20px;">
-                <a onclick="toggleMainView('login')" style="cursor:pointer; font-size:0.8rem; color:#888;">⬅ Back to Login</a>
-                <a onclick="toggleMainView('forgot-phone')" style="cursor:pointer; font-size:0.8rem; color:var(--red); text-decoration:underline;">Use Number Instead</a>
-            </div>
-        </div>
-
-        <!-- FORGOT PASSWORD — PHONE -->
-        <div id="view-forgot-phone" class="hidden">
-            <div class="logo" style="font-size:1.4rem;">FORGOT?</div>
-            <h2 style="margin-bottom:10px;">Reset via Phone</h2>
-            <input type="text" id="reset-phone-input" placeholder="Enter Phone Number">
-            <button class="btn-red" style="margin-top:10px;" onclick="triggerOTP('phone')">RESET PASSWORD</button>
-            <div style="display:flex; justify-content:space-between; margin-top:20px;">
-                <a onclick="toggleMainView('login')" style="cursor:pointer; font-size:0.8rem; color:#888;">⬅ Back to Login</a>
-                <a onclick="toggleMainView('forgot-email')" style="cursor:pointer; font-size:0.8rem; color:var(--red); text-decoration:underline;">Use Email Instead</a>
+            <button class="btn-red" id="btn-send-otp" style="margin-top:10px;" onclick="sendOTP()">SEND OTP</button>
+            <div style="display:flex;justify-content:space-between;margin-top:20px;">
+                <a onclick="toggleMainView('login')" style="cursor:pointer;font-size:0.8rem;color:#888;">⬅ Back to Login</a>
             </div>
         </div>
 
@@ -230,17 +142,22 @@
         <div id="view-otp" class="hidden">
             <div class="logo" style="font-size:1.4rem;">OTP</div>
             <h2>Password Reset</h2>
-            <p style="font-size:0.8rem; margin-bottom:15px; color:#888;">Code sent to: <b id="target-display"></b></p>
-            <div style="display:flex; gap:8px; justify-content:center; margin-bottom:20px;">
-                <input type="text" class="otp-in" maxlength="1" oninput="moveNext(this, 0)">
-                <input type="text" class="otp-in" maxlength="1" oninput="moveNext(this, 1)">
-                <input type="text" class="otp-in" maxlength="1" oninput="moveNext(this, 2)">
-                <input type="text" class="otp-in" maxlength="1" oninput="moveNext(this, 3)">
-                <input type="text" class="otp-in" maxlength="1" oninput="moveNext(this, 4)">
+            <p style="font-size:0.8rem;margin-bottom:15px;color:#888;">
+                A 5-digit code was sent to<br><b id="target-display" style="color:#333;"></b>
+            </p>
+            <div style="display:flex;gap:8px;justify-content:center;margin-bottom:20px;">
+                <input type="text" inputmode="numeric" class="otp-in" maxlength="1" oninput="moveNext(this,0)">
+                <input type="text" inputmode="numeric" class="otp-in" maxlength="1" oninput="moveNext(this,1)">
+                <input type="text" inputmode="numeric" class="otp-in" maxlength="1" oninput="moveNext(this,2)">
+                <input type="text" inputmode="numeric" class="otp-in" maxlength="1" oninput="moveNext(this,3)">
+                <input type="text" inputmode="numeric" class="otp-in" maxlength="1" oninput="moveNext(this,4)">
             </div>
-            <button class="btn-red" onclick="validateOTP()">CONTINUE</button>
-            <p style="font-size:0.75rem; margin-top:15px; color:#888;">
-                Didn't receive the code? <span onclick="resendOTP()" style="text-decoration:underline; cursor:pointer; color:var(--red); font-weight:bold;">Resend</span>
+            <div id="otp-timer">Code expires in <span id="otp-countdown">10:00</span></div>
+            <button class="btn-red" id="btn-verify-otp" onclick="validateOTP()">CONTINUE</button>
+            <p style="font-size:0.75rem;margin-top:15px;color:#888;">
+                Didn't receive the code? 
+                <span id="resend-link" onclick="resendOTP()" style="text-decoration:underline;cursor:pointer;color:var(--red);font-weight:bold;">Resend</span>
+                <span id="resend-wait" class="hidden" style="color:#bbb;">Resend in <span id="resend-sec">30</span>s</span>
             </p>
         </div>
 
@@ -248,7 +165,7 @@
         <div id="view-new-pass" class="hidden">
             <div class="logo" style="font-size:1.4rem;">NEW PASS</div>
             <h2>Set New Password</h2>
-            <p style="font-size:0.75rem; color:#888; margin-bottom:5px;">Enter at least 4 characters</p>
+            <p style="font-size:0.75rem;color:#888;margin-bottom:5px;">Enter at least 4 characters</p>
             <input type="password" id="new-p-val"     placeholder="New Password">
             <input type="password" id="confirm-p-val" placeholder="Confirm Password">
             <button class="btn-red" onclick="finalizeReset()">RESET PASSWORD</button>
@@ -259,26 +176,31 @@
     <script>
         // ── VIEW SWITCHER ────────────────────────────────────────────────────
         function toggleMainView(viewName) {
-            ['login','reg','forgot-email','forgot-phone','otp','new-pass'].forEach(v => {
+            ['login','reg','forgot-email','otp','new-pass'].forEach(v => {
                 document.getElementById('view-' + v).classList.add('hidden');
             });
             document.getElementById('view-' + viewName).classList.remove('hidden');
         }
 
         // ── FLOATING ALERT ───────────────────────────────────────────────────
-        function showAlert(msg, type = 'info') {
+        let _alertTimer = null;
+        function showAlert(msg, type = 'info', duration = 4000) {
             const box = document.getElementById('custom-alert');
-            const txt = document.getElementById('alert-msg');
             box.className = `alert-${type} show`;
-            txt.innerText = msg;
-            setTimeout(() => box.classList.remove('show'), 3000);
+            document.getElementById('alert-msg').innerText = msg;
+            if (_alertTimer) clearTimeout(_alertTimer);
+            _alertTimer = setTimeout(() => box.classList.remove('show'), duration);
         }
 
-        // ── OTP HELPERS ──────────────────────────────────────────────────────
-        let generatedOTP = '';
-        let resetTarget  = '';
+        // ── OTP STATE ────────────────────────────────────────────────────────
+        let _resetEmail    = '';
+        let _otpVerified   = false;
+        let _countdownInt  = null;
+        let _resendInt     = null;
 
+        // ── OTP DIGIT INPUT HELPERS ──────────────────────────────────────────
         function moveNext(current, index) {
+            current.value = current.value.replace(/\D/g, '');  // digits only
             const inputs = document.querySelectorAll('.otp-in');
             if (current.value.length >= 1 && index < inputs.length - 1)
                 inputs[index + 1].focus();
@@ -291,85 +213,227 @@
             });
         });
 
-        function triggerOTP(type) {
-            const val = type === 'email'
-                ? document.getElementById('reset-email-input').value
-                : document.getElementById('reset-phone-input').value;
-            if (!val) return showAlert('Please enter your details!', 'error');
-            resetTarget  = val;
-            generatedOTP = Math.floor(10000 + Math.random() * 90000).toString();
-            document.getElementById('target-display').innerText = resetTarget;
-            showAlert(`OTP Sent! (Demo Code: ${generatedOTP})`, 'success');
-            toggleMainView('otp');
+        // ── OTP COUNTDOWN TIMER (10 min) ─────────────────────────────────────
+        function startOTPCountdown(seconds = 600) {
+            if (_countdownInt) clearInterval(_countdownInt);
+            const el = document.getElementById('otp-countdown');
+            let remaining = seconds;
+            _countdownInt = setInterval(() => {
+                remaining--;
+                const m = Math.floor(remaining / 60);
+                const s = remaining % 60;
+                if (el) el.textContent = `${m}:${String(s).padStart(2,'0')}`;
+                if (remaining <= 0) {
+                    clearInterval(_countdownInt);
+                    if (el) el.textContent = 'Expired';
+                    showAlert('OTP has expired. Please request a new one.', 'error');
+                    document.getElementById('btn-verify-otp').disabled = true;
+                }
+            }, 1000);
         }
 
-        function resendOTP() {
-            generatedOTP = Math.floor(10000 + Math.random() * 90000).toString();
-            showAlert(`New OTP Sent: ${generatedOTP}`, 'info');
+        // ── RESEND COOLDOWN (30 s) ───────────────────────────────────────────
+        function startResendCooldown() {
+            const resendLink = document.getElementById('resend-link');
+            const resendWait = document.getElementById('resend-wait');
+            const secEl      = document.getElementById('resend-sec');
+            resendLink.classList.add('hidden');
+            resendWait.classList.remove('hidden');
+            let secs = 30;
+            if (_resendInt) clearInterval(_resendInt);
+            _resendInt = setInterval(() => {
+                secs--;
+                if (secEl) secEl.textContent = secs;
+                if (secs <= 0) {
+                    clearInterval(_resendInt);
+                    resendLink.classList.remove('hidden');
+                    resendWait.classList.add('hidden');
+                }
+            }, 1000);
         }
 
-        function validateOTP() {
-            const inputs = document.querySelectorAll('.otp-in');
-            let entered  = '';
-            inputs.forEach(i => entered += i.value);
-            if (entered === generatedOTP) {
-                showAlert('OTP Verified!', 'success');
-                toggleMainView('new-pass');
-            } else {
-                showAlert('Invalid Code! Try again.', 'error');
-                inputs.forEach(i => i.value = '');
-                inputs[0].focus();
+        // ── SEND OTP (calls server — OTP never shown in browser) ─────────────
+        async function sendOTP() {
+            const email = document.getElementById('reset-email-input').value.trim();
+            if (!email) return showAlert('Please enter your email address.', 'error');
+            if (!email.includes('@')) return showAlert('Invalid email format.', 'error');
+
+            const btn = document.getElementById('btn-send-otp');
+            btn.disabled    = true;
+            btn.textContent = 'Sending...';
+
+            try {
+                const res  = await fetch('/api/send_otp', {
+                    method:  'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body:    JSON.stringify({ email })
+                });
+                const data = await res.json();
+
+                if (!res.ok) {
+                    showAlert(data.error || 'Failed to send OTP.', 'error');
+                    btn.disabled = false; btn.textContent = 'SEND OTP';
+                    return;
+                }
+
+                _resetEmail = email;
+                document.getElementById('target-display').textContent = email;
+
+                // Show OTP screen — clear boxes
+                document.querySelectorAll('.otp-in').forEach(i => i.value = '');
+                document.getElementById('btn-verify-otp').disabled = false;
+                toggleMainView('otp');
+                startOTPCountdown(600);
+                startResendCooldown();
+
+                if (data.warn) {
+                    showAlert(data.warn, 'info', 6000);
+                } else {
+                    showAlert('OTP sent! Check your email inbox.', 'success');
+                }
+            } catch {
+                showAlert('Server error. Please try again.', 'error');
+            }
+
+            btn.disabled = false; btn.textContent = 'SEND OTP';
+        }
+
+        async function resendOTP() {
+            if (!_resetEmail) return;
+            startResendCooldown();
+            document.querySelectorAll('.otp-in').forEach(i => i.value = '');
+            document.getElementById('btn-verify-otp').disabled = false;
+
+            try {
+                const res  = await fetch('/api/send_otp', {
+                    method:  'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body:    JSON.stringify({ email: _resetEmail })
+                });
+                const data = await res.json();
+                startOTPCountdown(600);
+                showAlert(data.warn || 'New OTP sent to your email.', data.warn ? 'info' : 'success');
+            } catch {
+                showAlert('Could not resend. Try again.', 'error');
             }
         }
 
-        function finalizeReset() {
+        // ── VALIDATE OTP (server verifies — browser never knows the code) ────
+        async function validateOTP() {
+            const inputs  = document.querySelectorAll('.otp-in');
+            let entered   = '';
+            inputs.forEach(i => entered += i.value.trim());
+
+            if (entered.length < 5) return showAlert('Enter all 5 digits.', 'error');
+
+            const btn = document.getElementById('btn-verify-otp');
+            btn.disabled = true; btn.textContent = 'Verifying...';
+
+            try {
+                const res  = await fetch('/api/verify_otp', {
+                    method:  'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body:    JSON.stringify({ email: _resetEmail, otp: entered })
+                });
+                const data = await res.json();
+
+                if (res.ok) {
+                    _otpVerified = true;
+                    clearInterval(_countdownInt);
+                    showAlert('OTP verified!', 'success');
+                    toggleMainView('new-pass');
+                } else {
+                    showAlert(data.error || 'Invalid code.', 'error');
+                    inputs.forEach(i => i.value = '');
+                    inputs[0].focus();
+                    btn.disabled = false; btn.textContent = 'CONTINUE';
+
+                    if (res.status === 429) {
+                        // Locked — disable resend too, ask them to restart
+                        document.getElementById('resend-link').classList.add('hidden');
+                    }
+                }
+            } catch {
+                showAlert('Server error. Try again.', 'error');
+                btn.disabled = false; btn.textContent = 'CONTINUE';
+            }
+        }
+
+        // ── FINALIZE PASSWORD RESET (requires OTP to have been verified) ─────
+        async function finalizeReset() {
+            if (!_otpVerified) {
+                showAlert('Please verify OTP first.', 'error');
+                toggleMainView('otp');
+                return;
+            }
             const p1 = document.getElementById('new-p-val').value;
             const p2 = document.getElementById('confirm-p-val').value;
-            if (!p1 || p1.length < 4) return showAlert('Password too short!', 'error');
-            if (p1 !== p2)            return showAlert('Passwords do not match!', 'error');
-            // NOTE: Password reset is frontend-only (OTP demo).
-            // Full server-side reset requires a separate /api/reset-password endpoint.
-            showAlert('Password updated! (Demo Mode)', 'success');
-            toggleMainView('login');
+            if (!p1 || p1.length < 4) return showAlert('Password must be at least 4 characters.', 'error');
+            if (p1 !== p2)            return showAlert('Passwords do not match.', 'error');
+
+            try {
+                const res  = await fetch('/api/reset_password', {
+                    method:  'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body:    JSON.stringify({ email: _resetEmail, password: p1 })
+                });
+                const data = await res.json();
+                if (!res.ok) return showAlert(data.error || 'Reset failed.', 'error');
+
+                _otpVerified = false;
+                _resetEmail  = '';
+                showAlert('Password updated! Please log in.', 'success');
+                setTimeout(() => toggleMainView('login'), 2000);
+            } catch {
+                showAlert('Server error. Try again.', 'error');
+            }
         }
 
-        // ── LOGIN — uses Flask /api/login ────────────────────────────────────
+        // ── LOGIN ────────────────────────────────────────────────────────────
         document.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') {
-                if (!document.getElementById('view-login').classList.contains('hidden')) handleLogin();
-                else if (!document.getElementById('view-reg').classList.contains('hidden')) handleRegister();
-            }
-        });
-
-        // Clear any stale mail_config from previous sessions on login page load
-        // This prevents old Gmail/app-password from autofilling the email field
-        window.addEventListener('load', () => {
-            localStorage.removeItem('mail_config');
+            if (e.key !== 'Enter') return;
+            if (!document.getElementById('view-login').classList.contains('hidden'))    handleLogin();
+            else if (!document.getElementById('view-reg').classList.contains('hidden')) handleRegister();
+            else if (!document.getElementById('view-forgot-email').classList.contains('hidden')) sendOTP();
+            else if (!document.getElementById('view-otp').classList.contains('hidden')) validateOTP();
         });
 
         async function handleLogin() {
-            const e = document.getElementById('ins-email').value;
-            const p = document.getElementById('ins-pass').value;
+            const e   = document.getElementById('ins-email').value;
+            const p   = document.getElementById('ins-pass').value;
+            const btn = document.getElementById('btn-signin');
+            btn.disabled = true; btn.textContent = 'Signing in...';
+
             try {
                 const res  = await fetch('/api/login', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ email: e, password: p })
+                    method:      'POST',
+                    credentials: 'include',   // send/receive cookies
+                    headers:     { 'Content-Type': 'application/json' },
+                    body:        JSON.stringify({ email: e, password: p })
                 });
                 const data = await res.json();
-                if (res.status === 403) return showAlert('Your account is still pending approval.', 'error');
-                if (!res.ok)           return showAlert(data.error || 'Invalid email or password.', 'error');
-                // Save full session including name for use in index.html
-                localStorage.setItem('active_session', JSON.stringify({
-                    email: data.email,
-                    name:  data.name || ''
-                }));
-                showAlert('Login Success! Redirecting...', 'success');
-                setTimeout(() => { window.location.href = '/home'; }, 1000);
-            } catch { showAlert('Server error.', 'error'); }
+
+                if (res.status === 403) {
+                    showAlert('Your account is still pending approval.', 'error');
+                } else if (!res.ok) {
+                    showAlert(data.error || 'Invalid email or password.', 'error');
+                } else {
+                    // Save minimal session info for display only (not for auth)
+                    localStorage.setItem('active_session', JSON.stringify({
+                        email: data.email,
+                        name:  data.name || ''
+                    }));
+                    showAlert('Login successful! Redirecting...', 'success');
+                    setTimeout(() => { window.location.href = '/home'; }, 900);
+                }
+            } catch {
+                showAlert('Server error.', 'error');
+            }
+
+            btn.disabled = false; btn.textContent = 'Sign In';
         }
 
-        // ── REGISTER — uses Flask /api/register ──────────────────────────────
+        // ── REGISTER ─────────────────────────────────────────────────────────
         async function handleRegister() {
             const n = document.getElementById('reg-name').value.trim();
             const e = document.getElementById('reg-email').value.trim();
@@ -378,15 +442,17 @@
             if (!e.includes('@')) return showAlert('Invalid email format!', 'error');
             try {
                 const res  = await fetch('/api/register', {
-                    method: 'POST',
+                    method:  'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ name: n, email: e, password: p })
+                    body:    JSON.stringify({ name: n, email: e, password: p })
                 });
                 const data = await res.json();
                 if (!res.ok) return showAlert(data.error || 'Registration failed.', 'error');
                 showAlert('Success! Wait for Admin approval.', 'success');
                 setTimeout(() => toggleMainView('login'), 2000);
-            } catch { showAlert('Server error.', 'error'); }
+            } catch {
+                showAlert('Server error.', 'error');
+            }
         }
     </script>
 </body>

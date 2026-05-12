@@ -226,10 +226,135 @@ def init_db():
         );
     """)    
 
+    # ── 10. otp_resets — server-side OTP for password reset ──────────────────
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS otp_resets (
+            id         INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+            email      VARCHAR(100) NOT NULL,
+            otp_hash   VARCHAR(200) NOT NULL,
+            expires_at TIMESTAMP    NOT NULL,
+            attempts   INTEGER      DEFAULT 0,
+            used       BOOLEAN      DEFAULT FALSE
+        );
+    """)
+
+    # ── 11. session_tokens — server-side login sessions ───────────────────────
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS session_tokens (
+            token      VARCHAR(64)  PRIMARY KEY,
+            email      VARCHAR(100) NOT NULL,
+            created_at TIMESTAMP    DEFAULT NOW(),
+            expires_at TIMESTAMP    NOT NULL
+        );
+    """)
+
     conn.commit()
     cur.close()
     conn.close()
     print("[DB] PostgreSQL tables ready.")
+
+
+# ── SESSION TOKEN FUNCTIONS ───────────────────────────────────────────────────
+
+def create_session_token(email):
+    """Generate a secure random token, store it in DB, return the token string."""
+    import secrets
+    from datetime import timedelta
+    token = secrets.token_hex(32)           # 64-char hex string
+    expires = datetime.now() + timedelta(hours=12)
+    conn = get_db(); cur = conn.cursor()
+    # Clean old tokens for this email first
+    cur.execute("DELETE FROM session_tokens WHERE email = %s", (email,))
+    cur.execute(
+        "INSERT INTO session_tokens (token, email, expires_at) VALUES (%s, %s, %s)",
+        (token, email, expires)
+    )
+    conn.commit(); cur.close(); conn.close()
+    return token
+
+def verify_session_token(token):
+    """Return the instructor row if token is valid and not expired, else None."""
+    if not token:
+        return None
+    conn = get_db(); cur = get_cursor(conn)
+    cur.execute(
+        "SELECT email FROM session_tokens WHERE token = %s AND expires_at > NOW()",
+        (token,)
+    )
+    row = cur.fetchone(); cur.close(); conn.close()
+    if not row:
+        return None
+    return get_instructor_by_email(row["email"])
+
+def delete_session_token(token):
+    """Remove a session token (logout)."""
+    if not token:
+        return
+    conn = get_db(); cur = conn.cursor()
+    cur.execute("DELETE FROM session_tokens WHERE token = %s", (token,))
+    conn.commit(); cur.close(); conn.close()
+
+
+# ── OTP RESET FUNCTIONS ───────────────────────────────────────────────────────
+
+def create_otp(email, otp_code):
+    """Hash and store OTP for this email, expiring in 10 minutes."""
+    import hashlib
+    from datetime import timedelta
+    otp_hash = hashlib.sha256(otp_code.encode()).hexdigest()
+    expires   = datetime.now() + timedelta(minutes=10)
+    conn = get_db(); cur = conn.cursor()
+    # Remove any previous OTPs for this email
+    cur.execute("DELETE FROM otp_resets WHERE email = %s", (email,))
+    cur.execute(
+        "INSERT INTO otp_resets (email, otp_hash, expires_at) VALUES (%s, %s, %s)",
+        (email, otp_hash, expires)
+    )
+    conn.commit(); cur.close(); conn.close()
+
+def verify_otp(email, otp_code):
+    """
+    Check OTP for email. Returns: 'ok' | 'invalid' | 'expired' | 'locked'
+    Increments attempt counter; locks after 5 wrong attempts.
+    """
+    import hashlib
+    conn = get_db(); cur = get_cursor(conn)
+    cur.execute(
+        "SELECT * FROM otp_resets WHERE email = %s AND used = FALSE ORDER BY id DESC LIMIT 1",
+        (email,)
+    )
+    row = cur.fetchone()
+    if not row:
+        cur.close(); conn.close()
+        return "invalid"
+
+    if row["attempts"] >= 5:
+        cur.close(); conn.close()
+        return "locked"
+
+    if datetime.now() > row["expires_at"]:
+        cur.close(); conn.close()
+        return "expired"
+
+    entered_hash = hashlib.sha256(otp_code.encode()).hexdigest()
+    if entered_hash != row["otp_hash"]:
+        # Increment attempts
+        wc = conn.cursor()
+        wc.execute("UPDATE otp_resets SET attempts = attempts + 1 WHERE id = %s", (row["id"],))
+        conn.commit(); wc.close(); cur.close(); conn.close()
+        return "invalid"
+
+    # Mark as used
+    wc = conn.cursor()
+    wc.execute("UPDATE otp_resets SET used = TRUE WHERE id = %s", (row["id"],))
+    conn.commit(); wc.close(); cur.close(); conn.close()
+    return "ok"
+
+def update_password(email, new_password):
+    """Update instructor password after successful OTP verification."""
+    conn = get_db(); cur = conn.cursor()
+    cur.execute("UPDATE instructors SET password = %s WHERE email = %s", (new_password, email))
+    conn.commit(); cur.close(); conn.close()
 
 
 # ── CLASSES ───────────────────────────────────────────────────────────────────

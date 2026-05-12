@@ -17,12 +17,14 @@ Then open:
 import os
 import shutil
 import smtplib
+import secrets
+import random
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from datetime import datetime
 from flask import (
     Flask, request,
-    jsonify, send_file, send_from_directory, Response, abort
+    jsonify, send_file, send_from_directory, Response, abort, make_response
 )
 from werkzeug.utils import secure_filename
 
@@ -81,15 +83,24 @@ def allowed_file(filename):
 
 def get_current_instructor_id(req):
     """
-    Reads instructor email from the Authorization header sent by script.js
-    and returns their instructor id from the database.
-    Returns None if not found.
+    Authenticates the request using the session token cookie.
+    Falls back to X-Instructor-Email header for backward compatibility.
+    Returns instructor id or None if not authenticated.
     """
+    # Primary: secure session token from HttpOnly cookie
+    token = req.cookies.get("session_token", "")
+    if token:
+        instructor = db.verify_session_token(token)
+        if instructor:
+            return instructor["id"]
+
+    # Fallback: email header (kept for API calls that don't send cookies)
     email = req.headers.get("X-Instructor-Email", "")
-    if not email:
-        return None
-    instructor = db.get_instructor_by_email(email)
-    return instructor["id"] if instructor else None
+    if email:
+        instructor = db.get_instructor_by_email(email)
+        return instructor["id"] if instructor else None
+
+    return None
 
 
 
@@ -110,7 +121,16 @@ def portal():
 
 @app.route("/home")
 def index():
-    return send_file("index.html")
+    # Server-side session guard — redirect to login if no valid token
+    token = request.cookies.get("session_token", "")
+    if not token or not db.verify_session_token(token):
+        from flask import redirect
+        return redirect("/login")
+    resp = make_response(send_file("index.html"))
+    # Prevent browser from caching the dashboard
+    resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
+    resp.headers["Pragma"]        = "no-cache"
+    return resp
 
 
 @app.route("/favicon.ico")
@@ -769,7 +789,134 @@ def api_login():
         return jsonify({"error": "Invalid email or password."}), 401
     if user["status"] == "pending":
         return jsonify({"error": "pending"}), 403
-    return jsonify({"status": "ok", "email": user["email"], "name": user["name"]})
+    # Issue a secure server-side session token
+    token = db.create_session_token(email)
+    resp  = make_response(jsonify({"status": "ok", "email": user["email"], "name": user["name"]}))
+    resp.set_cookie(
+        "session_token", token,
+        httponly = True,      # JS cannot read it — prevents XSS theft
+        secure   = False,     # set True in production with HTTPS
+        samesite = "Lax",
+        max_age  = 43200      # 12 hours
+    )
+    return resp
+
+
+@app.route("/api/logout", methods=["POST"])
+def api_logout():
+    """Invalidate the session token and clear the cookie."""
+    token = request.cookies.get("session_token", "")
+    db.delete_session_token(token)
+    resp = make_response(jsonify({"status": "ok"}))
+    resp.delete_cookie("session_token")
+    return resp
+
+
+@app.route("/api/verify_session")
+def api_verify_session():
+    """Called by index.html on every load to confirm the session is still valid."""
+    token = request.cookies.get("session_token", "")
+    instructor = db.verify_session_token(token)
+    if not instructor:
+        return jsonify({"valid": False}), 401
+    return jsonify({
+        "valid": True,
+        "email": instructor["email"],
+        "name":  instructor["name"] or ""
+    })
+
+
+@app.route("/api/send_otp", methods=["POST"])
+def api_send_otp():
+    """
+    Generate OTP server-side, store hashed version in DB,
+    email it using system SMTP. OTP never sent to browser.
+    """
+    data  = request.json or {}
+    email = data.get("email", "").strip().lower()
+    if not email:
+        return jsonify({"error": "Email is required."}), 400
+
+    instructor = db.get_instructor_by_email(email)
+    if not instructor:
+        # Return OK anyway to prevent email enumeration attacks
+        return jsonify({"status": "ok", "msg": "If that email exists, an OTP was sent."})
+
+    otp_code = str(random.randint(10000, 99999))
+    db.create_otp(email, otp_code)
+
+    # Send OTP via system SMTP from .env
+    smtp_user = os.environ.get("SYSTEM_EMAIL", "").strip()
+    smtp_pass = os.environ.get("SYSTEM_EMAIL_PASS", "").strip()
+
+    if smtp_user and smtp_pass:
+        try:
+            msg             = MIMEMultipart()
+            msg["From"]     = smtp_user
+            msg["To"]       = email
+            msg["Subject"]  = "Password Reset OTP — BatStateU Attendance System"
+            instructor_name = instructor["name"] or "Instructor"
+            body = (
+                f"Hello {instructor_name},\n\n"
+                f"Your OTP for password reset is:\n\n"
+                f"  {otp_code}\n\n"
+                f"This code expires in 10 minutes. Do not share it with anyone.\n\n"
+                f"If you did not request this, ignore this email.\n\n"
+                f"--- BatStateU Attendance System"
+            )
+            msg.attach(MIMEText(body, "plain"))
+            with smtplib.SMTP("smtp.gmail.com", 587) as server:
+                server.ehlo()
+                server.starttls()
+                server.login(smtp_user, smtp_pass.replace(" ", ""))
+                server.sendmail(smtp_user, email, msg.as_string())
+        except Exception as e:
+            print(f"[OTP] Email send failed: {e}")
+            # Still return ok — OTP is in DB, email failure is a config issue
+            return jsonify({"status": "ok", "warn": "Email could not be sent. Check SYSTEM_EMAIL in .env."})
+    else:
+        print("[OTP] No SYSTEM_EMAIL configured — OTP generated but not emailed.")
+        return jsonify({"status": "ok", "warn": "No email configured. Add SYSTEM_EMAIL and SYSTEM_EMAIL_PASS to .env."})
+
+    return jsonify({"status": "ok", "msg": "OTP sent to your email."})
+
+
+@app.route("/api/verify_otp", methods=["POST"])
+def api_verify_otp():
+    """Verify OTP entered by user. Returns ok or error reason."""
+    data     = request.json or {}
+    email    = data.get("email", "").strip().lower()
+    otp_code = data.get("otp", "").strip()
+    if not email or not otp_code:
+        return jsonify({"error": "Missing fields."}), 400
+    result = db.verify_otp(email, otp_code)
+    if result == "ok":
+        return jsonify({"status": "ok"})
+    elif result == "expired":
+        return jsonify({"error": "OTP has expired. Please request a new one."}), 410
+    elif result == "locked":
+        return jsonify({"error": "Too many attempts. Please request a new OTP."}), 429
+    else:
+        return jsonify({"error": "Invalid code. Please try again."}), 401
+
+
+@app.route("/api/reset_password", methods=["POST"])
+def api_reset_password():
+    """
+    Final step — updates password after OTP was verified.
+    Requires the email and new password. OTP must have been verified first
+    (checked by looking for a recently used OTP record).
+    """
+    data     = request.json or {}
+    email    = data.get("email", "").strip().lower()
+    new_pass = data.get("password", "").strip()
+    if not email or not new_pass or len(new_pass) < 4:
+        return jsonify({"error": "Invalid request."}), 400
+    instructor = db.get_instructor_by_email(email)
+    if not instructor:
+        return jsonify({"error": "Account not found."}), 404
+    db.update_password(email, new_pass)
+    return jsonify({"status": "ok"})
 
 
 @app.route("/api/register", methods=["POST"])

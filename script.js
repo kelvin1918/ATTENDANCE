@@ -36,6 +36,34 @@ let studentSearchVal     = '';    // student name/SR search inside folder view
 // ── ON LOAD ───────────────────────────────────────────────────────────────────
 
 document.addEventListener('DOMContentLoaded', async () => {
+    // ── SERVER-SIDE SESSION CHECK ─────────────────────────────────────────
+    // Verify the session token cookie with the server before rendering anything.
+    // This blocks back-button bypass and direct URL access.
+    try {
+        const vRes = await fetch('/api/verify_session', { credentials: 'include' });
+        if (!vRes.ok) {
+            // Token invalid or expired — redirect to login immediately
+            window.location.replace('/login');
+            return;
+        }
+        const vData = await vRes.json();
+        if (!vData.valid) {
+            window.location.replace('/login');
+            return;
+        }
+        // Refresh localStorage display info from server response
+        const existing = JSON.parse(localStorage.getItem('active_session') || '{}');
+        localStorage.setItem('active_session', JSON.stringify({
+            ...existing,
+            email: vData.email,
+            name:  vData.name || existing.name || ''
+        }));
+    } catch {
+        // Network error — still redirect to login for safety
+        window.location.replace('/login');
+        return;
+    }
+
     updateTime();
     setInterval(updateTime, 1000);
     generateTimeOptions();
@@ -2347,8 +2375,12 @@ async function confirmAction(action, id) {
             await fetch(`/api/delete_class/${id}`, { method: 'DELETE' });
             showPage('classes');
         } else if (action === 'logout') {
+            // Invalidate server-side session token first
+            try {
+                await fetch('/api/logout', { method: 'POST', credentials: 'include' });
+            } catch { /* proceed anyway */ }
             localStorage.removeItem('active_session');
-            window.location.href = "/";
+            window.location.replace("/login");
         }
         closeConfirm();
     };
