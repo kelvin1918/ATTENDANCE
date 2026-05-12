@@ -507,6 +507,22 @@ label.field-label{display:block;font-size:12px;font-weight:600;
   border-radius:99px;font-size:10px;font-weight:600;
   background:#FCE4EC;color:#C62828;border:0.5px solid #F48FB1}
 
+/* ── STUDENT ACTION BUTTONS ─────────────────────────────────────────── */
+.stu-action-btn{
+  width:22px;height:22px;min-height:unset;padding:0;
+  border-radius:4px;border:0.5px solid #333;
+  background:transparent;color:#666;
+  cursor:pointer;font-size:11px;display:inline-flex;
+  align-items:center;justify-content:center;
+  transition:background .15s,color .15s,border-color .15s
+}
+.stu-action-btn:hover{
+  background:#2a2a2a;color:#fff;border-color:#555
+}
+.stu-del-btn:hover{
+  background:rgba(211,47,47,.15);color:#EF5350;border-color:#D32F2F
+}
+
 /* ── EDIT / SIGNATURE MODAL EXTRAS ─────────────────────────────────────── */
 .preview-sig{width:100%;height:60px;border:0.5px solid #2a2a2a;border-radius:var(--r-sm);
   background:#111;display:flex;align-items:center;justify-content:center;
@@ -639,16 +655,7 @@ label.field-label{display:block;font-size:12px;font-weight:600;
       Offline mode — showing cached class list
     </div>
 
-    <!-- Day filter tabs -->
-    <div class="day-tabs" id="day-tabs">
-      <button class="day-tab" data-day="ALL">All Classes</button>
-      <button class="day-tab" data-day="MON">Mon</button>
-      <button class="day-tab" data-day="TUE">Tue</button>
-      <button class="day-tab" data-day="WED">Wed</button>
-      <button class="day-tab" data-day="THU">Thu</button>
-      <button class="day-tab" data-day="FRI">Fri</button>
-      <button class="day-tab" data-day="SAT">Sat</button>
-    </div>
+    <!-- Day filter removed — all classes shown directly -->
 
     <!-- Class grid -->
     <div id="class-grid" class="class-grid">
@@ -763,7 +770,6 @@ label.field-label{display:block;font-size:12px;font-weight:600;
       </svg>
       <select class="cam-source-select" id="cam-source-select">
         <option value="0">Webcam (Built-in)</option>
-        <option value="1">Webcam (External)</option>
         <option value="rtsp">IP Camera (RTSP)</option>
       </select>
       <input id="cam-rtsp-input" class="input hidden"
@@ -1253,16 +1259,8 @@ function initClassesScreen() {
     STATE.name.charAt(0).toUpperCase();
   document.getElementById('topbar-name').textContent = STATE.name;
 
-  // Mark today tab
-  document.querySelectorAll('.day-tab').forEach(tab => {
-    tab.classList.remove('active', 'today-marker');
-    if (tab.dataset.day === STATE.today) tab.classList.add('today-marker');
-    if (tab.dataset.day === STATE.today) tab.classList.add('active');
-    // default: show today's classes
-    if (tab.dataset.day === 'ALL' && !STATE.today) tab.classList.add('active');
-  });
-
-  renderClassGrid(STATE.today || 'ALL');
+  // Always show all classes — day filtering removed
+  renderClassGrid('ALL');
 }
 
 function renderClassGrid(dayFilter) {
@@ -1347,14 +1345,7 @@ function renderClassGrid(dayFilter) {
   grid.innerHTML = cards.join('');
 }
 
-// Day tab clicks
-document.getElementById('day-tabs').addEventListener('click', e => {
-  const tab = e.target.closest('.day-tab');
-  if (!tab) return;
-  document.querySelectorAll('.day-tab').forEach(t => t.classList.remove('active'));
-  tab.classList.add('active');
-  renderClassGrid(tab.dataset.day);
-});
+// Day tabs removed
 
 // Logout
 document.getElementById('btn-logout').addEventListener('click', () => {
@@ -1432,8 +1423,16 @@ function _showLoadingOverlay(total) {
   document.getElementById('cam-feed').classList.add('hidden');
   document.getElementById('cam-scan-line').style.display    = 'none';
   document.getElementById('cam-overlay-top').style.display  = 'none';
+
+  // Show Stop button (cancels loading) — hide Start
   document.getElementById('btn-start-camera').classList.add('hidden');
-  document.getElementById('btn-stop-camera').classList.remove('hidden');
+  const stopBtn = document.getElementById('btn-stop-camera');
+  stopBtn.classList.remove('hidden');
+  stopBtn.textContent = '';
+  stopBtn.innerHTML = `
+    <svg width="13" height="13" fill="currentColor" viewBox="0 0 24 24">
+      <path d="M6 6h12v12H6z"/>
+    </svg> Cancel`;
 }
 
 function _updateLoadingOverlay(loaded, total) {
@@ -1493,6 +1492,11 @@ function _startLoadPoll(total) {
         _hideLoadingOverlay();
         setCameraUI(true);
         startPresentPoll();
+        // Reset stop button label back from "Cancel"
+        document.getElementById('btn-stop-camera').innerHTML = `
+          <svg width="13" height="13" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M6 6h12v12H6z"/>
+          </svg> Stop`;
         const msg = data.total > 0
           ? `Camera ready — ${data.total} face${data.total !== 1 ? 's' : ''} loaded`
           : 'Camera ready — no faces registered yet';
@@ -1555,6 +1559,12 @@ async function stopCamera() {
       headers: {'X-Instructor-Email': STATE.email}
     });
   } catch {}
+  // Reset stop button label in case it was showing "Cancel"
+  const stopBtn = document.getElementById('btn-stop-camera');
+  stopBtn.innerHTML = `
+    <svg width="13" height="13" fill="currentColor" viewBox="0 0 24 24">
+      <path d="M6 6h12v12H6z"/>
+    </svg> Stop`;
   setCameraUI(false);
 }
 
@@ -1659,49 +1669,33 @@ function renderStudentsList(present = []) {
     const hasFace   = _hasFace(s);
     const hasSig    = _hasSig(s);
     const sName     = (s.name||'').replace(/'/g,"\\'");
+    // Compact single-row layout: dot · name · badges · actions
     return `
-      <div class="student-item" style="flex-direction:column;align-items:stretch;gap:6px;padding:10px">
-        <div style="display:flex;align-items:center;gap:8px">
-          <div class="student-status-dot ${isPresent?'dot-present':'dot-absent'}"></div>
-          <span class="student-name-txt" style="flex:1;overflow:hidden;
-                text-overflow:ellipsis;white-space:nowrap;font-size:12px">
-            ${s.name}
+      <div class="student-item" style="padding:7px 8px;gap:6px;align-items:center">
+        <div class="student-status-dot ${isPresent?'dot-present':'dot-absent'}" style="flex-shrink:0"></div>
+        <span class="student-name-txt" style="flex:1;font-size:12px;overflow:hidden;
+              text-overflow:ellipsis;white-space:nowrap;min-width:0">
+          ${s.name}
+        </span>
+        <div style="display:flex;align-items:center;gap:3px;flex-shrink:0">
+          <span title="${hasFace?'Face image on disk':'No face image — camera cannot detect'}"
+                class="${hasFace?'badge-face-ok':'badge-face-no'}" style="padding:1px 5px;font-size:9px">
+            ${hasFace?'F✓':'F✗'}
           </span>
-          ${isPresent
-            ? '<span style="font-size:10px;color:#22C55E;font-weight:600;flex-shrink:0">Present</span>'
-            : '<span style="font-size:10px;color:#555;flex-shrink:0">—</span>'}
-        </div>
-        <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap">
-          <span class="${hasFace?'badge-face-ok':'badge-face-no'}">
-            ${hasFace?'face ✓':'no face'}
+          <span title="${hasSig?'Signature on file':'No signature — attendance sheet shows text only'}"
+                class="${hasSig?'badge-sig-ok':'badge-sig-no'}" style="padding:1px 5px;font-size:9px">
+            ${hasSig?'S✓':'S✗'}
           </span>
-          <span class="${hasSig?'badge-sig-ok':'badge-sig-no'}">
-            ${hasSig?'sig ✓':'no sig'}
-          </span>
-          <div style="flex:1"></div>
           ${!hasSig ? `
           <button onclick="openSigOnly(${s.id},'${sName}')"
-            style="font-size:10px;padding:3px 8px;border-radius:4px;
-                   border:0.5px solid #1565C0;background:transparent;
-                   color:#1565C0;cursor:pointer;min-height:auto">
-            + Sig
-          </button>` : ''}
+            title="Upload signature for this student"
+            class="stu-action-btn" style="color:#90CAF9;border-color:#1565C0">+S</button>` : ''}
           <button onclick="openEditStudent(${s.id})"
-            style="font-size:10px;padding:3px 8px;border-radius:4px;
-                   border:0.5px solid #444;background:transparent;
-                   color:#aaa;cursor:pointer;min-height:auto">
-            Edit
-          </button>
+            title="Edit student"
+            class="stu-action-btn">✎</button>
           <button onclick="deleteStudent(${s.id},'${sName}')"
-            style="font-size:10px;padding:3px 6px;border-radius:4px;
-                   border:0.5px solid #333;background:transparent;
-                   color:#555;cursor:pointer;min-height:auto">
-            <svg width="10" height="10" fill="none" stroke="currentColor"
-                 stroke-width="2" viewBox="0 0 24 24">
-              <path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                    stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-          </button>
+            title="Delete student (removes from disk + Cloudinary)"
+            class="stu-action-btn stu-del-btn">✕</button>
         </div>
       </div>`;
   }).join('');

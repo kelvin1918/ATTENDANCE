@@ -353,10 +353,23 @@ async function renderDashboard() {
             </div>
         </div>
 
-        <div class="bg-white p-8 rounded-[3rem] border border-gray-100 shadow-sm mb-10 h-[450px]">
+        <div class="bg-white p-8 rounded-[3rem] border border-gray-100 shadow-sm mb-10">
              <h3 class="text-lg font-black text-gray-800 mb-1 flex items-center"><i data-lucide="pie-chart" class="w-5 h-5 mr-2 text-[#D32F2F]"></i> Absence Rate by Class</h3>
-             <p class="text-[10px] text-gray-400 font-bold uppercase tracking-widest mb-4">Average absences per session &amp; overall percentage</p>
-             <div class="h-[330px] w-full"><canvas id="absentChart"></canvas></div>
+             <p class="text-[10px] text-gray-400 font-bold uppercase tracking-widest mb-6">3 most recently active classes · avg absence per session</p>
+             <div id="chartGrid" class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                 <div class="flex flex-col items-center">
+                     <div class="h-[220px] w-full"><canvas id="absentChart0"></canvas></div>
+                     <p id="chartLabel0" class="text-[10px] font-black text-gray-400 uppercase tracking-widest mt-3 text-center truncate w-full px-2"></p>
+                 </div>
+                 <div class="flex flex-col items-center">
+                     <div class="h-[220px] w-full"><canvas id="absentChart1"></canvas></div>
+                     <p id="chartLabel1" class="text-[10px] font-black text-gray-400 uppercase tracking-widest mt-3 text-center truncate w-full px-2"></p>
+                 </div>
+                 <div class="flex flex-col items-center">
+                     <div class="h-[220px] w-full"><canvas id="absentChart2"></canvas></div>
+                     <p id="chartLabel2" class="text-[10px] font-black text-gray-400 uppercase tracking-widest mt-3 text-center truncate w-full px-2"></p>
+                 </div>
+             </div>
         </div>
 
         <div class="bg-white p-8 rounded-[3rem] border border-gray-100 shadow-sm">
@@ -374,9 +387,9 @@ async function renderDashboard() {
     try {
         const res  = await authFetch('/api/absences');
         const data = await res.json();
-        initChart(data);
+        initCharts(data);
     } catch {
-        initChart([]);
+        initCharts([]);
     }
 
     // Load recent activity
@@ -463,11 +476,24 @@ function renderRecentActivityList(records, totalCount = null) {
     list.innerHTML = records.map(r => {
         const dateObj  = new Date(r.date + 'T00:00:00');
         const dateStr  = dateObj.toLocaleDateString('en-US', { weekday:'short', day:'2-digit', month:'short', year:'numeric' });
-        const timeRaw  = (r.time || '').substring(0, 8);
+        const timeRaw  = (r.time || r.session_time || '').substring(0, 8);
+        // Build consistent Log_ filename: Log_Apr-29-2026_06-01PM_Report.pdf
+        const _mo  = dateObj.toLocaleDateString('en-US', { month:'short' });
+        const _dy  = String(dateObj.getDate()).padStart(2,'0');
+        const _yr  = dateObj.getFullYear();
+        const _t   = timeRaw ? (() => {
+            const d = new Date('1970-01-01T' + timeRaw);
+            const hh = String(d.getHours()).padStart(2,'0');
+            const mm = String(d.getMinutes()).padStart(2,'0');
+            const ss = String(d.getSeconds()).padStart(2,'0');
+            const ampm = d.getHours() >= 12 ? 'PM' : 'AM';
+            const h12  = d.getHours() % 12 || 12;
+            return `${String(h12).padStart(2,'0')}-${mm}-${ss}${ampm}`;
+        })() : '';
         const dispTime = timeRaw
             ? new Date('1970-01-01T' + timeRaw).toLocaleTimeString([], { hour:'2-digit', minute:'2-digit', second:'2-digit' })
             : '';
-        const filename = `${dateStr} ${dispTime}_Report.pdf`;
+        const filename = `Log_${_mo}-${_dy}-${_yr}${_t ? '_'+_t : ''}_Report.pdf`;
 
         return `
         <div class="flex items-center justify-between p-4 bg-gray-50 rounded-2xl cursor-pointer hover:bg-red-50 transition group"
@@ -495,133 +521,102 @@ function renderRecentActivityList(records, totalCount = null) {
     lucide.createIcons();
 }
 
-// Chart — uses real absence data from backend (Doughnut style)
-function initChart(data = []) {
-    const ctx = document.getElementById('absentChart');
-    if (!ctx) return;
-
-    if (window._absentChartInstance) {
-        window._absentChartInstance.destroy();
+// Chart — renders up to 3 individual donut charts (most recently active classes)
+function initCharts(data = []) {
+    // Destroy any existing chart instances
+    for (let i = 0; i < 3; i++) {
+        const key = `_absentChart${i}`;
+        if (window[key]) { window[key].destroy(); window[key] = null; }
     }
 
-    // Color by severity
     const getColor = pct => pct >= 50 ? '#D32F2F' : pct >= 25 ? '#E65100' : '#F59E0B';
 
-    // Plugin: draws centered text inside the doughnut hole
-    const centerLabelPlugin = {
-        id: 'centerLabel',
-        afterDraw(chart) {
-            if (chart.config.type !== 'doughnut') return;
-            const { ctx: c, chartArea: { top, left, width, height } } = chart;
-            const cx = left + width / 2;
-            const cy = top  + height / 2;
-            c.save();
+    // Take only the 3 most recent (DB already orders by last_session_date DESC)
+    const recent = data.slice(0, 3);
 
-            const vals = chart.data.datasets[0]?.data || [];
-            const hasData = vals.length > 1 || (vals.length === 1 && vals[0] !== 1);
+    for (let i = 0; i < 3; i++) {
+        const ctx   = document.getElementById(`absentChart${i}`);
+        const label = document.getElementById(`chartLabel${i}`);
+        if (!ctx) continue;
 
-            if (hasData) {
-                const avg = Math.round(vals.reduce((a, b) => a + b, 0) / vals.length);
-                c.font = 'bold 26px Inter, sans-serif';
+        if (!recent[i]) {
+            // Empty slot — grey placeholder
+            if (label) label.textContent = '—';
+            window[`_absentChart${i}`] = new Chart(ctx, {
+                type: 'doughnut',
+                data: { labels: ['No Data'], datasets: [{ data: [1], backgroundColor: ['#F3F4F6'], borderWidth: 0 }] },
+                options: { responsive: true, maintainAspectRatio: false, cutout: '72%',
+                           plugins: { legend: { display: false }, tooltip: { enabled: false } } },
+            });
+            continue;
+        }
+
+        const d   = recent[i];
+        const pct = d.pct_absent;
+        const color = getColor(pct);
+        if (label) label.textContent = d.name;
+
+        const centerPlugin = {
+            id: `center${i}`,
+            afterDraw(chart) {
+                if (chart.config.type !== 'doughnut') return;
+                const { ctx: c, chartArea: { top, left, width, height } } = chart;
+                const cx = left + width / 2;
+                const cy = top  + height / 2;
+                c.save();
+                c.font = 'bold 22px Inter, sans-serif';
                 c.fillStyle = '#1a1a1a';
                 c.textAlign = 'center';
                 c.textBaseline = 'middle';
-                c.fillText(avg + '%', cx, cy - 10);
-                c.font = '700 9px Inter, sans-serif';
+                c.fillText(pct + '%', cx, cy - 9);
+                c.font = '700 8px Inter, sans-serif';
                 c.fillStyle = '#9CA3AF';
-                c.letterSpacing = '1.5px';
-                c.fillText('AVG ABSENCE', cx, cy + 13);
-            } else {
-                c.font = '600 12px Inter, sans-serif';
-                c.fillStyle = '#D1D5DB';
                 c.textAlign = 'center';
-                c.textBaseline = 'middle';
-                c.fillText('No data yet', cx, cy);
+                c.fillText('AVG ABSENCE', cx, cy + 11);
+                c.restore();
             }
-            c.restore();
-        }
-    };
+        };
 
-    if (!data.length) {
-        window._absentChartInstance = new Chart(ctx, {
+        window[`_absentChart${i}`] = new Chart(ctx, {
             type: 'doughnut',
             data: {
-                labels: ['No Data'],
-                datasets: [{ data: [1], backgroundColor: ['#F3F4F6'], borderWidth: 0 }]
+                labels: [d.name, 'Present'],
+                datasets: [{
+                    data: [pct, Math.max(0, 100 - pct)],
+                    backgroundColor: [color, '#F3F4F6'],
+                    borderWidth: 3,
+                    borderColor: '#ffffff',
+                    hoverOffset: 8,
+                }]
             },
             options: {
-                responsive: true, maintainAspectRatio: false,
-                cutout: '72%',
-                plugins: { legend: { display: false }, tooltip: { enabled: false } }
-            },
-            plugins: [centerLabelPlugin]
-        });
-        return;
-    }
-
-    const labels  = data.map(d => d.name);
-    const pctVals = data.map(d => d.pct_absent);
-    const avgVals = data.map(d => d.avg_absent);
-    const totVals = data.map(d => d.total_absent);
-    const sesVals = data.map(d => d.total_sessions);
-    const colors  = pctVals.map(getColor);
-
-    window._absentChartInstance = new Chart(ctx, {
-        type: 'doughnut',
-        data: {
-            labels,
-            datasets: [{
-                data: pctVals,
-                backgroundColor: colors,
-                borderWidth: 3,
-                borderColor: '#ffffff',
-                hoverOffset: 10,
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            cutout: '65%',
-            plugins: {
-                legend: {
-                    display: true,
-                    position: 'bottom',
-                    labels: {
-                        usePointStyle: true,
-                        pointStyle: 'circle',
-                        padding: 18,
-                        font: { size: 10, weight: 'bold', family: 'Inter' },
-                        color: '#6B7280',
-                    }
-                },
-                tooltip: {
-                    backgroundColor: '#111827',
-                    titleColor: '#F9FAFB',
-                    bodyColor: '#D1D5DB',
-                    padding: 14,
-                    cornerRadius: 12,
-                    callbacks: {
-                        title: items => items[0].label,
-                        label: item => {
-                            const i = item.dataIndex;
-                            return [
-                                `  Absence Rate : ${pctVals[i]}%`,
-                                `  Avg / Session: ${avgVals[i]} students`,
-                                `  Total Absences: ${totVals[i]}`,
-                                `  Sessions       : ${sesVals[i]}`
-                            ];
+                responsive: true,
+                maintainAspectRatio: false,
+                cutout: '70%',
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        backgroundColor: '#111827',
+                        titleColor: '#F9FAFB',
+                        bodyColor: '#D1D5DB',
+                        padding: 12,
+                        cornerRadius: 10,
+                        callbacks: {
+                            title: () => d.name,
+                            label: item => item.dataIndex === 0 ? [
+                                `  Absence Rate : ${pct}%`,
+                                `  Avg / Session: ${d.avg_absent} students`,
+                                `  Total Absences: ${d.total_absent}`,
+                                `  Sessions      : ${d.total_sessions}`
+                            ] : [`  Present Rate : ${Math.round(100-pct)}%`]
                         }
                     }
-                }
+                },
+                animation: { animateRotate: true, duration: 900, easing: 'easeInOutQuart' }
             },
-            animation: {
-                animateRotate: true,
-                duration: 900,
-                easing: 'easeInOutQuart'
-            }
-        },
-        plugins: [centerLabelPlugin]
-    });
+            plugins: [centerPlugin]
+        });
+    }
 }
 
 // ── CLASSES (FOLDERS) ─────────────────────────────────────────────────────────
@@ -782,9 +777,20 @@ async function historyLoadFiles(class_code) {
         const [yr, mo, dy] = (s.date || '').split('-');
         const shortDate = (mo && dy && yr) ? `${mo}-${dy}-${String(yr).slice(-2)}` : s.date;
 
-        // Parse session_time: "HH:MM:SS" → "HH-MM"
-        const timeSlug = s.session_time ? s.session_time.substring(0, 5).replace(':', '-') : '';
-        const fileLabel = `Log_${shortDate}${timeSlug ? '_' + timeSlug : ''}`;
+        // Build consistent Log_ filename matching dashboard format
+        const _hDate = new Date(s.date + 'T00:00:00');
+        const _hMo   = _hDate.toLocaleDateString('en-US', { month:'short' });
+        const _hDy   = String(_hDate.getDate()).padStart(2,'0');
+        const _hYr   = _hDate.getFullYear();
+        const _hT    = s.session_time ? (() => {
+            const d = new Date('1970-01-01T' + s.session_time);
+            const h12 = d.getHours() % 12 || 12;
+            const mm  = String(d.getMinutes()).padStart(2,'0');
+            const ss  = String(d.getSeconds()).padStart(2,'0');
+            const ap  = d.getHours() >= 12 ? 'PM' : 'AM';
+            return `${String(h12).padStart(2,'0')}-${mm}-${ss}${ap}`;
+        })() : '';
+        const fileLabel = `Log_${_hMo}-${_hDy}-${_hYr}${_hT ? '_'+_hT : ''}_Report.pdf`;
 
         // Display time in 12-hour format for subtitle
         const dispTime = s.session_time

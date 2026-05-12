@@ -714,12 +714,14 @@ def get_absence_counts(instructor_id=None):
                    ROUND(
                        COUNT(*) FILTER (WHERE a.status = 'Absent')::numeric
                        / NULLIF(COUNT(*), 0) * 100
-                   , 1)                                             AS pct_absent
+                   , 1)                                             AS pct_absent,
+                   MAX(a.date)                                      AS last_session_date,
+                   MAX(COALESCE(a.session_time, '00:00:00'))        AS last_session_time
                FROM attendance a
                JOIN classes c ON c.id = a.class_code
                WHERE c.instructor_id = %s AND a.session_time != 'LIVE'
                GROUP BY a.subject
-               ORDER BY pct_absent DESC""",
+               ORDER BY last_session_date DESC, last_session_time DESC""",
             (instructor_id,)
         )
     else:
@@ -737,22 +739,26 @@ def get_absence_counts(instructor_id=None):
                    ROUND(
                        COUNT(*) FILTER (WHERE a.status = 'Absent')::numeric
                        / NULLIF(COUNT(*), 0) * 100
-                   , 1)                                             AS pct_absent
+                   , 1)                                             AS pct_absent,
+                   MAX(a.date)                                      AS last_session_date,
+                   MAX(COALESCE(a.session_time, '00:00:00'))        AS last_session_time
                FROM attendance a
                WHERE a.session_time != 'LIVE'
                GROUP BY a.subject
-               ORDER BY pct_absent DESC"""
+               ORDER BY last_session_date DESC, last_session_time DESC"""
         )
     rows = cur.fetchall()
     cur.close(); conn.close()
     return [
         {
-            "name":          r["name"],
-            "total_absent":  r["total_absent"],
-            "total_records": r["total_records"],
-            "total_sessions":r["total_sessions"],
-            "avg_absent":    float(r["avg_absent"]  or 0),
-            "pct_absent":    float(r["pct_absent"]  or 0),
+            "name":              r["name"],
+            "total_absent":      r["total_absent"],
+            "total_records":     r["total_records"],
+            "total_sessions":    r["total_sessions"],
+            "avg_absent":        float(r["avg_absent"]  or 0),
+            "pct_absent":        float(r["pct_absent"]  or 0),
+            "last_session_date": str(r["last_session_date"] or ""),
+            "last_session_time": str(r["last_session_time"] or ""),
         }
         for r in rows
     ]
