@@ -28,6 +28,13 @@ from flask import (
 )
 from werkzeug.utils import secure_filename
 
+# Load .env for local development (Render sets env vars via dashboard)
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
 import database as db
 from pdf_generator import generate_attendance_pdf
 try:
@@ -826,6 +833,51 @@ def api_verify_session():
     })
 
 
+# ── SHARED SMTP HELPER ────────────────────────────────────────────────────────
+
+def _send_system_email(smtp_user, smtp_pass, to_addr, subject, body_plain):
+    """
+    Tries to send an email using the provided Gmail credentials.
+    Attempts port 465 (SSL) first — more reliable on cloud platforms like Render.
+    Falls back to port 587 (STARTTLS) if 465 fails.
+    Always enforces a 15-second timeout so the caller never hangs.
+
+    Returns: (True, None) on success, (False, error_message) on failure.
+    """
+    clean_pass = smtp_pass.replace(" ", "")
+
+    msg            = MIMEMultipart()
+    msg["From"]    = smtp_user
+    msg["To"]      = to_addr
+    msg["Subject"] = subject
+    msg.attach(MIMEText(body_plain, "plain"))
+
+    # ── Attempt 1: port 465 SSL ───────────────────────────────────────────────
+    try:
+        import ssl
+        ctx = ssl.create_default_context()
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465, context=ctx, timeout=15) as server:
+            server.login(smtp_user, clean_pass)
+            server.sendmail(smtp_user, to_addr, msg.as_string())
+        print(f"[SMTP] ✓ Sent via port 465 to {to_addr}")
+        return True, None
+    except Exception as e1:
+        print(f"[SMTP] Port 465 failed: {e1} — trying 587...")
+
+    # ── Attempt 2: port 587 STARTTLS ─────────────────────────────────────────
+    try:
+        with smtplib.SMTP("smtp.gmail.com", 587, timeout=15) as server:
+            server.ehlo()
+            server.starttls()
+            server.login(smtp_user, clean_pass)
+            server.sendmail(smtp_user, to_addr, msg.as_string())
+        print(f"[SMTP] ✓ Sent via port 587 to {to_addr}")
+        return True, None
+    except Exception as e2:
+        print(f"[SMTP] Port 587 also failed: {e2}")
+        return False, str(e2)
+
+
 @app.route("/api/send_otp", methods=["POST"])
 def api_send_otp():
     """
@@ -850,33 +902,28 @@ def api_send_otp():
     smtp_pass = os.environ.get("SYSTEM_EMAIL_PASS", "").strip()
 
     if smtp_user and smtp_pass:
-        try:
-            msg             = MIMEMultipart()
-            msg["From"]     = smtp_user
-            msg["To"]       = email
-            msg["Subject"]  = "Password Reset OTP — BatStateU Attendance System"
-            instructor_name = instructor["name"] or "Instructor"
-            body = (
-                f"Hello {instructor_name},\n\n"
-                f"Your OTP for password reset is:\n\n"
-                f"  {otp_code}\n\n"
-                f"This code expires in 10 minutes. Do not share it with anyone.\n\n"
-                f"If you did not request this, ignore this email.\n\n"
-                f"--- BatStateU Attendance System"
-            )
-            msg.attach(MIMEText(body, "plain"))
-            with smtplib.SMTP("smtp.gmail.com", 587) as server:
-                server.ehlo()
-                server.starttls()
-                server.login(smtp_user, smtp_pass.replace(" ", ""))
-                server.sendmail(smtp_user, email, msg.as_string())
-        except Exception as e:
-            print(f"[OTP] Email send failed: {e}")
-            # Still return ok — OTP is in DB, email failure is a config issue
-            return jsonify({"status": "ok", "warn": "Email could not be sent. Check SYSTEM_EMAIL in .env."})
+        instructor_name = instructor["name"] or "Instructor"
+        body = (
+            f"Hello {instructor_name},\n\n"
+            f"Your OTP for password reset is:\n\n"
+            f"  {otp_code}\n\n"
+            f"This code expires in 10 minutes. Do not share it with anyone.\n\n"
+            f"If you did not request this, ignore this email.\n\n"
+            f"--- BatStateU Attendance System"
+        )
+        sent, err = _send_system_email(smtp_user, smtp_pass, email,
+                                        "Password Reset OTP — BatStateU Attendance System",
+                                        body)
+        if not sent:
+            print(f"[OTP] Email send failed: {err}")
+            return jsonify({"status": "ok",
+                            "warn": f"OTP generated but email failed: {err}. "
+                                     "Check SYSTEM_EMAIL credentials on Render."})
     else:
         print("[OTP] No SYSTEM_EMAIL configured — OTP generated but not emailed.")
-        return jsonify({"status": "ok", "warn": "No email configured. Add SYSTEM_EMAIL and SYSTEM_EMAIL_PASS to .env."})
+        return jsonify({"status": "ok",
+                        "warn": "No system email configured. Add SYSTEM_EMAIL and "
+                                "SYSTEM_EMAIL_PASS to Render environment variables."})
 
     return jsonify({"status": "ok", "msg": "OTP sent to your email."})
 
@@ -1074,11 +1121,13 @@ def api_send_email():
         msg.attach(plain)
         msg.attach(html)
 
-        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
-            server.ehlo()
-            server.starttls()
-            server.login(smtp_user, smtp_password)
-            server.sendmail(smtp_user, data["to"], msg.as_string())
+        sent, err = _send_system_email(smtp_user, smtp_password, data["to"],
+                                 data.get("subject", "Attendance Update"),
+                                 data.get("plain", "Please view this in an HTML-capable email client."))
+        if not sent:
+            if "Authentication" in str(err) or "Username" in str(err) or "534" in str(err):
+                return jsonify({"error": "SMTP authentication failed. Check your Gmail and App Password in Profile → Mailing Setup."}), 401
+            return jsonify({"error": f"Email failed to send: {err}"}), 500
 
         # Notify instructor that the email was sent successfully
         db.add_notification(
@@ -1114,39 +1163,48 @@ def api_test_smtp():
             "error": "No credentials saved. Fill in your Gmail and App Password first, then save."
         }), 400
 
-    try:
-        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=10) as server:
-            server.ehlo()
-            server.starttls()
-            server.login(smtp_user, smtp_password)
+    # Try both ports — Render may block 587 but allow 465
+    sent, err = _send_system_email(smtp_user, smtp_password,
+                                    smtp_user,   # send test to self
+                                    "SMTP Test — BatStateU Attendance",
+                                    "This is a test email from the Attendance System.")
+    if sent:
         return jsonify({
             "ok":      True,
             "message": f"✓ Connected successfully as {smtp_user}. Email is ready to send."
         })
 
-    except smtplib.SMTPAuthenticationError:
+    err_str = str(err)
+    if "Authentication" in err_str or "Username" in err_str or "534" in err_str:
         return jsonify({
             "ok":    False,
             "error": (
                 "Authentication failed. Most likely causes:\n"
-                "① 2-Step Verification is NOT turned on in your Google Account.\n"
+                "① 2-Step Verification is NOT enabled in your Google Account.\n"
                 "② The App Password is wrong — regenerate it and paste the new one.\n"
                 "③ Wrong Gmail address entered.\n\n"
                 "Go to: Google Account → Security → 2-Step Verification → App Passwords."
             )
         }), 401
 
-    except smtplib.SMTPConnectError:
+    if "Network" in err_str or "101" in err_str or "timed out" in err_str.lower():
         return jsonify({
             "ok":    False,
-            "error": "Cannot connect to Gmail servers. Check your internet connection."
+            "error": (
+                "[Errno 101] Network is unreachable.\n"
+                "Render.com blocks outbound SMTP on ports 587 and 465.\n"
+                "Solution: Use SendGrid or another HTTP-based mail service instead of Gmail SMTP."
+            )
         }), 503
 
+    try:
+        placeholder = None  # keep try/except structure intact
+    except smtplib.SMTPAuthenticationError:
+        pass
+    except smtplib.SMTPConnectError:
+        pass
     except TimeoutError:
-        return jsonify({
-            "ok":    False,
-            "error": "Connection timed out. Check your network or firewall settings."
-        }), 504
+        pass
 
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500

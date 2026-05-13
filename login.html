@@ -263,11 +263,19 @@
             btn.textContent = 'Sending...';
 
             try {
-                const res  = await fetch('/api/send_otp', {
-                    method:  'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body:    JSON.stringify({ email })
-                });
+                const ctrl   = new AbortController();
+                const timer  = setTimeout(() => ctrl.abort(), 20000); // 20s timeout
+                let res;
+                try {
+                    res = await fetch('/api/send_otp', {
+                        method:  'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body:    JSON.stringify({ email }),
+                        signal:  ctrl.signal
+                    });
+                } finally {
+                    clearTimeout(timer);
+                }
                 const data = await res.json();
 
                 if (!res.ok) {
@@ -291,8 +299,12 @@
                 } else {
                     showAlert('OTP sent! Check your email inbox.', 'success');
                 }
-            } catch {
-                showAlert('Server error. Please try again.', 'error');
+            } catch (fetchErr) {
+                if (fetchErr.name === 'AbortError') {
+                    showAlert('Request timed out. Render may be blocking SMTP. Check server logs.', 'error', 7000);
+                } else {
+                    showAlert('Server error. Please try again.', 'error');
+                }
             }
 
             btn.disabled = false; btn.textContent = 'SEND OTP';
