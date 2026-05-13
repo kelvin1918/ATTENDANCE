@@ -295,9 +295,14 @@
                 startResendCooldown();
 
                 if (data.warn) {
-                    showAlert(data.warn, 'info', 6000);
+                    // If SendGrid not configured, show setup guidance
+                    if (data.warn.includes('RESEND') || data.warn.includes('Resend') || data.warn.includes('SendGrid')) {
+                        showAlert('Email not configured on server. Add RESEND_API_KEY to Render environment variables.', 'error', 8000);
+                    } else {
+                        showAlert(data.warn, 'info', 6000);
+                    }
                 } else {
-                    showAlert('OTP sent! Check your email inbox.', 'success');
+                    showAlert('OTP sent! Check your email inbox (and spam folder).', 'success', 5000);
                 }
             } catch (fetchErr) {
                 if (fetchErr.name === 'AbortError') {

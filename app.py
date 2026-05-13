@@ -833,49 +833,133 @@ def api_verify_session():
     })
 
 
-# ── SHARED SMTP HELPER ────────────────────────────────────────────────────────
+# ── SHARED EMAIL HELPER ──────────────────────────────────────────────────────
+#
+# Priority order:
+#   1. Resend API (HTTPS port 443) — primary, works on Render, free 3000/month
+#   2. Gmail SMTP SSL 465          — local development fallback
+#   3. Gmail SMTP TLS 587          — local development fallback
+#
+# Render deployment : add RESEND_API_KEY to Render environment variables
+# Local development : Gmail SMTP works without Resend
+# Sender address    : onboarding@resend.dev (built-in, works immediately)
+#                     or your own domain once verified on resend.com
+# ─────────────────────────────────────────────────────────────────────────────
 
-def _send_system_email(smtp_user, smtp_pass, to_addr, subject, body_plain):
+import urllib.request
+import urllib.error
+import json as _json
+
+# Resend sender — use onboarding@resend.dev until you verify a custom domain
+RESEND_FROM_NAME    = "BatStateU Attendance System"
+RESEND_FROM_ADDR    = "onboarding@resend.dev"
+
+
+def _send_via_resend(to_addr, subject, body_plain, body_html=None, api_key=None):
     """
-    Tries to send an email using the provided Gmail credentials.
-    Attempts port 465 (SSL) first — more reliable on cloud platforms like Render.
-    Falls back to port 587 (STARTTLS) if 465 fails.
-    Always enforces a 15-second timeout so the caller never hangs.
-
-    Returns: (True, None) on success, (False, error_message) on failure.
+    Send email via Resend HTTP API (https://api.resend.com).
+    Uses HTTPS port 443 — never blocked by Render.
+    Free tier: 3,000 emails/month, 100/day.
+    Sender: onboarding@resend.dev (built-in, no domain verification needed).
+    Returns: (True, None) on success | (False, error_str) on failure
     """
-    clean_pass = smtp_pass.replace(" ", "")
+    if not api_key:
+        api_key = os.environ.get("RESEND_API_KEY", "").strip()
+    if not api_key:
+        return False, "RESEND_API_KEY not configured."
 
-    msg            = MIMEMultipart()
-    msg["From"]    = smtp_user
-    msg["To"]      = to_addr
-    msg["Subject"] = subject
-    msg.attach(MIMEText(body_plain, "plain"))
+    payload = {
+        "from":    f"{RESEND_FROM_NAME} <{RESEND_FROM_ADDR}>",
+        "to":      [to_addr],
+        "subject": subject,
+        "text":    body_plain,
+    }
+    if body_html:
+        payload["html"] = body_html
 
-    # ── Attempt 1: port 465 SSL ───────────────────────────────────────────────
+    req = urllib.request.Request(
+        "https://api.resend.com/emails",
+        data    = _json.dumps(payload).encode("utf-8"),
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type":  "application/json"
+        },
+        method  = "POST"
+    )
     try:
-        import ssl
-        ctx = ssl.create_default_context()
-        with smtplib.SMTP_SSL("smtp.gmail.com", 465, context=ctx, timeout=15) as server:
-            server.login(smtp_user, clean_pass)
-            server.sendmail(smtp_user, to_addr, msg.as_string())
-        print(f"[SMTP] ✓ Sent via port 465 to {to_addr}")
-        return True, None
-    except Exception as e1:
-        print(f"[SMTP] Port 465 failed: {e1} — trying 587...")
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            if resp.status in (200, 201):
+                print(f"[MAIL] ✓ Resend delivered to {to_addr}")
+                return True, None
+            return False, f"Resend HTTP {resp.status}"
+    except urllib.error.HTTPError as e:
+        body = e.read().decode("utf-8", errors="ignore")
+        print(f"[MAIL] Resend error {e.code}: {body}")
+        return False, f"Resend {e.code}: {body}"
+    except Exception as e:
+        return False, str(e)
 
-    # ── Attempt 2: port 587 STARTTLS ─────────────────────────────────────────
-    try:
-        with smtplib.SMTP("smtp.gmail.com", 587, timeout=15) as server:
-            server.ehlo()
-            server.starttls()
-            server.login(smtp_user, clean_pass)
-            server.sendmail(smtp_user, to_addr, msg.as_string())
-        print(f"[SMTP] ✓ Sent via port 587 to {to_addr}")
-        return True, None
-    except Exception as e2:
-        print(f"[SMTP] Port 587 also failed: {e2}")
-        return False, str(e2)
+
+def _send_system_email(from_addr, smtp_pass, to_addr, subject, body_plain, body_html=None):
+    """
+    Unified email sender. Tries in order:
+      1. Resend API  — primary for Render (HTTPS, never blocked)
+      2. Gmail SMTP SSL 465 — local fallback
+      3. Gmail SMTP TLS 587 — local fallback
+
+    from_addr : instructor Gmail (used for SMTP fallback only)
+    smtp_pass : Gmail App Password (SMTP fallback only)
+    Returns: (True, None) | (False, error_str)
+    """
+    # ── 1. Resend (HTTPS — works on Render) ──────────────────────────────────
+    resend_key = os.environ.get("RESEND_API_KEY", "").strip()
+    if resend_key:
+        ok, err = _send_via_resend(to_addr, subject, body_plain, body_html, resend_key)
+        if ok:
+            return True, None
+        print(f"[MAIL] Resend failed: {err} — trying SMTP fallback...")
+
+    # ── 2. Gmail SMTP SSL port 465 (works locally) ────────────────────────────
+    clean_pass = (smtp_pass or "").replace(" ", "")
+    if from_addr and clean_pass:
+        try:
+            import ssl
+            ctx = ssl.create_default_context()
+            msg = MIMEMultipart("alternative")
+            msg["From"]    = from_addr
+            msg["To"]      = to_addr
+            msg["Subject"] = subject
+            msg.attach(MIMEText(body_plain, "plain"))
+            if body_html:
+                msg.attach(MIMEText(body_html, "html"))
+            with smtplib.SMTP_SSL("smtp.gmail.com", 465, context=ctx, timeout=15) as sv:
+                sv.login(from_addr, clean_pass)
+                sv.sendmail(from_addr, to_addr, msg.as_string())
+            print(f"[MAIL] ✓ SMTP 465 delivered to {to_addr}")
+            return True, None
+        except Exception as e1:
+            print(f"[MAIL] SMTP 465 failed: {e1} — trying 587...")
+
+        # ── 3. Gmail SMTP TLS port 587 ────────────────────────────────────────
+        try:
+            msg = MIMEMultipart("alternative")
+            msg["From"]    = from_addr
+            msg["To"]      = to_addr
+            msg["Subject"] = subject
+            msg.attach(MIMEText(body_plain, "plain"))
+            if body_html:
+                msg.attach(MIMEText(body_html, "html"))
+            with smtplib.SMTP("smtp.gmail.com", 587, timeout=15) as sv:
+                sv.ehlo(); sv.starttls()
+                sv.login(from_addr, clean_pass)
+                sv.sendmail(from_addr, to_addr, msg.as_string())
+            print(f"[MAIL] ✓ SMTP 587 delivered to {to_addr}")
+            return True, None
+        except Exception as e2:
+            print(f"[MAIL] SMTP 587 also failed: {e2}")
+            return False, str(e2)
+
+    return False, "No RESEND_API_KEY and no SMTP credentials configured."
 
 
 @app.route("/api/send_otp", methods=["POST"])
@@ -1121,9 +1205,14 @@ def api_send_email():
         msg.attach(plain)
         msg.attach(html)
 
-        sent, err = _send_system_email(smtp_user, smtp_password, data["to"],
-                                 data.get("subject", "Attendance Update"),
-                                 data.get("plain", "Please view this in an HTML-capable email client."))
+        # Send via Resend (primary) → SMTP fallback
+        sent, err = _send_system_email(
+            smtp_user, smtp_password,
+            data["to"],
+            data.get("subject", "Attendance Update"),
+            data.get("plain", "Please view this email in an HTML-capable client."),
+            data.get("html", None)
+        )
         if not sent:
             if "Authentication" in str(err) or "Username" in str(err) or "534" in str(err):
                 return jsonify({"error": "SMTP authentication failed. Check your Gmail and App Password in Profile → Mailing Setup."}), 401
@@ -1193,7 +1282,8 @@ def api_test_smtp():
             "error": (
                 "[Errno 101] Network is unreachable.\n"
                 "Render.com blocks outbound SMTP on ports 587 and 465.\n"
-                "Solution: Use SendGrid or another HTTP-based mail service instead of Gmail SMTP."
+                "Solution: Add RESEND_API_KEY to your Render environment variables.\n"
+                "Get a free key at resend.com (3,000 emails/month free)."
             )
         }), 503
 
