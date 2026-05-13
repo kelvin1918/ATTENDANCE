@@ -836,66 +836,67 @@ def api_verify_session():
 # ── SHARED EMAIL HELPER ──────────────────────────────────────────────────────
 #
 # Priority order:
-#   1. Resend API (HTTPS port 443) — primary, works on Render, free 3000/month
+#   1. Brevo API (HTTPS port 443)  — primary, works on Render, free 300/day
 #   2. Gmail SMTP SSL 465          — local development fallback
 #   3. Gmail SMTP TLS 587          — local development fallback
 #
-# Render deployment : add RESEND_API_KEY to Render environment variables
-# Local development : Gmail SMTP works without Resend
-# Sender address    : onboarding@resend.dev (built-in, works immediately)
-#                     or your own domain once verified on resend.com
+# Render deployment : add BREVO_API_KEY to Render environment variables
+# Local development : Gmail SMTP works without Brevo
+# Sender address    : kelvinlloydafrica@gmail.com (verified on Brevo)
 # ─────────────────────────────────────────────────────────────────────────────
 
 import urllib.request
 import urllib.error
 import json as _json
 
-# Resend sender — use onboarding@resend.dev until you verify a custom domain
-RESEND_FROM_NAME    = "BatStateU Attendance System"
-RESEND_FROM_ADDR    = "onboarding@resend.dev"
+# ── Brevo (formerly Sendinblue) — HTTPS, never blocked by Render ──────────────
+# Free tier: 300 emails/day, no domain needed, Gmail verified sender works.
+# Add BREVO_API_KEY to Render environment variables (starts with xkeysib-).
+BREVO_FROM_NAME = "BatStateU Attendance System"
+BREVO_FROM_ADDR = "kelvinlloydafrica@gmail.com"   # your verified Brevo sender
 
 
-def _send_via_resend(to_addr, subject, body_plain, body_html=None, api_key=None):
+def _send_via_brevo(to_addr, subject, body_plain, body_html=None, api_key=None):
     """
-    Send email via Resend HTTP API (https://api.resend.com).
+    Send email via Brevo Transactional Email API v3.
     Uses HTTPS port 443 — never blocked by Render.
-    Free tier: 3,000 emails/month, 100/day.
-    Sender: onboarding@resend.dev (built-in, no domain verification needed).
+    Free tier: 300 emails/day. Verified Gmail sender, no domain required.
     Returns: (True, None) on success | (False, error_str) on failure
     """
     if not api_key:
-        api_key = os.environ.get("RESEND_API_KEY", "").strip()
+        api_key = os.environ.get("BREVO_API_KEY", "").strip()
     if not api_key:
-        return False, "RESEND_API_KEY not configured."
+        return False, "BREVO_API_KEY not configured."
 
     payload = {
-        "from":    f"{RESEND_FROM_NAME} <{RESEND_FROM_ADDR}>",
-        "to":      [to_addr],
-        "subject": subject,
-        "text":    body_plain,
+        "sender":      {"name": BREVO_FROM_NAME, "email": BREVO_FROM_ADDR},
+        "to":          [{"email": to_addr}],
+        "subject":     subject,
+        "textContent": body_plain,
     }
     if body_html:
-        payload["html"] = body_html
+        payload["htmlContent"] = body_html
 
     req = urllib.request.Request(
-        "https://api.resend.com/emails",
+        "https://api.brevo.com/v3/smtp/email",
         data    = _json.dumps(payload).encode("utf-8"),
         headers = {
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type":  "application/json"
+            "api-key":      api_key,
+            "Content-Type": "application/json",
+            "Accept":       "application/json",
         },
-        method  = "POST"
+        method = "POST"
     )
     try:
         with urllib.request.urlopen(req, timeout=15) as resp:
             if resp.status in (200, 201):
-                print(f"[MAIL] ✓ Resend delivered to {to_addr}")
+                print(f"[MAIL] ✓ Brevo delivered to {to_addr}")
                 return True, None
-            return False, f"Resend HTTP {resp.status}"
+            return False, f"Brevo HTTP {resp.status}"
     except urllib.error.HTTPError as e:
         body = e.read().decode("utf-8", errors="ignore")
-        print(f"[MAIL] Resend error {e.code}: {body}")
-        return False, f"Resend {e.code}: {body}"
+        print(f"[MAIL] Brevo error {e.code}: {body}")
+        return False, f"Brevo {e.code}: {body}"
     except Exception as e:
         return False, str(e)
 
@@ -903,21 +904,21 @@ def _send_via_resend(to_addr, subject, body_plain, body_html=None, api_key=None)
 def _send_system_email(from_addr, smtp_pass, to_addr, subject, body_plain, body_html=None):
     """
     Unified email sender. Tries in order:
-      1. Resend API  — primary for Render (HTTPS, never blocked)
-      2. Gmail SMTP SSL 465 — local fallback
-      3. Gmail SMTP TLS 587 — local fallback
+      1. Brevo API   — primary for Render (HTTPS, never blocked, 300/day free)
+      2. Gmail SMTP SSL 465 — local development fallback
+      3. Gmail SMTP TLS 587 — local development fallback
 
     from_addr : instructor Gmail (used for SMTP fallback only)
     smtp_pass : Gmail App Password (SMTP fallback only)
     Returns: (True, None) | (False, error_str)
     """
-    # ── 1. Resend (HTTPS — works on Render) ──────────────────────────────────
-    resend_key = os.environ.get("RESEND_API_KEY", "").strip()
-    if resend_key:
-        ok, err = _send_via_resend(to_addr, subject, body_plain, body_html, resend_key)
+    # ── 1. Brevo (HTTPS — works on Render, free, no domain needed) ────────────
+    brevo_key = os.environ.get("BREVO_API_KEY", "").strip()
+    if brevo_key:
+        ok, err = _send_via_brevo(to_addr, subject, body_plain, body_html, brevo_key)
         if ok:
             return True, None
-        print(f"[MAIL] Resend failed: {err} — trying SMTP fallback...")
+        print(f"[MAIL] Brevo failed: {err} — trying SMTP fallback...")
 
     # ── 2. Gmail SMTP SSL port 465 (works locally) ────────────────────────────
     clean_pass = (smtp_pass or "").replace(" ", "")
@@ -959,7 +960,7 @@ def _send_system_email(from_addr, smtp_pass, to_addr, subject, body_plain, body_
             print(f"[MAIL] SMTP 587 also failed: {e2}")
             return False, str(e2)
 
-    return False, "No RESEND_API_KEY and no SMTP credentials configured."
+    return False, "No BREVO_API_KEY and no SMTP credentials configured."
 
 
 @app.route("/api/send_otp", methods=["POST"])
@@ -981,8 +982,8 @@ def api_send_otp():
     otp_code = str(random.randint(10000, 99999))
     db.create_otp(email, otp_code)
 
-    # Send OTP via Resend (primary) or SMTP fallback
-    # Uses _send_system_email which checks RESEND_API_KEY first
+    # Send OTP via Brevo (primary) or SMTP fallback
+    # Uses _send_system_email which checks BREVO_API_KEY first
     instructor_name = instructor["name"] or "Instructor"
     body = (
         f"Hello {instructor_name},\n\n"
@@ -992,7 +993,7 @@ def api_send_otp():
         f"If you did not request this, ignore this email.\n\n"
         f"--- BatStateU Attendance System"
     )
-    # Pass empty strings for smtp credentials — Resend doesn't need them
+    # Pass empty strings for smtp credentials — Brevo doesn't need them
     smtp_user = os.environ.get("SYSTEM_EMAIL", "").strip()
     smtp_pass = os.environ.get("SYSTEM_EMAIL_PASS", "").strip()
     sent, err = _send_system_email(smtp_user, smtp_pass, email,
@@ -1002,7 +1003,7 @@ def api_send_otp():
         print(f"[OTP] Email send failed: {err}")
         return jsonify({"status": "ok",
                         "warn": f"OTP generated but email failed to send. "
-                                 "Check RESEND_API_KEY in Render environment variables."})
+                                 "Check BREVO_API_KEY in Render environment variables."})
 
     return jsonify({"status": "ok", "msg": "OTP sent to your email."})
 
@@ -1200,7 +1201,7 @@ def api_send_email():
         msg.attach(plain)
         msg.attach(html)
 
-        # Send via Resend (primary) → SMTP fallback
+        # Send via Brevo (primary) → SMTP fallback
         sent, err = _send_system_email(
             smtp_user, smtp_password,
             data["to"],
@@ -1277,8 +1278,8 @@ def api_test_smtp():
             "error": (
                 "[Errno 101] Network is unreachable.\n"
                 "Render.com blocks outbound SMTP on ports 587 and 465.\n"
-                "Solution: Add RESEND_API_KEY to your Render environment variables.\n"
-                "Get a free key at resend.com (3,000 emails/month free)."
+                "Solution: Add BREVO_API_KEY to your Render environment variables.\n"
+                "Get a free key at brevo.com (300 emails/day free, no domain needed)."
             )
         }), 503
 
