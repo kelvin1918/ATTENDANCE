@@ -853,7 +853,7 @@ import json as _json
 # Free tier: 300 emails/day, no domain needed, Gmail verified sender works.
 # Add BREVO_API_KEY to Render environment variables (starts with xkeysib-).
 BREVO_FROM_NAME = "BatStateU Attendance System"
-BREVO_FROM_ADDR = "kelvinlloydafrica@gmail.com"   # your verified Brevo sender
+BREVO_FROM_ADDR = "attendance.system.bsu@gmail.com"   # your verified Brevo sender
 
 
 def _send_via_brevo(to_addr, subject, body_plain, body_html=None, api_key=None):
