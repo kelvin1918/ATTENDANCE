@@ -981,33 +981,28 @@ def api_send_otp():
     otp_code = str(random.randint(10000, 99999))
     db.create_otp(email, otp_code)
 
-    # Send OTP via system SMTP from .env
+    # Send OTP via Resend (primary) or SMTP fallback
+    # Uses _send_system_email which checks RESEND_API_KEY first
+    instructor_name = instructor["name"] or "Instructor"
+    body = (
+        f"Hello {instructor_name},\n\n"
+        f"Your OTP for password reset is:\n\n"
+        f"  {otp_code}\n\n"
+        f"This code expires in 10 minutes. Do not share it with anyone.\n\n"
+        f"If you did not request this, ignore this email.\n\n"
+        f"--- BatStateU Attendance System"
+    )
+    # Pass empty strings for smtp credentials — Resend doesn't need them
     smtp_user = os.environ.get("SYSTEM_EMAIL", "").strip()
     smtp_pass = os.environ.get("SYSTEM_EMAIL_PASS", "").strip()
-
-    if smtp_user and smtp_pass:
-        instructor_name = instructor["name"] or "Instructor"
-        body = (
-            f"Hello {instructor_name},\n\n"
-            f"Your OTP for password reset is:\n\n"
-            f"  {otp_code}\n\n"
-            f"This code expires in 10 minutes. Do not share it with anyone.\n\n"
-            f"If you did not request this, ignore this email.\n\n"
-            f"--- BatStateU Attendance System"
-        )
-        sent, err = _send_system_email(smtp_user, smtp_pass, email,
-                                        "Password Reset OTP — BatStateU Attendance System",
-                                        body)
-        if not sent:
-            print(f"[OTP] Email send failed: {err}")
-            return jsonify({"status": "ok",
-                            "warn": f"OTP generated but email failed: {err}. "
-                                     "Check SYSTEM_EMAIL credentials on Render."})
-    else:
-        print("[OTP] No SYSTEM_EMAIL configured — OTP generated but not emailed.")
+    sent, err = _send_system_email(smtp_user, smtp_pass, email,
+                                    "Password Reset OTP — BatStateU Attendance System",
+                                    body)
+    if not sent:
+        print(f"[OTP] Email send failed: {err}")
         return jsonify({"status": "ok",
-                        "warn": "No system email configured. Add SYSTEM_EMAIL and "
-                                "SYSTEM_EMAIL_PASS to Render environment variables."})
+                        "warn": f"OTP generated but email failed to send. "
+                                 "Check RESEND_API_KEY in Render environment variables."})
 
     return jsonify({"status": "ok", "msg": "OTP sent to your email."})
 
