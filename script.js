@@ -1004,18 +1004,25 @@ async function viewAndPrintPDF(class_code, date, session_time) {
 
             const _sigHtml = (student) => {
                 if (!student) return '';
-                const p = student.sig_path || '';
+                const p   = student.sig_path || '';
+                const col = statusColor(student.status);
                 if (p) {
-                    // Extract just the filename so the route stays clean
-                    const fname = p.split(/[\\/]/).pop();
-                    const col   = statusColor(student.status);
-                    return `<img src="/api/signature/${encodeURIComponent(fname)}"
+                    // If it's a Cloudinary URL, use it directly — no local server needed
+                    // If it's a local path, route through /api/signature/<filename>
+                    let imgSrc;
+                    if (p.startsWith('http://') || p.startsWith('https://')) {
+                        imgSrc = p;   // Cloudinary public URL — use directly
+                    } else {
+                        const fname = p.split(/[\\/]/).pop();
+                        imgSrc = `/api/signature/${encodeURIComponent(fname)}`;
+                    }
+                    return `<img src="${imgSrc}"
                                  alt="${student.status}"
+                                 crossorigin="anonymous"
                                  onerror="this.style.display='none';this.nextElementSibling.style.display='inline';"
                                  style="max-height:20px;max-width:90%;object-fit:contain;display:block;margin:0 auto;">
                             <span style="display:none;font-weight:bold;color:${col};font-size:10px;">${student.status}</span>`;
                 }
-                const col = statusColor(student.status);
                 return `<span style="font-weight:bold;color:${col};">${student.status}</span>`;
             };
 

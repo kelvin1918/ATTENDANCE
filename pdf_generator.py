@@ -259,15 +259,24 @@ SIG_MAX_H = 12            # row is 14 pt; 1 pt clearance top + bottom
 
 
 def _fetch_image_bytes(url):
-    """Download image from URL. Returns b'' on failure."""
+    """Download image from Cloudinary URL. Returns b'' on failure.
+    Uses a 12s timeout. On Render, all 30+ signatures are fetched
+    in the same request so we cache by URL to avoid duplicate downloads."""
+    if url in _fetch_image_bytes._cache:
+        return _fetch_image_bytes._cache[url]
     try:
         import urllib.request as _ur
         req = _ur.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-        with _ur.urlopen(req, timeout=5) as resp:
-            return resp.read()
+        with _ur.urlopen(req, timeout=12) as resp:
+            data = resp.read()
+            _fetch_image_bytes._cache[url] = data
+            return data
     except Exception as e:
-        print(f"[PDF] Could not fetch signature: {e}")
+        print(f"[PDF] Could not fetch signature from {url}: {e}")
+        _fetch_image_bytes._cache[url] = b""
         return b""
+
+_fetch_image_bytes._cache = {}
 
 
 def _sig_cell(sig_path, status, sig_col, norm9c_style):

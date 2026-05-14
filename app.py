@@ -674,17 +674,39 @@ def api_download_pdf(class_code, date):
 
 
 
-    filepath = generate_attendance_pdf(
-        class_id     = class_code,
-        subject      = cls["subject"],
-        section      = cls["section"],
-        room         = room,
-        date         = date,
-        time_str     = time_str,
-        faculty_name = faculty_name,
-        records      = attended,
-        session_time = session_time or "",
-    )
+    # ── Pre-fetch all Cloudinary signatures concurrently ────────────────────
+    # This avoids sequential 12s timeouts for 30+ students — all fetches run
+    # in parallel threads so total wait is ~max(individual_fetch) not sum.
+    import threading as _th
+    from pdf_generator import _fetch_image_bytes
+    _fetch_image_bytes._cache.clear()   # fresh cache per PDF request
+
+    def _warm(url):
+        if url and (url.startswith("http://") or url.startswith("https://")):
+            _fetch_image_bytes(url)
+
+    sig_urls = list({rec.get("sig_path", "") for rec in attended})
+    warmers  = [_th.Thread(target=_warm, args=(u,), daemon=True) for u in sig_urls if u]
+    for w in warmers: w.start()
+    for w in warmers: w.join(timeout=15)   # wait up to 15s for all prefetches
+
+    # ── Generate PDF ─────────────────────────────────────────────────────────
+    try:
+        filepath = generate_attendance_pdf(
+            class_id     = class_code,
+            subject      = cls["subject"],
+            section      = cls["section"],
+            room         = room,
+            date         = date,
+            time_str     = time_str,
+            faculty_name = faculty_name,
+            records      = attended,
+            session_time = session_time or "",
+        )
+    except Exception as pdf_err:
+        print(f"[PDF] Generation error: {pdf_err}")
+        import traceback; traceback.print_exc()
+        return jsonify({"error": f"PDF generation failed: {pdf_err}"}), 500
 
     return send_file(
         filepath,
