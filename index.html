@@ -14,21 +14,20 @@
         /* ── History 3-column layout ────────────────────────────────────────── */
         .history-layout {
             display: grid;
-            grid-template-columns: 220px 1fr 1fr;
-            gap: 16px;
-            height: calc(100vh - 220px);
+            grid-template-columns: 240px 260px 1fr;
+            gap: 20px;
+            height: calc(100vh - 210px);
             min-height: 400px;
             transition: grid-template-columns 0.25s ease;
         }
-        /* Collapsed state: folders panel hidden */
+        /* Collapsed: folders slide away, files + detail expand */
         .history-layout.folders-hidden {
-            grid-template-columns: 0px 1fr 1fr;
+            grid-template-columns: 0px 280px 1fr;
         }
         .history-layout.folders-hidden .history-col-folders {
             overflow: hidden;
             opacity: 0;
             pointer-events: none;
-            width: 0;
             min-width: 0;
             padding: 0;
         }
@@ -36,21 +35,23 @@
         .history-col-files,
         .history-col-detail {
             overflow-y: auto;
-            padding-right: 4px;
             min-width: 0;
-            transition: opacity 0.2s ease, width 0.25s ease;
+            transition: opacity 0.2s ease;
         }
+        .history-col-folders { padding-right: 4px; }
+        .history-col-files   { border-left: 1px solid #F3F4F6; padding-left: 16px; }
+        .history-col-detail  { border-left: 1px solid #F3F4F6; padding-left: 16px; }
         .history-detail-inner {
             height: 100%;
             display: flex;
             flex-direction: column;
             overflow-y: auto;
         }
-        /* Toggle button for folders panel */
+        /* Toggle button */
         .history-toggle-btn {
             display: inline-flex;
             align-items: center;
-            gap: 6px;
+            gap: 5px;
             font-size: 9px;
             font-weight: 800;
             text-transform: uppercase;
@@ -59,14 +60,13 @@
             background: none;
             border: none;
             cursor: pointer;
-            padding: 4px 8px;
+            padding: 3px 8px;
             border-radius: 8px;
             transition: background 0.15s, color 0.15s;
         }
-        .history-toggle-btn:hover {
-            background: #FEF2F2;
-            color: #D32F2F;
-        }
+        .history-toggle-btn:hover { background: #FEF2F2; color: #D32F2F; }
+        /* Hide mobile hidden class on desktop */
+        .history-col-hidden-mobile { display: block; }
     </style>
 </head>
 <body class="flex h-screen overflow-hidden bg-[#FDFDFD]">

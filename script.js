@@ -726,10 +726,10 @@ async function renderHistoryPage() {
 
             <!-- Column 1: Class Folders (collapsible) -->
             <div class="history-col-folders">
-                <div class="flex items-center justify-between mb-3">
+                <div class="flex items-center justify-between mb-4">
                     <p class="text-[9px] font-black text-gray-400 uppercase tracking-widest">Class Folders</p>
-                    <button class="history-toggle-btn" onclick="toggleHistoryFolders()" title="Hide folders panel">
-                        <i data-lucide="panel-left-close" class="w-3 h-3"></i>
+                    <button class="history-toggle-btn" onclick="toggleHistoryFolders()" title="Hide folders">
+                        <i data-lucide="chevrons-left" class="w-3 h-3"></i>
                     </button>
                 </div>
                 ${filtered.length === 0
@@ -752,12 +752,13 @@ async function renderHistoryPage() {
 
             <!-- Column 2: Attendance Files -->
             <div class="history-col-files ${historySelectedClass ? '' : 'history-col-hidden-mobile'}">
-                <div class="flex items-center justify-between mb-3">
-                    <p class="text-[9px] font-black text-gray-400 uppercase tracking-widest">Attendance Files</p>
-                    <button id="historyShowFoldersBtn" class="history-toggle-btn hidden" onclick="toggleHistoryFolders()" title="Show folders panel">
-                        <i data-lucide="panel-left-open" class="w-3 h-3"></i>
-                        <span>Folders</span>
-                    </button>
+                <div class="flex items-center justify-between mb-4">
+                    <div class="flex items-center gap-2">
+                        <button id="historyShowFoldersBtn" class="history-toggle-btn hidden" onclick="toggleHistoryFolders()" title="Show folders">
+                            <i data-lucide="chevrons-right" class="w-3 h-3"></i>
+                        </button>
+                        <p class="text-[9px] font-black text-gray-400 uppercase tracking-widest">Attendance Files</p>
+                    </div>
                 </div>
                 <div id="historyFilesList">
                     <p class="text-[10px] text-gray-300 font-bold text-center py-8">Select a class folder</p>
@@ -830,7 +831,7 @@ async function historyLoadFiles(class_code) {
             const ap  = d.getHours() >= 12 ? 'PM' : 'AM';
             return `${String(h12).padStart(2,'0')}-${mm}-${ss}${ap}`;
         })() : '';
-        const fileLabel = `${_hMo}-${_hDy}-${_hYr}${_hT ? '_'+_hT : ''}_Report.pdf`;
+        const fileLabel = `Log_${_hMo}-${_hDy}-${_hYr}${_hT ? '_'+_hT : ''}_Report.pdf`;
 
         // Display time in 12-hour format for subtitle
         const dispTime = s.session_time
@@ -2385,18 +2386,8 @@ function showToast(msg, type = 'success') {
 // ── CONFIRM DIALOG (unchanged logic, updated backend calls) ───────────────────
 
 async function confirmAction(action, id) {
-    // For deleteSubject: check usage FIRST before showing any modal
+    // For deleteSubject: always show "Are you sure?" — simpler and reliable
     if (action === 'deleteSubject') {
-        try {
-            const uRes = await authFetch(`/api/schedules/${id}/check_usage`);
-            const used = await uRes.json();
-            if (used.length > 0) {
-                // Schedule IS linked to a class folder → show "in use" blocking modal
-                showScheduleInUseModal();
-                return;
-            }
-        } catch {}
-        // Schedule is NOT linked → show "Are you sure?" confirm modal
         const modal = document.getElementById('customConfirm');
         modal.classList.remove('hidden');
         document.getElementById('confirmDesc').innerText = "Are you sure you want to delete this schedule? This cannot be undone.";
