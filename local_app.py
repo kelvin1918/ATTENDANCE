@@ -86,7 +86,7 @@ except ImportError:
 
 # ── CAMERA ───────────────────────────────────────────────────────────────────
 try:
-    from face_recognition_a import FaceRecognizer, load_known_faces
+    from face_recognition_a import FaceRecognizer, load_known_faces, _build_app
     CAMERA_ENABLED = True
 except ImportError:
     CAMERA_ENABLED = False
@@ -153,14 +153,12 @@ _load_lock     = threading.Lock()
 
 def _load_class_faces_bg(class_code, session_meta):
     """
-    Background thread — encodes faces one-by-one for this class only.
-    Updates _load_progress after each image.
+    Background thread — loads InsightFace buffalo_l model and encodes all
+    faces for this class. Updates _load_progress after each image.
     Starts the camera automatically when all faces are encoded.
     """
     global known_enc, known_names, recognizer, _camera_active
     global _current_class_code, _load_progress
-
-    import face_recognition as _fr
 
     faces_dir   = _class_faces_dir(class_code)
     image_files = [
@@ -172,21 +170,41 @@ def _load_class_faces_bg(class_code, session_meta):
     with _load_lock:
         _load_progress = {"loaded": 0, "total": total, "done": False, "error": None}
 
+    # Build InsightFace app once for this session
+    from face_recognition_a import _build_app as _insight_build
+    import cv2 as _cv2, numpy as _np
+
+    angle_suffixes = ("_front", "_left", "_right", "_up")
+
+    app = _insight_build()
     enc_list  = []
     name_list = []
 
     for i, filename in enumerate(image_files):
-        path         = os.path.join(faces_dir, filename)
-        display_name = os.path.splitext(filename)[0].replace("_", " ")
+        path     = os.path.join(faces_dir, filename)
+        raw_name = os.path.splitext(filename)[0]
+
+        # Strip angle suffix to get display name
+        display_name = raw_name
+        for sfx in angle_suffixes:
+            if raw_name.lower().endswith(sfx):
+                display_name = raw_name[:-len(sfx)]
+                break
+        display_name = display_name.replace("_", " ")
+
         try:
-            img  = _fr.load_image_file(path)
-            encs = _fr.face_encodings(img)
-            if encs:
-                enc_list.append(encs[0])
-                name_list.append(display_name)
-                print(f"[FACES] ✓ {display_name} ({i+1}/{total})")
+            img   = _cv2.imread(path)
+            if img is None:
+                print(f"[FACES] ✗ Cannot read {filename}")
             else:
-                print(f"[FACES] ✗ No face in {filename}")
+                faces = app.get(img) if app else []
+                if faces:
+                    face = max(faces, key=lambda f: (f.bbox[2]-f.bbox[0])*(f.bbox[3]-f.bbox[1]))
+                    enc_list.append(face.normed_embedding)
+                    name_list.append(display_name)
+                    print(f"[FACES] ✓ {display_name} ({i+1}/{total})")
+                else:
+                    print(f"[FACES] ✗ No face in {filename}")
         except Exception as e:
             print(f"[FACES] ✗ Error {filename}: {e}")
 
@@ -205,11 +223,11 @@ def _load_class_faces_bg(class_code, session_meta):
 
         known_enc, known_names = enc_list, name_list
         _current_class_code    = class_code
-        recognizer             = FaceRecognizer(known_enc, known_names)
+        recognizer             = FaceRecognizer(known_enc, known_names, app)
         recognizer.set_session(email, class_code, section, subject)
         recognizer.start(source)
         _camera_active = True
-        print(f"[CAMERA] Started — {len(known_names)} face(s) for {class_code}")
+        print(f"[CAMERA] Started — {len(known_names)} embedding(s) for {class_code}")
 
         with _load_lock:
             _load_progress["done"] = True
@@ -229,35 +247,21 @@ def _load_class_faces(class_code: str):
     """
     faces_dir = _class_faces_dir(class_code)
     if CAMERA_ENABLED:
-        return load_known_faces(faces_dir)
-    return [], []
+        encs, names, app = load_known_faces(faces_dir)
+        return encs, names, app
+    return [], [], None
 
 
 def _add_single_face(image_path: str, display_name: str):
     """
-    Encode ONE new face image and append it to the live recognizer.
-    Called after student registration — no full reload needed.
+    Encode ONE face image and append its InsightFace embedding to the live recognizer.
+    Called for each angle photo after registration.
     Runs in a background thread so the HTTP response returns immediately.
     """
     if not CAMERA_ENABLED or recognizer is None:
         return
-
-    def _encode():
-        import face_recognition as _fr
-        try:
-            img  = _fr.load_image_file(image_path)
-            encs = _fr.face_encodings(img)
-            if encs:
-                with recognizer._lock:
-                    recognizer.known_encodings.append(encs[0])
-                    recognizer.known_names.append(display_name)
-                print(f"[FACES] ✓ Added {display_name} to live recognizer")
-            else:
-                print(f"[FACES] ✗ No face found in {image_path}")
-        except Exception as e:
-            print(f"[FACES] ✗ Encode error for {display_name}: {e}")
-
-    threading.Thread(target=_encode, daemon=True).start()
+    # Delegate to FaceRecognizer.add_known_face which uses InsightFace internally
+    recognizer.add_known_face(image_path, display_name)
 
 
 def _cloudinary_upload(local_path: str, public_id: str, folder: str) -> str:
@@ -285,38 +289,67 @@ def _cloudinary_upload(local_path: str, public_id: str, folder: str) -> str:
         return ""
 
 
-def _register_bg(class_code, name, safe_base, photo_local, face_local, sig_local, form_data):
+def _register_bg(class_code, name, safe_base,
+                 face_files,       # list of (local_path, angle_label)
+                 photo_local,      # front photo for display (students/ folder)
+                 sig_local,        # signature file
+                 form_data):
     """
-    Background thread for student registration:
-      1. Lazy face encode (appends to live recognizer, no full reload)
-      2. Upload photo + signature to Cloudinary
-      3. Save student record to Neon DB (Cloudinary URL preferred, local fallback)
+    Background thread for student registration (4-angle InsightFace version):
+      1. Encode all angle photos and add to live recognizer
+      2. Upload all angle photos + signature to Cloudinary
+      3. Save student record to Neon DB
     HTTP response is already returned before this runs.
-    """
-    # Step 1 — lazy encode
-    if face_local:
-        _add_single_face(face_local, name)
 
-    # Step 2 — Cloudinary
+    face_files: [(path, label), ...] e.g.
+        [("faces/CLASS/Name_front.jpg", "front"),
+         ("faces/CLASS/Name_left.jpg",  "left"), ...]
+    """
     safe_class = _safe_code(class_code)
-    photo_url  = _cloudinary_upload(photo_local, safe_base,         f"students/{safe_class}")  if photo_local else ""
-    sig_url    = _cloudinary_upload(sig_local,   safe_base + "_sig", f"signatures/{safe_class}") if sig_local   else ""
+
+    # Step 1 — lazy encode ALL angle photos into live recognizer
+    for face_path, angle_label in face_files:
+        if face_path and os.path.isfile(face_path):
+            _add_single_face(face_path, name)
+
+    # Step 2 — Cloudinary uploads
+    # Front photo → students/ folder (for display on Render)
+    photo_url = _cloudinary_upload(photo_local, safe_base, f"students/{safe_class}")                 if photo_local else ""
+
+    # Angle photos → faces/ folder on Cloudinary (for sync to new PCs)
+    angle_urls = {}
+    for face_path, label in face_files:
+        if face_path and os.path.isfile(face_path):
+            url = _cloudinary_upload(
+                face_path,
+                f"{safe_base}_{label}",
+                f"faces/{safe_class}"
+            )
+            angle_urls[f"photo_{label}"] = url
+
+    # Signature
+    sig_url = _cloudinary_upload(sig_local, safe_base + "_sig", f"signatures/{safe_class}")               if sig_local else ""
 
     # Step 3 — DB
     try:
         db.add_student(
-            class_code = class_code,
-            name       = name,
-            address    = form_data.get("address", ""),
-            number     = form_data.get("number",  ""),
-            sr_code    = form_data.get("sr_code", ""),
-            age        = int(form_data.get("age") or 0),
-            sex        = form_data.get("sex",     ""),
-            email      = form_data.get("email",   ""),
-            photo      = photo_url  or photo_local or "",
-            signature  = sig_url    or sig_local   or "",
+            class_code   = class_code,
+            name         = name,
+            address      = form_data.get("address", ""),
+            number       = form_data.get("number",  ""),
+            sr_code      = form_data.get("sr_code", ""),
+            age          = int(form_data.get("age") or 0),
+            sex          = form_data.get("sex",     ""),
+            email        = form_data.get("email",   ""),
+            photo        = photo_url  or photo_local or "",
+            signature    = sig_url    or sig_local   or "",
+            photo_front  = angle_urls.get("photo_front",  ""),
+            photo_left   = angle_urls.get("photo_left",   ""),
+            photo_right  = angle_urls.get("photo_right",  ""),
+            photo_up     = angle_urls.get("photo_up",     ""),
         )
-        print(f"[REG] ✓ {name} saved — sig={'Cloudinary' if sig_url else 'local'}")
+        print(f"[REG] ✓ {name} saved — {len(face_files)} angle(s), "
+              f"sig={'Cloudinary' if sig_url else 'local'}")
     except Exception as e:
         print(f"[REG] ✗ DB error for {name}: {e}")
 
@@ -415,48 +448,59 @@ def _sync_faces_bg(instructor_id):
 
     import urllib.request as _ur
 
-    for s in students:
-        class_code = s.get("class_code", "")
-        name       = s.get("name", "")
-        photo_url  = s.get("photo", "") or ""
-
-        # Build expected local face path
-        safe_name  = _safe_code(name.replace(" ", "_"))
-        faces_dir  = _class_faces_dir(class_code)
-
-        # Check if ANY image for this student already exists
-        existing = [
-            f for f in os.listdir(faces_dir)
-            if os.path.splitext(f)[0] == safe_name
-        ] if os.path.isdir(faces_dir) else []
-
-        if existing:
-            skipped += 1
-            with _sync_lock:
-                _sync_progress["skipped"] = skipped
-            continue
-
-        # Only download if it's a Cloudinary / HTTPS URL
-        if not photo_url.startswith("http"):
-            skipped += 1
-            with _sync_lock:
-                _sync_progress["skipped"] = skipped
-            continue
-
-        # Determine extension from URL
-        url_path = photo_url.split("?")[0]   # strip query params
-        ext      = os.path.splitext(url_path)[1] or ".jpg"
-        dest     = os.path.join(faces_dir, safe_name + ext)
-
+    def _dl(url, dest):
+        """Download a URL to dest. Returns True on success."""
+        if not url or not url.startswith("http"):
+            return False
+        if os.path.isfile(dest):
+            return False   # already exists
         try:
-            req = _ur.Request(photo_url, headers={"User-Agent": "Mozilla/5.0"})
+            req = _ur.Request(url, headers={"User-Agent": "Mozilla/5.0"})
             with _ur.urlopen(req, timeout=10) as resp:
                 with open(dest, "wb") as out:
                     out.write(resp.read())
-            synced += 1
-            print(f"[SYNC] ✓ {name} → {dest}")
+            return True
         except Exception as e:
-            print(f"[SYNC] ✗ {name}: {e}")
+            print(f"[SYNC] ✗ download error {dest}: {e}")
+            return False
+
+    for s in students:
+        class_code = s.get("class_code", "")
+        name       = s.get("name", "")
+        safe_name  = _safe_code(name.replace(" ", "_"))
+        faces_dir  = _class_faces_dir(class_code)
+        any_dl     = False
+
+        # Try all 4 angle photos first (new registration format)
+        angle_map = {
+            "front": s.get("photo_front", "") or "",
+            "left":  s.get("photo_left",  "") or "",
+            "right": s.get("photo_right", "") or "",
+            "up":    s.get("photo_up",    "") or "",
+        }
+        has_angles = any(v.startswith("http") for v in angle_map.values())
+
+        if has_angles:
+            for label, url in angle_map.items():
+                if not url:
+                    continue
+                ext  = os.path.splitext(url.split("?")[0])[1] or ".jpg"
+                dest = os.path.join(faces_dir, f"{safe_name}_{label}{ext}")
+                if _dl(url, dest):
+                    any_dl = True
+                    print(f"[SYNC] ✓ {name} ({label})")
+        else:
+            # Legacy: single photo in photo column
+            photo_url = s.get("photo", "") or ""
+            ext  = os.path.splitext(photo_url.split("?")[0])[1] or ".jpg"
+            dest = os.path.join(faces_dir, f"{safe_name}_front{ext}")
+            if _dl(photo_url, dest):
+                any_dl = True
+                print(f"[SYNC] ✓ {name} (legacy front)")
+
+        if any_dl:
+            synced += 1
+        else:
             skipped += 1
 
         with _sync_lock:
@@ -949,37 +993,52 @@ def api_local_register_student():
 
     safe_base = secure_filename(name.replace(" ", "_"))
 
-    # ── Save files to disk immediately (before background thread) ─────────────
-    # Files must be saved synchronously because request.files is not
-    # accessible after the HTTP response is returned.
+    # ── Save all 4 angle photos + signature synchronously ────────────────────
+    # request.files is not accessible after the HTTP response, so all
+    # file saves must happen before the background thread is spawned.
 
-    photo_local = ""
-    face_local  = ""
-    if "photo" in request.files:
-        f = request.files["photo"]
-        if f and f.filename and allowed(f.filename):
-            ext          = os.path.splitext(secure_filename(f.filename))[1]
-            photo_local  = os.path.join(_class_students_dir(class_code), safe_base + ext)
-            f.save(photo_local)
-            face_local   = os.path.join(_class_faces_dir(class_code), safe_base + ext)
-            if not os.path.exists(face_local):
-                shutil.copy(photo_local, face_local)
+    ANGLES = ["front", "left", "right", "up"]
+    face_files  = []   # list of (local_path, angle_label)
+    photo_local = ""   # front photo path for display (students/ folder)
+
+    for angle in ANGLES:
+        key = f"photo_{angle}"
+        if key in request.files:
+            f = request.files[key]
+            if f and f.filename and allowed(f.filename):
+                ext        = os.path.splitext(secure_filename(f.filename))[1]
+                face_path  = os.path.join(
+                    _class_faces_dir(class_code),
+                    f"{safe_base}_{angle}{ext}"
+                )
+                f.save(face_path)
+                face_files.append((face_path, angle))
+                if angle == "front":
+                    # Also save to students/ folder for display
+                    photo_local = os.path.join(
+                        _class_students_dir(class_code), safe_base + ext
+                    )
+                    shutil.copy(face_path, photo_local)
+
+    if not face_files:
+        return jsonify({"error": "At least the front-facing photo is required."}), 400
 
     sig_local = ""
     if "signature" in request.files:
         f = request.files["signature"]
         if f and f.filename and allowed(f.filename):
             ext       = os.path.splitext(secure_filename(f.filename))[1]
-            sig_local = os.path.join(_class_signatures_dir(class_code), safe_base + "_sig" + ext)
+            sig_local = os.path.join(
+                _class_signatures_dir(class_code), safe_base + "_sig" + ext
+            )
             f.save(sig_local)
 
     # ── Offload encoding + Cloudinary + DB to background thread ───────────────
-    # HTTP response returns immediately — instructor sees "Registered ✓" at once.
     threading.Thread(
-        target  = _register_bg,
-        args    = (class_code, name, safe_base,
-                   photo_local, face_local, sig_local, dict(form)),
-        daemon  = True,
+        target = _register_bg,
+        args   = (class_code, name, safe_base,
+                  face_files, photo_local, sig_local, dict(form)),
+        daemon = True,
     ).start()
 
     return jsonify({"status": "ok", "name": name})

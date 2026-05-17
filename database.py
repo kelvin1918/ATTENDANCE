@@ -173,6 +173,10 @@ def init_db():
         );
     """)
     cur.execute("ALTER TABLE students ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'Enrolled';")
+    cur.execute("ALTER TABLE students ADD COLUMN IF NOT EXISTS photo_front TEXT DEFAULT '';")
+    cur.execute("ALTER TABLE students ADD COLUMN IF NOT EXISTS photo_left  TEXT DEFAULT '';")
+    cur.execute("ALTER TABLE students ADD COLUMN IF NOT EXISTS photo_right TEXT DEFAULT '';")
+    cur.execute("ALTER TABLE students ADD COLUMN IF NOT EXISTS photo_up    TEXT DEFAULT '';")
 
     # ── 5. attendance — references classes ────────────────────────────────────
     cur.execute("""
@@ -489,16 +493,19 @@ def get_student_by_srcode(sr_code):
 
 
 def add_student(class_code, name, address, number,
-                sr_code, age, sex, email, photo, signature):
+                sr_code, age, sex, email, photo, signature,
+                photo_front="", photo_left="", photo_right="", photo_up=""):
     conn = get_db()
     cur  = get_cursor(conn)
     cur.execute(
         """INSERT INTO students
            (class_code, name, address, number,
-            sr_code, age, sex, email, photo, signature)
-           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+            sr_code, age, sex, email, photo, signature,
+            photo_front, photo_left, photo_right, photo_up)
+           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
         (class_code, name, address, number,
-         sr_code, age, sex, email, photo, signature)
+         sr_code, age, sex, email, photo, signature,
+         photo_front, photo_left, photo_right, photo_up)
     )
     conn.commit()
     cur.close(); conn.close()

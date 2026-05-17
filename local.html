@@ -819,20 +819,68 @@ label.field-label{display:block;font-size:12px;font-weight:600;
         <input class="input" id="reg-email" type="email" placeholder="student@email.com">
       </div>
 
-      <!-- Photo upload -->
+      <!-- 4-Angle Photo uploads -->
       <div class="field">
-        <label class="field-label">Student Photo (for face recognition)</label>
-        <div class="file-upload-area" id="photo-upload-area"
-             onclick="document.getElementById('reg-photo').click()">
-          <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24" style="opacity:.4">
-            <path d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" stroke-linecap="round"/>
-            <circle cx="12" cy="13" r="3" stroke-linecap="round"/>
-          </svg>
-          <p>Click to choose photo</p>
-          <span class="filename" id="photo-filename"></span>
+        <label class="field-label" style="color:#D32F2F;font-weight:700;">
+          Face Photos — 4 Angles Required
+        </label>
+        <p style="font-size:11px;color:#888;margin-bottom:10px;">
+          All 4 angles are needed for accurate detection at distance and from the side.
+        </p>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+          <!-- Front -->
+          <div>
+            <label style="font-size:11px;font-weight:600;color:#555;display:block;margin-bottom:4px;">
+              📷 Front Face <span style="color:#D32F2F;">*</span>
+            </label>
+            <div class="file-upload-area" id="photo-front-area" style="padding:10px;"
+                 onclick="document.getElementById('reg-photo-front').click()">
+              <p style="font-size:11px;margin:0;">Click to upload</p>
+              <span class="filename" id="photo-front-fname" style="font-size:10px;"></span>
+            </div>
+            <input type="file" id="reg-photo-front" accept="image/*" class="hidden"
+                   onchange="handleFileSelect('reg-photo-front','photo-front-area','photo-front-fname')">
+          </div>
+          <!-- Left -->
+          <div>
+            <label style="font-size:11px;font-weight:600;color:#555;display:block;margin-bottom:4px;">
+              👈 Left Side <span style="color:#D32F2F;">*</span>
+            </label>
+            <div class="file-upload-area" id="photo-left-area" style="padding:10px;"
+                 onclick="document.getElementById('reg-photo-left').click()">
+              <p style="font-size:11px;margin:0;">Click to upload</p>
+              <span class="filename" id="photo-left-fname" style="font-size:10px;"></span>
+            </div>
+            <input type="file" id="reg-photo-left" accept="image/*" class="hidden"
+                   onchange="handleFileSelect('reg-photo-left','photo-left-area','photo-left-fname')">
+          </div>
+          <!-- Right -->
+          <div>
+            <label style="font-size:11px;font-weight:600;color:#555;display:block;margin-bottom:4px;">
+              👉 Right Side <span style="color:#D32F2F;">*</span>
+            </label>
+            <div class="file-upload-area" id="photo-right-area" style="padding:10px;"
+                 onclick="document.getElementById('reg-photo-right').click()">
+              <p style="font-size:11px;margin:0;">Click to upload</p>
+              <span class="filename" id="photo-right-fname" style="font-size:10px;"></span>
+            </div>
+            <input type="file" id="reg-photo-right" accept="image/*" class="hidden"
+                   onchange="handleFileSelect('reg-photo-right','photo-right-area','photo-right-fname')">
+          </div>
+          <!-- Up -->
+          <div>
+            <label style="font-size:11px;font-weight:600;color:#555;display:block;margin-bottom:4px;">
+              ☝️ Looking Up <span style="color:#D32F2F;">*</span>
+            </label>
+            <div class="file-upload-area" id="photo-up-area" style="padding:10px;"
+                 onclick="document.getElementById('reg-photo-up').click()">
+              <p style="font-size:11px;margin:0;">Click to upload</p>
+              <span class="filename" id="photo-up-fname" style="font-size:10px;"></span>
+            </div>
+            <input type="file" id="reg-photo-up" accept="image/*" class="hidden"
+                   onchange="handleFileSelect('reg-photo-up','photo-up-area','photo-up-fname')">
+          </div>
         </div>
-        <input type="file" id="reg-photo" accept="image/*" class="hidden"
-               onchange="handleFileSelect('reg-photo','photo-upload-area','photo-filename')">
       </div>
 
       <!-- Signature upload -->
@@ -1960,16 +2008,31 @@ document.getElementById('btn-submit-reg').addEventListener('click', async () => 
   const name = document.getElementById('reg-name').value.trim();
   if (!name) { toast('Full name is required.', 'error'); return; }
 
+  // Validate all 4 angles are uploaded
+  const angles = ['front', 'left', 'right', 'up'];
+  const angleLabels = { front: 'Front Face', left: 'Left Side', right: 'Right Side', up: 'Looking Up' };
+  for (const angle of angles) {
+    const f = document.getElementById(`reg-photo-${angle}`).files[0];
+    if (!f) {
+      toast(`Please upload the ${angleLabels[angle]} photo.`, 'error');
+      return;
+    }
+  }
+
   const fd = new FormData();
   fd.append('class_code', STATE.currentClass.class_code);
   fd.append('name',       name);
   fd.append('sr_code',    document.getElementById('reg-sr').value.trim());
   fd.append('email',      document.getElementById('reg-email').value.trim());
 
-  const photo = document.getElementById('reg-photo').files[0];
-  const sig   = document.getElementById('reg-sig').files[0];
-  if (photo) fd.append('photo',     photo);
-  if (sig)   fd.append('signature', sig);
+  // Append all 4 angle photos
+  for (const angle of angles) {
+    const f = document.getElementById(`reg-photo-${angle}`).files[0];
+    if (f) fd.append(`photo_${angle}`, f);
+  }
+
+  const sig = document.getElementById('reg-sig').files[0];
+  if (sig) fd.append('signature', sig);
 
   const btn = document.getElementById('btn-submit-reg');
   btn.disabled = true; btn.textContent = 'Registering…';
@@ -1997,14 +2060,18 @@ document.getElementById('btn-submit-reg').addEventListener('click', async () => 
     ['reg-name','reg-sr','reg-email'].forEach(id => {
       document.getElementById(id).value = '';
     });
-    document.getElementById('reg-photo').value = '';
-    document.getElementById('reg-sig').value   = '';
-    ['photo-upload-area','sig-upload-area'].forEach(id => {
-      document.getElementById(id).classList.remove('has-file');
+    // Clear all 4 angle photo inputs
+    angles.forEach(angle => {
+      document.getElementById(`reg-photo-${angle}`).value = '';
+      document.getElementById(`photo-${angle}-area`).classList.remove('has-file');
+      const fn = document.getElementById(`photo-${angle}-fname`);
+      if (fn) { fn.textContent = ''; fn.style.display = 'none'; }
     });
-    ['photo-filename','sig-filename'].forEach(id => {
-      document.getElementById(id).style.display = 'none';
-    });
+    document.getElementById('reg-sig').value = '';
+    const sigArea = document.getElementById('sig-upload-area');
+    if (sigArea) sigArea.classList.remove('has-file');
+    const sigFn = document.getElementById('sig-filename');
+    if (sigFn) { sigFn.textContent = ''; sigFn.style.display = 'none'; }
   } catch {
     toast('Network error during registration.', 'error');
   } finally {
