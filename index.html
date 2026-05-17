@@ -11,19 +11,34 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
     <link rel="icon" type="image/png" href="face.png">
     <style>
-        /* ── History responsive layout ─────────────────────────────────────── */
+        /* ── History 3-column layout ────────────────────────────────────────── */
         .history-layout {
             display: grid;
             grid-template-columns: 220px 1fr 1fr;
             gap: 16px;
             height: calc(100vh - 220px);
             min-height: 400px;
+            transition: grid-template-columns 0.25s ease;
+        }
+        /* Collapsed state: folders panel hidden */
+        .history-layout.folders-hidden {
+            grid-template-columns: 0px 1fr 1fr;
+        }
+        .history-layout.folders-hidden .history-col-folders {
+            overflow: hidden;
+            opacity: 0;
+            pointer-events: none;
+            width: 0;
+            min-width: 0;
+            padding: 0;
         }
         .history-col-folders,
         .history-col-files,
         .history-col-detail {
             overflow-y: auto;
             padding-right: 4px;
+            min-width: 0;
+            transition: opacity 0.2s ease, width 0.25s ease;
         }
         .history-detail-inner {
             height: 100%;
@@ -31,32 +46,26 @@
             flex-direction: column;
             overflow-y: auto;
         }
-        /* Medium screens: collapse to 2 columns */
-        @media (max-width: 1024px) {
-            .history-layout {
-                grid-template-columns: 200px 1fr;
-                grid-template-rows: auto auto;
-                height: auto;
-            }
-            .history-col-detail {
-                grid-column: 1 / -1;
-                max-height: 400px;
-            }
+        /* Toggle button for folders panel */
+        .history-toggle-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 9px;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: #9CA3AF;
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 4px 8px;
+            border-radius: 8px;
+            transition: background 0.15s, color 0.15s;
         }
-        /* Small screens: single column accordion */
-        @media (max-width: 768px) {
-            .history-layout {
-                grid-template-columns: 1fr;
-                height: auto;
-                gap: 12px;
-            }
-            .history-col-hidden-mobile {
-                display: none;
-            }
-            .history-col-detail {
-                grid-column: 1;
-                max-height: 500px;
-            }
+        .history-toggle-btn:hover {
+            background: #FEF2F2;
+            color: #D32F2F;
         }
     </style>
 </head>

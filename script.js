@@ -557,7 +557,8 @@ function initCharts(data = []) {
         if (window[key]) { window[key].destroy(); window[key] = null; }
     }
 
-    const getColor = pct => pct >= 50 ? '#D32F2F' : pct >= 25 ? '#E65100' : '#F59E0B';
+    const getColor = pct => pct >= 50 ? '#D32F2F' : pct >= 25 ? '#F97316' : '#F59E0B';
+    const getPresentColor = pct => pct >= 50 ? '#FECACA' : pct >= 25 ? '#FED7AA' : '#FEF3C7';
 
     // Take only the 3 most recent (DB already orders by last_session_date DESC)
     const recent = data.slice(0, 3);
@@ -611,7 +612,7 @@ function initCharts(data = []) {
                 labels: [d.name, 'Present'],
                 datasets: [{
                     data: [pct, Math.max(0, 100 - pct)],
-                    backgroundColor: [color, '#F3F4F6'],
+                    backgroundColor: [color, getPresentColor(pct)],
                     borderWidth: 3,
                     borderColor: '#ffffff',
                     hoverOffset: 8,
@@ -720,12 +721,17 @@ async function renderHistoryPage() {
             <input type="text" oninput="searchVal=this.value; renderHistoryPage()" value="${searchVal}"
                 placeholder="Search classes..." class="w-full bg-gray-50 border-none rounded-2xl py-4 pl-12 pr-4 text-sm font-bold outline-none">
         </div>
-        <!-- HISTORY: responsive 3-col on desktop, stacked accordion on mobile -->
-        <div class="history-layout">
+        <!-- HISTORY: 3-column layout with collapsible folders panel -->
+        <div class="history-layout" id="historyLayout">
 
-            <!-- Column 1: Class Folders -->
+            <!-- Column 1: Class Folders (collapsible) -->
             <div class="history-col-folders">
-                <p class="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-3">Class Folders</p>
+                <div class="flex items-center justify-between mb-3">
+                    <p class="text-[9px] font-black text-gray-400 uppercase tracking-widest">Class Folders</p>
+                    <button class="history-toggle-btn" onclick="toggleHistoryFolders()" title="Hide folders panel">
+                        <i data-lucide="panel-left-close" class="w-3 h-3"></i>
+                    </button>
+                </div>
                 ${filtered.length === 0
                     ? '<p class="text-[10px] text-gray-300 font-bold text-center py-8">No classes yet</p>'
                     : filtered.map(f => `
@@ -746,7 +752,13 @@ async function renderHistoryPage() {
 
             <!-- Column 2: Attendance Files -->
             <div class="history-col-files ${historySelectedClass ? '' : 'history-col-hidden-mobile'}">
-                <p class="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-3">Attendance Files</p>
+                <div class="flex items-center justify-between mb-3">
+                    <p class="text-[9px] font-black text-gray-400 uppercase tracking-widest">Attendance Files</p>
+                    <button id="historyShowFoldersBtn" class="history-toggle-btn hidden" onclick="toggleHistoryFolders()" title="Show folders panel">
+                        <i data-lucide="panel-left-open" class="w-3 h-3"></i>
+                        <span>Folders</span>
+                    </button>
+                </div>
                 <div id="historyFilesList">
                     <p class="text-[10px] text-gray-300 font-bold text-center py-8">Select a class folder</p>
                 </div>
@@ -1216,6 +1228,22 @@ function goToHistoryByClassDate(class_code, date) {
     // Pre-select the session matching this date so the file opens immediately
     historySelectedSession = { class_code, date, session_time: null };
     showPage('history');
+}
+
+// Toggle the Class Folders panel in History (for smaller screens)
+let _historyFoldersHidden = false;
+function toggleHistoryFolders() {
+    const layout  = document.getElementById('historyLayout');
+    const showBtn = document.getElementById('historyShowFoldersBtn');
+    if (!layout) return;
+    _historyFoldersHidden = !_historyFoldersHidden;
+    if (_historyFoldersHidden) {
+        layout.classList.add('folders-hidden');
+        if (showBtn) showBtn.classList.remove('hidden');
+    } else {
+        layout.classList.remove('folders-hidden');
+        if (showBtn) showBtn.classList.add('hidden');
+    }
 }
 
 
@@ -2363,15 +2391,15 @@ async function confirmAction(action, id) {
             const uRes = await authFetch(`/api/schedules/${id}/check_usage`);
             const used = await uRes.json();
             if (used.length > 0) {
-                // Schedule is in use — show blocking "in use" modal, no delete option
+                // Schedule IS linked to a class folder → show "in use" blocking modal
                 showScheduleInUseModal();
                 return;
             }
         } catch {}
-        // Not in use — show normal confirm modal
+        // Schedule is NOT linked → show "Are you sure?" confirm modal
         const modal = document.getElementById('customConfirm');
         modal.classList.remove('hidden');
-        document.getElementById('confirmDesc').innerText = "Proceed with this action?";
+        document.getElementById('confirmDesc').innerText = "Are you sure you want to delete this schedule? This cannot be undone.";
         document.getElementById('confirmBtn').onclick = async () => {
             await authFetch(`/api/schedules/${id}`, { method: 'DELETE' });
             await loadSchedules(); renderDayFilters();
