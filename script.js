@@ -830,7 +830,7 @@ async function historyLoadFiles(class_code) {
             const ap  = d.getHours() >= 12 ? 'PM' : 'AM';
             return `${String(h12).padStart(2,'0')}-${mm}-${ss}${ap}`;
         })() : '';
-        const fileLabel = `Log_${_hMo}-${_hDy}-${_hYr}${_hT ? '_'+_hT : ''}_Report.pdf`;
+        const fileLabel = `${_hMo}-${_hDy}-${_hYr}${_hT ? '_'+_hT : ''}_Report.pdf`;
 
         // Display time in 12-hour format for subtitle
         const dispTime = s.session_time
