@@ -867,6 +867,11 @@ async function historyLoadDetail(class_code, date, session_time) {
                 { weekday:'long', year:'numeric', month:'long', day:'numeric' })
             : date;
 
+        const statusBadge = (lbl) => {
+            if (lbl === 'Present') return 'bg-green-100 text-green-700';
+            if (lbl === 'Late')    return 'bg-yellow-100 text-yellow-700';
+            return 'bg-red-100 text-red-700';
+        };
         const renderRows = (list, color, label) => list.length === 0
             ? '<p class="text-[10px] text-gray-300 font-bold py-2 pl-2">None</p>'
             : list.map(r => `
@@ -875,8 +880,8 @@ async function historyLoadDetail(class_code, date, session_time) {
                         <p class="text-sm font-black text-gray-900">${r.name}</p>
                         <p class="text-[9px] text-gray-400 font-bold">${r.sr_code || ''}</p>
                     </div>
-                    <div class="text-right">
-                        <span class="text-[10px] font-black ${color} uppercase">${label}</span>
+                    <div class="text-right flex flex-col items-end gap-0.5">
+                        <span class="text-[9px] font-black px-2 py-0.5 rounded-lg uppercase ${statusBadge(label)}">${label}</span>
                         <p class="text-[9px] text-gray-400">${r.timestamp ? formatDisplayTime(r.timestamp) : '—'}</p>
                     </div>
                 </div>`).join('');
@@ -1207,7 +1212,9 @@ async function viewAndPrintPDF(class_code, date, session_time) {
 }
 
 function goToHistoryByClassDate(class_code, date) {
-    historySelectedClass = class_code;
+    historySelectedClass   = class_code;
+    // Pre-select the session matching this date so the file opens immediately
+    historySelectedSession = { class_code, date, session_time: null };
     showPage('history');
 }
 
@@ -2520,22 +2527,7 @@ async function saveProfileChanges() {
         if (fullNmDisp)  fullNmDisp.textContent  = updatedName;
     }
 
-    // Save mail config + grace periods to DB
-    const gmail        = document.getElementById('mail-gmail')?.value    || '';
-    const appPass      = document.getElementById('mail-app-pass')?.value || '';
-    const presentGrace = parseInt(document.getElementById('time-present')?.value || '15');
-    const lateGrace    = parseInt(document.getElementById('time-late')?.value    || '30');
-
-    try {
-        await authFetch('/api/mail_config', {
-            method:  'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body:    JSON.stringify({ gmail, app_pass: appPass, present_grace: presentGrace, late_grace: lateGrace })
-        });
-    } catch { /* non-blocking */ }
-
-    // Mirror to localStorage so camera session reads grace periods immediately
-    localStorage.setItem('mail_config', JSON.stringify({ gmail, appPass, presentGrace, lateGrace }));
+    // Grace periods removed from UI — no mail config save needed
     showSaveModal();
 }
 
