@@ -976,22 +976,71 @@ label.field-label{display:block;font-size:12px;font-weight:600;
         <input class="input" id="edit-email" type="email" placeholder="student@email.com">
       </div>
 
-      <!-- Photo replace -->
+      <!-- 4-Angle Face Photo Upload Grid -->
       <div class="field">
-        <label class="field-label">Student Photo
-          <span id="edit-photo-status" class="field-note"></span>
-        </label>
-        <div class="file-upload-area" id="edit-photo-area"
-             onclick="document.getElementById('edit-photo-file').click()">
-          <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24" style="opacity:.4">
-            <path d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" stroke-linecap="round"/>
-            <circle cx="12" cy="13" r="3" stroke-linecap="round"/>
-          </svg>
-          <p>Click to replace — leave blank to keep current</p>
-          <span class="filename hidden" id="edit-photo-fname"></span>
+        <label class="field-label" style="color:#D32F2F;font-weight:700">FACE PHOTOS — UPDATE ANGLES</label>
+        <p style="font-size:11px;color:#6B7280;margin-bottom:10px">
+          Upload only the angles you want to replace. Leave blank to keep the current photo for that angle.
+        </p>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+
+          <!-- Front -->
+          <div>
+            <div style="font-size:11px;font-weight:600;color:#374151;margin-bottom:4px">
+              📷 Front Face <span id="edit-status-front" style="font-size:10px;font-weight:500"></span>
+            </div>
+            <div class="file-upload-area" id="edit-area-front" style="padding:12px 8px"
+                 onclick="document.getElementById('edit-file-front').click()">
+              <p style="font-size:11px;margin:0" id="edit-label-front">Click to replace</p>
+              <span class="filename hidden" id="edit-fname-front"></span>
+            </div>
+            <input type="file" id="edit-file-front" accept="image/*" class="hidden"
+                   onchange="handleEditAngle('front')">
+          </div>
+
+          <!-- Left -->
+          <div>
+            <div style="font-size:11px;font-weight:600;color:#374151;margin-bottom:4px">
+              👈 Left Side <span id="edit-status-left" style="font-size:10px;font-weight:500"></span>
+            </div>
+            <div class="file-upload-area" id="edit-area-left" style="padding:12px 8px"
+                 onclick="document.getElementById('edit-file-left').click()">
+              <p style="font-size:11px;margin:0" id="edit-label-left">Click to replace</p>
+              <span class="filename hidden" id="edit-fname-left"></span>
+            </div>
+            <input type="file" id="edit-file-left" accept="image/*" class="hidden"
+                   onchange="handleEditAngle('left')">
+          </div>
+
+          <!-- Right -->
+          <div>
+            <div style="font-size:11px;font-weight:600;color:#374151;margin-bottom:4px">
+              👉 Right Side <span id="edit-status-right" style="font-size:10px;font-weight:500"></span>
+            </div>
+            <div class="file-upload-area" id="edit-area-right" style="padding:12px 8px"
+                 onclick="document.getElementById('edit-file-right').click()">
+              <p style="font-size:11px;margin:0" id="edit-label-right">Click to replace</p>
+              <span class="filename hidden" id="edit-fname-right"></span>
+            </div>
+            <input type="file" id="edit-file-right" accept="image/*" class="hidden"
+                   onchange="handleEditAngle('right')">
+          </div>
+
+          <!-- Up -->
+          <div>
+            <div style="font-size:11px;font-weight:600;color:#374151;margin-bottom:4px">
+              👆 Looking Up <span id="edit-status-up" style="font-size:10px;font-weight:500"></span>
+            </div>
+            <div class="file-upload-area" id="edit-area-up" style="padding:12px 8px"
+                 onclick="document.getElementById('edit-file-up').click()">
+              <p style="font-size:11px;margin:0" id="edit-label-up">Click to replace</p>
+              <span class="filename hidden" id="edit-fname-up"></span>
+            </div>
+            <input type="file" id="edit-file-up" accept="image/*" class="hidden"
+                   onchange="handleEditAngle('up')">
+          </div>
+
         </div>
-        <input type="file" id="edit-photo-file" accept="image/*" class="hidden"
-               onchange="handleFileSelect('edit-photo-file','edit-photo-area','edit-photo-fname')">
       </div>
 
       <!-- Signature replace -->
@@ -1752,6 +1801,22 @@ function renderStudentsList(present = []) {
 // ═══════════════════════════════════════════════════════════════════════
 // EDIT STUDENT
 // ═══════════════════════════════════════════════════════════════════════
+// handleEditAngle — called when a file is chosen for an angle slot
+function handleEditAngle(angle) {
+  const fileEl  = document.getElementById(`edit-file-${angle}`);
+  const areaEl  = document.getElementById(`edit-area-${angle}`);
+  const labelEl = document.getElementById(`edit-label-${angle}`);
+  const fnameEl = document.getElementById(`edit-fname-${angle}`);
+  const f = fileEl.files[0];
+  if (!f) return;
+  areaEl.classList.add('has-file');
+  areaEl.style.borderColor = '#D32F2F';
+  areaEl.style.background  = '#FEF2F2';
+  labelEl.textContent      = 'Selected';
+  fnameEl.textContent      = f.name;
+  fnameEl.style.display    = 'block';
+}
+
 async function openEditStudent(studentId) {
   const s = STATE.students.find(x => x.id === studentId);
   if (!s) return;
@@ -1761,24 +1826,44 @@ async function openEditStudent(studentId) {
   document.getElementById('edit-sr').value          = s.sr_code || '';
   document.getElementById('edit-email').value       = s.email   || '';
 
-  // Show real status using server-computed flags
-  const hasFace = _hasFace(s);
-  const hasSig  = _hasSig(s);
-  document.getElementById('edit-photo-status').textContent =
-    hasFace ? '(current: ✓ face file on disk)' : '(missing — upload to enable face recognition)';
-  document.getElementById('edit-photo-status').style.color = hasFace ? '#2E7D32' : '#E65100';
+  // Show per-angle status
+  const angleKeys = { front: 'photo_front', left: 'photo_left', right: 'photo_right', up: 'photo_up' };
+  ['front','left','right','up'].forEach(angle => {
+    const hasAngle = !!(s[angleKeys[angle]] && s[angleKeys[angle]].startsWith('http'));
+    const statusEl = document.getElementById(`edit-status-${angle}`);
+    const areaEl   = document.getElementById(`edit-area-${angle}`);
+    const labelEl  = document.getElementById(`edit-label-${angle}`);
+    const fileEl   = document.getElementById(`edit-file-${angle}`);
+    const fnameEl  = document.getElementById(`edit-fname-${angle}`);
+
+    fileEl.value = '';
+    fnameEl.style.display = 'none';
+    areaEl.classList.remove('has-file');
+    areaEl.style.borderColor = '';
+    areaEl.style.background  = '';
+
+    if (hasAngle) {
+      statusEl.textContent = '(on file)';
+      statusEl.style.color = '#2E7D32';
+      labelEl.textContent  = 'Click to replace';
+    } else {
+      statusEl.textContent = '(missing)';
+      statusEl.style.color = '#E65100';
+      labelEl.textContent  = 'Click to upload';
+      areaEl.style.borderColor = '#E65100';
+    }
+  });
+
+  // Signature status
+  const hasSig = _hasSig(s);
   document.getElementById('edit-sig-status').textContent =
-    hasSig  ? '(current: ✓ signature on file)' : '(missing — upload for attendance sheet)';
+    hasSig ? '(current: signature on file)' : '(missing - upload for attendance sheet)';
   document.getElementById('edit-sig-status').style.color = hasSig ? '#1565C0' : '#E65100';
 
-  // Reset file inputs
-  document.getElementById('edit-photo-file').value = '';
-  document.getElementById('edit-sig-file').value   = '';
-  document.getElementById('edit-photo-area').classList.remove('has-file');
+  // Reset signature inputs
+  document.getElementById('edit-sig-file').value = '';
   document.getElementById('edit-sig-area').classList.remove('has-file');
-  ['edit-photo-fname','edit-sig-fname'].forEach(id => {
-    document.getElementById(id).style.display = 'none';
-  });
+  document.getElementById('edit-sig-fname').style.display = 'none';
   document.getElementById('edit-sig-preview').classList.add('hidden');
 
   openModal('modal-edit-student');
@@ -1805,10 +1890,14 @@ document.getElementById('btn-save-edit').addEventListener('click', async () => {
   fd.append('name',  name);
   fd.append('email', document.getElementById('edit-email').value.trim());
 
-  const photo = document.getElementById('edit-photo-file').files[0];
-  const sig   = document.getElementById('edit-sig-file').files[0];
-  if (photo) fd.append('photo',     photo);
+  // Append each angle photo only if a new file was chosen
+  ['front','left','right','up'].forEach(angle => {
+    const f = document.getElementById(`edit-file-${angle}`).files[0];
+    if (f) fd.append(`photo_${angle}`, f);
+  });
+  const sig = document.getElementById('edit-sig-file').files[0];
   if (sig)   fd.append('signature', sig);
+
 
   const btn = document.getElementById('btn-save-edit');
   btn.disabled = true; btn.textContent = 'Saving…';

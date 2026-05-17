@@ -838,27 +838,45 @@ def api_local_edit_student(student_id):
         (form.get("name") or student["name"]).replace(" ", "_")
     )
 
-    # ── Save new files to disk immediately (request closes after response) ──
-    new_photo_local = ""
-    new_face_local  = ""
-    if "photo" in request.files:
-        f = request.files["photo"]
-        if f and f.filename and allowed(f.filename):
-            ext             = os.path.splitext(secure_filename(f.filename))[1]
-            new_photo_local = os.path.join(_class_students_dir(class_code),
-                                           safe_base + ext)
-            f.save(new_photo_local)
-            new_face_local  = os.path.join(_class_faces_dir(class_code),
-                                           safe_base + ext)
-            shutil.copy(new_photo_local, new_face_local)
+    # ── Save angle photos + signature synchronously before response ──────────
+    # request.files is gone after the HTTP response — save everything now.
+    ANGLES = ["front", "left", "right", "up"]
+    new_angle_files = {}   # {angle: local_path}
+    new_photo_local = ""   # front photo for display (students/ folder)
+
+    for angle in ANGLES:
+        key = f"photo_{angle}"
+        if key in request.files:
+            f = request.files[key]
+            if f and f.filename and allowed(f.filename):
+                ext       = os.path.splitext(secure_filename(f.filename))[1]
+                face_path = os.path.join(
+                    _class_faces_dir(class_code),
+                    f"{safe_base}_{angle}{ext}"
+                )
+                # Delete old angle file(s) for this slot before saving new one
+                for old_ext in (".jpg", ".jpeg", ".png"):
+                    old = os.path.join(_class_faces_dir(class_code),
+                                       f"{safe_base}_{angle}{old_ext}")
+                    if os.path.isfile(old) and old != face_path:
+                        try: os.remove(old)
+                        except: pass
+                f.save(face_path)
+                new_angle_files[angle] = face_path
+                if angle == "front":
+                    new_photo_local = os.path.join(
+                        _class_students_dir(class_code), safe_base + ext
+                    )
+                    shutil.copy(face_path, new_photo_local)
 
     new_sig_local = ""
     if "signature" in request.files:
         f = request.files["signature"]
         if f and f.filename and allowed(f.filename):
             ext           = os.path.splitext(secure_filename(f.filename))[1]
-            new_sig_local = os.path.join(_class_signatures_dir(class_code),
-                                         safe_base + "_sig" + ext)
+            new_sig_local = os.path.join(
+                _class_signatures_dir(class_code), safe_base + "_sig" + ext
+            )
             f.save(new_sig_local)
 
     # ── Build info dict for background thread ────────────────────────────────
@@ -872,40 +890,59 @@ def api_local_edit_student(student_id):
     }
 
     def _edit_bg():
-        safe_class = _safe_code(class_code)
-        new_photo_url = ""
-        new_sig_url   = ""
+        safe_class   = _safe_code(class_code)
+        display_name = update_info["name"] or student["name"]
 
-        # Upload new photo if provided
+        # ── Upload each new angle photo to Cloudinary (replaces old) ─────────
+        angle_urls = {}
+        for angle, face_path in new_angle_files.items():
+            # Add the new embedding to the live recognizer
+            _add_single_face(face_path, display_name)
+            # Cloudinary public_id is identical to old one → overwrite=True
+            # replaces the old image automatically (no manual delete needed)
+            url = _cloudinary_upload(
+                face_path,
+                f"{safe_base}_{angle}",
+                f"faces/{safe_class}"
+            )
+            angle_urls[f"photo_{angle}"] = url
+            print(f"[EDIT] ✓ Angle '{angle}' → Cloudinary: {bool(url)}")
+
+        # ── Front photo display copy (students/ folder) ───────────────────────
+        new_photo_url = ""
         if new_photo_local:
-            _add_single_face(new_face_local,
-                             (update_info["name"] or student["name"]))
             new_photo_url = _cloudinary_upload(
                 new_photo_local, safe_base,
                 f"students/{safe_class}"
             )
 
-        # Upload new signature if provided
+        # ── Signature ─────────────────────────────────────────────────────────
+        new_sig_url = ""
         if new_sig_local:
             new_sig_url = _cloudinary_upload(
                 new_sig_local, safe_base + "_sig",
                 f"signatures/{safe_class}"
             )
 
-        # Only pass photo/sig to edit_student if we have new values
+        # ── DB update — only pass fields that have new values ─────────────────
         try:
             db.edit_student(
                 student_id,
-                name      = update_info["name"],
-                address   = update_info["address"],
-                number    = update_info["number"],
-                age       = update_info["age"],
-                sex       = update_info["sex"],
-                email     = update_info["email"],
-                photo     = (new_photo_url or new_photo_local) if new_photo_local else None,
-                signature = (new_sig_url   or new_sig_local)   if new_sig_local   else None,
+                name        = update_info["name"],
+                address     = update_info["address"],
+                number      = update_info["number"],
+                age         = update_info["age"],
+                sex         = update_info["sex"],
+                email       = update_info["email"],
+                photo       = (new_photo_url or new_photo_local) if new_photo_local else None,
+                signature   = (new_sig_url   or new_sig_local)   if new_sig_local   else None,
+                photo_front = angle_urls.get("photo_front") or None,
+                photo_left  = angle_urls.get("photo_left")  or None,
+                photo_right = angle_urls.get("photo_right") or None,
+                photo_up    = angle_urls.get("photo_up")    or None,
             )
-            print(f"[EDIT] ✓ Student {student_id} updated")
+            print(f"[EDIT] ✓ Student {student_id} ({display_name}) updated — "
+                  f"{len(new_angle_files)} angle(s) replaced")
         except Exception as e:
             print(f"[EDIT] ✗ DB error: {e}")
 

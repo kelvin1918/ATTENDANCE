@@ -513,12 +513,15 @@ def add_student(class_code, name, address, number,
 
 def edit_student(student_db_id, name=None, address=None, number=None,
                  sr_code=None, age=None, sex=None, email=None,
-                 status=None, photo=None, signature=None):
+                 status=None, photo=None, signature=None,
+                 photo_front=None, photo_left=None,
+                 photo_right=None, photo_up=None):
     """
     Update a student record. Only non-None fields are written.
     photo and signature accept either a local path or a Cloudinary URL.
     Pass photo=None to leave the existing photo untouched.
     Pass photo="" to explicitly clear the photo field.
+    photo_front/left/right/up are the 4-angle Cloudinary URLs.
     """
     conn = get_db()
     cur  = get_cursor(conn)
@@ -533,15 +536,19 @@ def edit_student(student_db_id, name=None, address=None, number=None,
         # Build dynamic SET clause — only update fields that were passed
         fields = []
         values = []
-        if name      is not None: fields.append("name=%s");      values.append(name)
-        if address   is not None: fields.append("address=%s");   values.append(address)
-        if number    is not None: fields.append("number=%s");    values.append(number)
-        if age       is not None: fields.append("age=%s");       values.append(age)
-        if sex       is not None: fields.append("sex=%s");       values.append(sex)
-        if email     is not None: fields.append("email=%s");     values.append(email)
-        if status    is not None: fields.append("status=%s");    values.append(status)
-        if photo     is not None: fields.append("photo=%s");     values.append(photo)
-        if signature is not None: fields.append("signature=%s"); values.append(signature)
+        if name        is not None: fields.append("name=%s");        values.append(name)
+        if address     is not None: fields.append("address=%s");     values.append(address)
+        if number      is not None: fields.append("number=%s");      values.append(number)
+        if age         is not None: fields.append("age=%s");         values.append(age)
+        if sex         is not None: fields.append("sex=%s");         values.append(sex)
+        if email       is not None: fields.append("email=%s");       values.append(email)
+        if status      is not None: fields.append("status=%s");      values.append(status)
+        if photo       is not None: fields.append("photo=%s");       values.append(photo)
+        if signature   is not None: fields.append("signature=%s");   values.append(signature)
+        if photo_front is not None: fields.append("photo_front=%s"); values.append(photo_front)
+        if photo_left  is not None: fields.append("photo_left=%s");  values.append(photo_left)
+        if photo_right is not None: fields.append("photo_right=%s"); values.append(photo_right)
+        if photo_up    is not None: fields.append("photo_up=%s");    values.append(photo_up)
 
         if not fields:
             cur.close(); conn.close()
