@@ -1409,10 +1409,9 @@ function renderClassGrid(dayFilter) {
       cards.push(`
         <div class="class-card ${isToday ? 'today' : ''}"
              onclick="openCameraScreen('${cls.class_code}')">
-          <div class="class-code">${cls.class_code}</div>
+          <div class="class-code">${cls.course_code || cls.class_code}</div>
           <div class="class-name">${cls.subject || '—'}</div>
           <div class="class-meta">${cls.section || ''}</div>
-          ${schedHtml}
         </div>`);
     });
   } else {
@@ -1426,15 +1425,9 @@ function renderClassGrid(dayFilter) {
       cards.push(`
         <div class="class-card today"
              onclick="openCameraScreen('${cls.class_code}')">
-          <div class="class-code">${cls.class_code}</div>
+          <div class="class-code">${cls.course_code || cls.class_code}</div>
           <div class="class-name">${cls.subject || '—'}</div>
           <div class="class-meta">${cls.section || ''}</div>
-          <div class="class-schedule">
-            <svg width="12" height="12" fill="currentColor" viewBox="0 0 24 24">
-              <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2zm.5 5H11v6l5.2 3.2.8-1.3-4.5-2.7V7z"/>
-            </svg>
-            ${sched.time || ''} · ${sched.room || 'TBA'}
-          </div>
         </div>`);
     });
   }
@@ -1460,7 +1453,8 @@ async function openCameraScreen(classCode) {
   if (!cls) return;
   STATE.currentClass = cls;
 
-  document.getElementById('cam-class-code').textContent = cls.class_code;
+  // Show friendly short code (e.g. CPET-3201) instead of full long class_code
+  document.getElementById('cam-class-code').textContent = cls.course_code || cls.class_code;
   document.getElementById('cam-class-name').textContent = cls.subject || '';
 
   // Load students for this class
@@ -1783,10 +1777,6 @@ function renderStudentsList(present = []) {
                 class="${hasSig?'badge-sig-ok':'badge-sig-no'}" style="padding:1px 5px;font-size:9px">
             ${hasSig?'S✓':'S✗'}
           </span>
-          ${!hasSig ? `
-          <button onclick="openSigOnly(${s.id},'${sName}')"
-            title="Upload signature for this student"
-            class="stu-action-btn" style="color:#90CAF9;border-color:#1565C0">+S</button>` : ''}
           <button onclick="openEditStudent(${s.id})"
             title="Edit student"
             class="stu-action-btn">✎</button>

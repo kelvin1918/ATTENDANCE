@@ -787,18 +787,32 @@ def api_local_students(class_code):
         # Check if face file actually exists on LOCAL disk
         # (DB photo field might be a Cloudinary URL but file may not be downloaded yet)
         name_base = _safe_code((s.get("name") or "").replace(" ", "_"))
+        # Check for any angle file (front/left/right/up) OR legacy single file
+        angle_labels = ("_front", "_left", "_right", "_up", "")
         has_face_local = any(
-            os.path.isfile(os.path.join(faces_dir, name_base + ext))
+            os.path.isfile(os.path.join(faces_dir, name_base + label + ext))
+            for label in angle_labels
             for ext in (".jpg", ".jpeg", ".png")
         )
-        # Check if signature exists — either local file or Cloudinary URL
+        # Also check Cloudinary URLs in DB as fallback
+        if not has_face_local:
+            has_face_local = any(
+                (s.get(f"photo_{lbl}") or "").startswith("http")
+                for lbl in ("front", "left", "right", "up")
+            )
+        # Check signature — Cloudinary URL or local file
         sig = s.get("signature", "") or ""
         has_sig = (
             sig.startswith("http") or
             (sig and os.path.isfile(sig))
         )
+        # Also check angle photo URLs for has_sig via photo_front as display fallback
         s["has_face_local"] = has_face_local
         s["has_sig"]        = has_sig
+        # Expose per-angle status so edit modal can show which angles exist
+        for lbl in ("front", "left", "right", "up"):
+            col = f"photo_{lbl}"
+            s[col] = s.get(col) or ""
         result.append(s)
 
     return jsonify(result)

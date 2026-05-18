@@ -1639,10 +1639,12 @@ async function saveFolderModal() {
     const section = document.getElementById('modalSection').value;
     const year    = document.getElementById('modalYear').value;
 
-    // class id includes instructor email prefix to ensure uniqueness across instructors
+    // class id uses: PREFIX-COURSECODE-SECTION  (e.g. KELVIN-CPET-3201-1ST-YEAR)
+    // course_code (year field) is the short code like CPET-3201, not the full subject name
+    // This keeps folder names readable in the local station and file system
     const session    = JSON.parse(localStorage.getItem('active_session') || '{}');
     const prefix     = (session.email || 'INS').split('@')[0].toUpperCase().substring(0, 6);
-    const class_code = `${prefix}-${subject}-${section}-${year}`.replace(/\s+/g, '-').toUpperCase();
+    const class_code = `${prefix}-${year}-${section}`.replace(/\s+/g, '-').toUpperCase();
 
     if (editIdx > -1) {
         // Edit existing class
