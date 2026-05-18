@@ -1507,7 +1507,7 @@ function _showLoadingOverlay(total) {
   document.getElementById('cam-loading-title').textContent  =
     total > 0 ? `Loading ${total} student${total !== 1 ? 's' : ''}` : 'Starting Camera';
   document.getElementById('cam-loading-sub').textContent    =
-    total > 0 ? 'Encoding faces — camera starts automatically…' : 'No faces registered yet. Starting…';
+    total > 0 ? 'Encoding face angles — camera starts automatically…' : 'No faces registered yet. Starting…';
 
   ov.classList.remove('hidden');
   document.getElementById('cam-no-feed').style.display      = 'none';
@@ -1561,13 +1561,30 @@ function _startLoadPoll(total) {
       const res  = await fetch('/api/local/load_progress');
       const data = await res.json();
 
-      _updateLoadingOverlay(data.loaded, data.total || total);
+      // Use student-level counts if available, fall back to image counts
+      const stu_total  = data.student_total  || total;
+      const stu_loaded = data.student_loaded || 0;
+      const cur_name   = data.current_student || '';
 
-      // Show newly loaded names by index (backend sends count, not names)
-      // We approximate by showing the count increment as a placeholder tick
-      while (lastLoaded < data.loaded) {
-        lastLoaded++;
+      // Update title to show student count (not image file count)
+      document.getElementById('cam-loading-title').textContent =
+        stu_total > 0 ? `Loading ${stu_total} student${stu_total !== 1 ? 's' : ''}` : 'Starting Camera';
+
+      // Counter shows students loaded, not image files
+      document.getElementById('cam-loading-num').textContent   = stu_loaded;
+      document.getElementById('cam-loading-denom').textContent = stu_total > 0 ? ` / ${stu_total}` : '';
+      const pct = stu_total > 0 ? Math.round((stu_loaded / stu_total) * 100) : 100;
+      document.getElementById('cam-loading-bar').style.width   = pct + '%';
+
+      // Sub-label shows the angle images being processed behind the scenes
+      if (cur_name && data.total > 0) {
+        const imgPct = Math.round((data.loaded / data.total) * 100);
+        document.getElementById('cam-loading-sub').textContent =
+          `Encoding angles for ${cur_name}… (${data.loaded}/${data.total} images)`;
       }
+
+      // Add student name row when a new unique student finishes
+      if (cur_name) _addLoadedName(cur_name);
 
       if (data.done) {
         clearInterval(_loadPollInterval);
@@ -1901,14 +1918,45 @@ document.getElementById('btn-save-edit').addEventListener('click', async () => {
     const data = await res.json();
     if (!res.ok) { toast(data.error || 'Save failed.', 'error'); return; }
 
+    // ── Real-time optimistic update ─────────────────────────────────────────
+    // The server runs DB + Cloudinary uploads in a background thread.
+    // We already know what changed — patch STATE.students instantly so the
+    // list reflects the new name/badges without waiting for the background.
+    const idx = STATE.students.findIndex(x => x.id === parseInt(id));
+    if (idx !== -1) {
+      const s = { ...STATE.students[idx] };
+      s.name  = name;
+      s.email = document.getElementById('edit-email').value.trim();
+      // If any angle photo was uploaded, mark face as present
+      const newAngles = ['front','left','right','up'].filter(
+        a => document.getElementById(`edit-file-${a}`).files[0]
+      );
+      if (newAngles.length > 0) {
+        s.has_face_local = true;
+        newAngles.forEach(a => { s[`photo_${a}`] = 'pending'; });
+      }
+      // If signature was uploaded, mark sig as present
+      if (document.getElementById('edit-sig-file').files[0]) {
+        s.has_sig   = true;
+        s.signature = 'pending';
+      }
+      STATE.students[idx] = s;
+      renderStudentsList();  // instant re-render
+    }
+
     toast(`${name} updated ✓`, 'success');
     closeModal('modal-edit-student');
 
-    // Refresh student list
-    const sRes = await fetch(`/api/local/students/${STATE.currentClass.class_code}`,
-      {headers: {'X-Instructor-Email': STATE.email}});
-    STATE.students = await sRes.json();
-    renderStudentsList();
+    // After 3 s the background thread should be done — do a quiet server
+    // refresh to pull real Cloudinary URLs and confirmed DB values.
+    setTimeout(async () => {
+      try {
+        const sRes = await fetch(`/api/local/students/${STATE.currentClass.class_code}`,
+          {headers: {'X-Instructor-Email': STATE.email}});
+        if (sRes.ok) { STATE.students = await sRes.json(); renderStudentsList(); }
+      } catch { /* silent — list already shows correct state */ }
+    }, 3000);
+
   } catch {
     toast('Network error.', 'error');
   } finally {

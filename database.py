@@ -962,7 +962,7 @@ def get_classes_using_schedule(schedule_id):
     cur.execute(
         """SELECT c.id, c.subject, c.section
            FROM classes c
-           JOIN schedules s ON s.class_code = c.id
+           JOIN schedules s ON s.class_code = c.class_code
            WHERE s.id = %s""",
         (schedule_id,)
     )

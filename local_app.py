@@ -166,9 +166,32 @@ def _load_class_faces_bg(class_code, session_meta):
         if f.lower().endswith((".jpg", ".jpeg", ".png"))
     ] if os.path.isdir(faces_dir) else []
 
-    total = len(image_files)
+    # Count unique students (strip angle suffix) so the UI shows "23 students"
+    # even though there are 61 image files (4 angles × 23 students)
+    angle_suffixes_set = {"_front", "_left", "_right", "_up"}
+    unique_students = set()
+    for fn in image_files:
+        raw = os.path.splitext(fn)[0]
+        base = raw
+        for sfx in angle_suffixes_set:
+            if raw.lower().endswith(sfx):
+                base = raw[:-len(sfx)]
+                break
+        unique_students.add(base)
+
+    total         = len(image_files)
+    student_total = len(unique_students)
+
     with _load_lock:
-        _load_progress = {"loaded": 0, "total": total, "done": False, "error": None}
+        _load_progress = {
+            "loaded":         0,
+            "total":          total,
+            "student_total":  student_total,
+            "student_loaded": 0,
+            "current_student": "",
+            "done":           False,
+            "error":          None,
+        }
 
     # Build InsightFace app once for this session
     from face_recognition_a import _build_app as _insight_build
@@ -208,8 +231,18 @@ def _load_class_faces_bg(class_code, session_meta):
         except Exception as e:
             print(f"[FACES] ✗ Error {filename}: {e}")
 
+        # Track unique student count — a student is "loaded" when their
+        # first angle file finishes (subsequent angles for same student
+        # don't increment student_loaded again).
+        base_for_count = display_name.replace(" ", "_")
         with _load_lock:
             _load_progress["loaded"] = i + 1
+            _load_progress["current_student"] = display_name
+            # Count distinct student names seen so far
+            already = set()
+            for n in name_list:
+                already.add(n)
+            _load_progress["student_loaded"] = len(already)
 
     # All encoded — start the camera now
     try:

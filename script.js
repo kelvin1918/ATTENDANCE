@@ -1639,12 +1639,10 @@ async function saveFolderModal() {
     const section = document.getElementById('modalSection').value;
     const year    = document.getElementById('modalYear').value;
 
-    // class id uses: PREFIX-COURSECODE-SECTION  (e.g. KELVIN-CPET-3201-1ST-YEAR)
-    // course_code (year field) is the short code like CPET-3201, not the full subject name
-    // This keeps folder names readable in the local station and file system
+    // class id includes instructor email prefix to ensure uniqueness across instructors
     const session    = JSON.parse(localStorage.getItem('active_session') || '{}');
     const prefix     = (session.email || 'INS').split('@')[0].toUpperCase().substring(0, 6);
-    const class_code = `${prefix}-${year}-${section}`.replace(/\s+/g, '-').toUpperCase();
+    const class_code = `${prefix}-${subject}-${section}-${year}`.replace(/\s+/g, '-').toUpperCase();
 
     if (editIdx > -1) {
         // Edit existing class
@@ -2388,8 +2386,18 @@ function showToast(msg, type = 'success') {
 // ── CONFIRM DIALOG (unchanged logic, updated backend calls) ───────────────────
 
 async function confirmAction(action, id) {
-    // For deleteSubject: always show "Are you sure?" — simpler and reliable
+    // For deleteSubject: check if linked to a class folder first
     if (action === 'deleteSubject') {
+        try {
+            const uRes = await authFetch(`/api/schedules/${id}/check_usage`);
+            const used = await uRes.json();
+            if (used.length > 0) {
+                // Schedule IS linked to a class folder → block deletion
+                showScheduleInUseModal();
+                return;
+            }
+        } catch {}
+        // Schedule is NOT linked → show "Are you sure?" confirm
         const modal = document.getElementById('customConfirm');
         modal.classList.remove('hidden');
         document.getElementById('confirmDesc').innerText = "Are you sure you want to delete this schedule? This cannot be undone.";
