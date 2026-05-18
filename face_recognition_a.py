@@ -197,15 +197,21 @@ class FaceRecognizer:
         self._class_code       = CLASS_CODE
         self._section          = SECTION
         self._subject          = SUBJECT
+        self._session_start    = _dt.now()  # overwritten by set_session
+        self._late_minutes     = 15         # default 15-minute grace period
 
     # ── public API ──────────────────────────────────────────────────────────
 
-    def set_session(self, instructor_email, class_code, section, subject):
+    def set_session(self, instructor_email, class_code, section, subject,
+                    late_minutes: int = 15):
         self._instructor_email = instructor_email
         self._class_code       = class_code
         self._section          = section
         self._subject          = subject
-        print(f"[CLOUD] Session set → {class_code} | {subject} | {section}")
+        self._session_start    = _dt.now()   # camera-on timestamp
+        self._late_minutes     = late_minutes      # default: 15 min grace period
+        print(f"[CLOUD] Session set → {class_code} | {subject} | {section} "
+              f"| Late after {late_minutes} min")
 
     def add_known_face(self, image_path: str, display_name: str):
         """
@@ -238,6 +244,10 @@ class FaceRecognizer:
             return
         def _push():
             try:
+                # Determine attendance status based on time since session start
+                elapsed = (_dt.now() - self._session_start).total_seconds() / 60
+                status  = "Late" if elapsed > self._late_minutes else "Present"
+
                 payload = {
                     "name":             name,
                     "class_code":       self._class_code,
@@ -245,13 +255,14 @@ class FaceRecognizer:
                     "subject":          self._subject,
                     "instructor_email": self._instructor_email,
                     "timestamp":        timestamp,
-                    "status":           "Present"
+                    "status":           status
                 }
                 res = requests.post(
                     f"{CLOUD_URL}/api/live_checkin",
                     json=payload, timeout=5
                 )
-                print(f"[CLOUD] {'✓' if res.status_code==200 else '✗'} {name}")
+                print(f"[CLOUD] {'✓' if res.status_code==200 else '✗'} {name} → {status} "
+                      f"({elapsed:.1f} min elapsed)")
             except Exception as e:
                 print(f"[CLOUD] ✗ {name}: {e}")
         threading.Thread(target=_push, daemon=True).start()

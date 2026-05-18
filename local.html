@@ -757,6 +757,30 @@ label.field-label{display:block;font-size:12px;font-weight:600;
 
       <!-- Students tab -->
       <div class="cam-side-content hidden" id="tab-students">
+        <!-- Search + Sort controls -->
+        <div style="display:flex;gap:6px;margin-bottom:8px;align-items:center">
+          <div style="position:relative;flex:1">
+            <svg style="position:absolute;left:8px;top:50%;transform:translateY(-50%);opacity:.4"
+                 width="12" height="12" viewBox="0 0 24 24" fill="none"
+                 stroke="currentColor" stroke-width="2.5">
+              <circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>
+            </svg>
+            <input id="stu-search" type="text" placeholder="Search student..."
+              oninput="renderStudentsList()"
+              style="width:100%;padding:5px 8px 5px 26px;font-size:11px;
+                     border:1px solid #E5E7EB;border-radius:8px;outline:none;
+                     background:#F9FAFB;box-sizing:border-box"/>
+          </div>
+          <select id="stu-sort" onchange="renderStudentsList()"
+            style="font-size:11px;padding:5px 6px;border:1px solid #E5E7EB;
+                   border-radius:8px;background:#F9FAFB;outline:none;cursor:pointer;
+                   color:#374151;font-weight:600">
+            <option value="first">First</option>
+            <option value="last">Last</option>
+            <option value="status">Status</option>
+          </select>
+        </div>
+        <div id="stu-filter-count" style="font-size:10px;color:#9CA3AF;margin-bottom:4px;display:none"></div>
         <div id="students-list"></div>
       </div>
     </div>
@@ -1764,12 +1788,61 @@ function _hasSig(student) {
 function renderStudentsList(present = []) {
   const presentSet = new Set(present.map(n => n.toLowerCase().replace(/_/g,' ')));
   const list = document.getElementById('students-list');
-  const enrolled = (STATE.students || []).filter(
+
+  // ── Search + Sort ────────────────────────────────────────────────────────
+  const searchQ  = (document.getElementById('stu-search')?.value || '').trim().toLowerCase();
+  const sortMode = document.getElementById('stu-sort')?.value || 'first';
+
+  let enrolled = (STATE.students || []).filter(
     s => s.status === 'Enrolled' || s.status === 'Unenrolled'
   );
+
+  // Apply search filter across full name
+  if (searchQ) {
+    enrolled = enrolled.filter(s => (s.name || '').toLowerCase().includes(searchQ));
+  }
+
+  // Apply sort
+  enrolled = [...enrolled].sort((a, b) => {
+    const na = (a.name || '').trim();
+    const nb = (b.name || '').trim();
+    if (sortMode === 'last') {
+      // Sort by last word in name (last name)
+      const la = na.split(' ').pop().toLowerCase();
+      const lb = nb.split(' ').pop().toLowerCase();
+      return la.localeCompare(lb);
+    } else if (sortMode === 'first') {
+      // Sort by first word (first name)
+      const fa = na.split(' ')[0].toLowerCase();
+      const fb = nb.split(' ')[0].toLowerCase();
+      return fa.localeCompare(fb);
+    } else if (sortMode === 'status') {
+      // Present first, then absent
+      const pa = presentSet.has(na.toLowerCase()) ? 0 : 1;
+      const pb = presentSet.has(nb.toLowerCase()) ? 0 : 1;
+      return pa - pb || na.localeCompare(nb);
+    }
+    return 0;
+  });
+
+  // Show filter result count
+  const countEl = document.getElementById('stu-filter-count');
+  if (countEl) {
+    const total = (STATE.students || []).filter(
+      s => s.status === 'Enrolled' || s.status === 'Unenrolled'
+    ).length;
+    if (searchQ) {
+      countEl.textContent = `${enrolled.length} of ${total} students`;
+      countEl.style.display = 'block';
+    } else {
+      countEl.style.display = 'none';
+    }
+  }
+
   if (!enrolled.length) {
-    list.innerHTML = `<p style="color:#555;font-size:13px;text-align:center;padding:20px">
-      No students enrolled</p>`;
+    list.innerHTML = searchQ
+      ? `<p style="color:#555;font-size:12px;text-align:center;padding:16px">No match for "<strong>${searchQ}</strong>"</p>`
+      : `<p style="color:#555;font-size:13px;text-align:center;padding:20px">No students enrolled</p>`;
     return;
   }
   list.innerHTML = enrolled.map(s => {
