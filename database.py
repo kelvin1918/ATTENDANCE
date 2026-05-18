@@ -250,6 +250,22 @@ def init_db():
             created_at TIMESTAMP    DEFAULT NOW(),
             expires_at TIMESTAMP    NOT NULL
         );
+
+        -- ── 13. admin_account — secure admin credentials ───────────────────
+        CREATE TABLE IF NOT EXISTS admin_account (
+            id             SERIAL       PRIMARY KEY,
+            username       VARCHAR(50)  NOT NULL UNIQUE DEFAULT 'admin',
+            password_hash  VARCHAR(255) NOT NULL,
+            recovery_email VARCHAR(100) NOT NULL,
+            updated_at     TIMESTAMP    DEFAULT NOW()
+        );
+
+        -- ── 14. admin_session_tokens — separate from instructor sessions ────
+        CREATE TABLE IF NOT EXISTS admin_session_tokens (
+            token      VARCHAR(64)  PRIMARY KEY,
+            created_at TIMESTAMP    DEFAULT NOW(),
+            expires_at TIMESTAMP    NOT NULL
+        );
     """)
 
     conn.commit()
@@ -962,7 +978,7 @@ def get_classes_using_schedule(schedule_id):
     cur.execute(
         """SELECT c.id, c.subject, c.section
            FROM classes c
-           JOIN schedules s ON s.class_code = c.class_code
+           JOIN schedules s ON s.class_code = c.id
            WHERE s.id = %s""",
         (schedule_id,)
     )
@@ -1172,3 +1188,173 @@ def get_unread_count(instructor_id):
     )
     row = cur.fetchone(); cur.close(); conn.close()
     return row["cnt"] if row else 0
+
+# ══════════════════════════════════════════════════════════════════════════════
+# ADMIN ACCOUNT FUNCTIONS
+# ══════════════════════════════════════════════════════════════════════════════
+
+def get_admin_account():
+    """Return the single admin account row, or None if not yet seeded."""
+    conn = get_db(); cur = get_cursor(conn)
+    cur.execute("SELECT * FROM admin_account LIMIT 1")
+    row = cur.fetchone(); cur.close(); conn.close()
+    return dict(row) if row else None
+
+
+def seed_admin_if_missing(default_password="admin123"):
+    """
+    Called on app startup. If no admin account exists, create one with
+    the default password so the system still works on first deploy.
+    Admins should change the password immediately via the forgot-password flow.
+    """
+    import hashlib
+    if get_admin_account():
+        return  # already seeded
+    conn = get_db(); cur = conn.cursor()
+    pw_hash = hashlib.sha256(default_password.encode()).hexdigest()
+    cur.execute(
+        """INSERT INTO admin_account (username, password_hash, recovery_email)
+           VALUES ('admin', %s, '') ON CONFLICT DO NOTHING""",
+        (pw_hash,)
+    )
+    conn.commit(); cur.close(); conn.close()
+    print("[DB] Admin account seeded with default password.")
+
+
+def verify_admin_password(password):
+    """Return True if password matches the stored hash."""
+    import hashlib
+    admin = get_admin_account()
+    if not admin:
+        return False
+    return admin["password_hash"] == hashlib.sha256(password.encode()).hexdigest()
+
+
+def update_admin_password(new_password):
+    """Hash and store a new admin password."""
+    import hashlib
+    pw_hash = hashlib.sha256(new_password.encode()).hexdigest()
+    conn = get_db(); cur = conn.cursor()
+    cur.execute(
+        "UPDATE admin_account SET password_hash = %s, updated_at = NOW()",
+        (pw_hash,)
+    )
+    conn.commit(); cur.close(); conn.close()
+
+
+def update_admin_recovery_email(email):
+    """Store / update the admin recovery email."""
+    conn = get_db(); cur = conn.cursor()
+    cur.execute(
+        "UPDATE admin_account SET recovery_email = %s, updated_at = NOW()",
+        (email.strip().lower(),)
+    )
+    conn.commit(); cur.close(); conn.close()
+
+
+def create_admin_session_token():
+    """Generate a secure token for the admin session (8-hour expiry)."""
+    import secrets
+    from datetime import timedelta
+    token   = secrets.token_hex(32)
+    expires = datetime.now() + timedelta(hours=8)
+    conn = get_db(); cur = conn.cursor()
+    # Keep only the latest token
+    cur.execute("DELETE FROM admin_session_tokens")
+    cur.execute(
+        "INSERT INTO admin_session_tokens (token, expires_at) VALUES (%s, %s)",
+        (token, expires)
+    )
+    conn.commit(); cur.close(); conn.close()
+    return token
+
+
+def verify_admin_session_token(token):
+    """Return True if token exists and has not expired."""
+    if not token:
+        return False
+    conn = get_db(); cur = get_cursor(conn)
+    cur.execute(
+        "SELECT token FROM admin_session_tokens WHERE token=%s AND expires_at > NOW()",
+        (token,)
+    )
+    row = cur.fetchone(); cur.close(); conn.close()
+    return row is not None
+
+
+def delete_admin_session_token(token):
+    conn = get_db(); cur = conn.cursor()
+    cur.execute("DELETE FROM admin_session_tokens WHERE token=%s", (token,))
+    conn.commit(); cur.close(); conn.close()
+
+
+# ── ADMIN ACTIVITY MONITOR ────────────────────────────────────────────────────
+
+def get_instructor_activity_summary():
+    """
+    Returns one row per instructor showing:
+      - name, email, status, total_classes, total_sessions,
+        last_active (most recent attendance date), total_students
+    Used by the admin Activity Monitor page.
+    """
+    conn = get_db(); cur = get_cursor(conn)
+    cur.execute("""
+        SELECT
+            i.id,
+            i.name,
+            i.email,
+            i.status,
+            COUNT(DISTINCT c.id)                                   AS total_classes,
+            COUNT(DISTINCT (a.class_code, a.date, a.session_time)) AS total_sessions,
+            COUNT(DISTINCT s.id)                                   AS total_students,
+            MAX(a.date)                                            AS last_active
+        FROM instructors i
+        LEFT JOIN classes  c ON c.instructor_id = i.id
+        LEFT JOIN attendance a ON a.class_code = c.id
+                               AND a.session_time != 'LIVE'
+        LEFT JOIN students s ON s.class_id = c.id
+        GROUP BY i.id, i.name, i.email, i.status
+        ORDER BY last_active DESC NULLS LAST, i.name
+    """)
+    rows = cur.fetchall(); cur.close(); conn.close()
+    result = []
+    for r in rows:
+        result.append({
+            "id":              r["id"],
+            "name":            r["name"] or r["email"],
+            "email":           r["email"],
+            "status":          r["status"],
+            "total_classes":   r["total_classes"]  or 0,
+            "total_sessions":  r["total_sessions"] or 0,
+            "total_students":  r["total_students"] or 0,
+            "last_active":     str(r["last_active"]) if r["last_active"] else None,
+        })
+    return result
+
+
+def get_instructor_recent_sessions(instructor_id, limit=10):
+    """
+    Returns the most recent attendance sessions for a specific instructor.
+    Used in the admin drill-down panel.
+    """
+    conn = get_db(); cur = get_cursor(conn)
+    cur.execute("""
+        SELECT
+            a.class_code,
+            c.subject,
+            c.section,
+            TO_CHAR(a.date, 'Mon DD, YYYY')                        AS date_fmt,
+            a.session_time,
+            COUNT(*)                                                AS total,
+            SUM(CASE WHEN a.status='Present' THEN 1 ELSE 0 END)   AS present,
+            SUM(CASE WHEN a.status='Absent'  THEN 1 ELSE 0 END)   AS absent,
+            SUM(CASE WHEN a.status='Late'    THEN 1 ELSE 0 END)   AS late
+        FROM attendance a
+        JOIN classes c ON c.id = a.class_code
+        WHERE c.instructor_id = %s AND a.session_time != 'LIVE'
+        GROUP BY a.class_code, c.subject, c.section, a.date, a.session_time
+        ORDER BY a.date DESC, a.session_time DESC
+        LIMIT %s
+    """, (instructor_id, limit))
+    rows = cur.fetchall(); cur.close(); conn.close()
+    return [dict(r) for r in rows]

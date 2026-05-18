@@ -115,6 +115,7 @@ def get_current_instructor_id(req):
 # ── INIT ──────────────────────────────────────────────────────────────────────
 
 db.init_db()
+db.seed_admin_if_missing()
 
 
 # ════════════════════════════════════════════════════════════════════════════════
@@ -998,8 +999,7 @@ def api_send_otp():
 
     instructor = db.get_instructor_by_email(email)
     if not instructor:
-        # Return OK anyway to prevent email enumeration attacks
-        return jsonify({"status": "ok", "msg": "If that email exists, an OTP was sent."})
+        return jsonify({"error": "No account found with that email address."}), 404
 
     otp_code = str(random.randint(10000, 99999))
     db.create_otp(email, otp_code)
@@ -1380,6 +1380,157 @@ def api_delete_room(room_id):
     """Delete a room by ID. Admin-only."""
     db.delete_room(room_id)
     return jsonify({"status": "ok"})
+
+
+
+# ════════════════════════════════════════════════════════════════════════════════
+# ADMIN AUTH — secure server-side login, OTP forgot password, session tokens
+# ════════════════════════════════════════════════════════════════════════════════
+
+def _get_admin_token(req):
+    """Extract admin session token from HttpOnly cookie."""
+    return req.cookies.get("admin_session_token", "")
+
+
+@app.route("/api/admin/login", methods=["POST"])
+def api_admin_login():
+    """Verify admin credentials, issue HttpOnly session cookie."""
+    data     = request.json or {}
+    username = data.get("username", "").strip()
+    password = data.get("password", "")
+    if not username or not password:
+        return jsonify({"error": "Username and password required."}), 400
+
+    admin = db.get_admin_account()
+    if not admin or admin["username"] != username:
+        return jsonify({"error": "Invalid credentials."}), 401
+    if not db.verify_admin_password(password):
+        return jsonify({"error": "Invalid credentials."}), 401
+
+    token = db.create_admin_session_token()
+    resp  = make_response(jsonify({"status": "ok"}))
+    resp.set_cookie(
+        "admin_session_token", token,
+        httponly=True, samesite="Lax",
+        max_age=8 * 3600      # 8 hours
+    )
+    return resp
+
+
+@app.route("/api/admin/logout", methods=["POST"])
+def api_admin_logout():
+    token = _get_admin_token(request)
+    if token:
+        db.delete_admin_session_token(token)
+    resp = make_response(jsonify({"status": "ok"}))
+    resp.delete_cookie("admin_session_token")
+    return resp
+
+
+@app.route("/api/admin/verify_session")
+def api_admin_verify_session():
+    token = _get_admin_token(request)
+    if db.verify_admin_session_token(token):
+        return jsonify({"valid": True})
+    return jsonify({"valid": False}), 401
+
+
+@app.route("/api/admin/send_otp", methods=["POST"])
+def api_admin_send_otp():
+    """Send OTP to admin recovery email for password reset."""
+    admin = db.get_admin_account()
+    if not admin or not admin.get("recovery_email"):
+        return jsonify({"error": "No recovery email configured for admin. "
+                                 "Contact your system administrator."}), 400
+
+    recovery_email = admin["recovery_email"]
+    otp_code = str(random.randint(10000, 99999))
+    db.create_otp(recovery_email, otp_code)
+
+    body = (
+        f"Hello Administrator,\n\n"
+        f"Your OTP for admin password reset is:\n\n"
+        f"  {otp_code}\n\n"
+        f"This code expires in 10 minutes. Do not share it.\n\n"
+        f"--- BatStateU Attendance System"
+    )
+    smtp_user = os.environ.get("SYSTEM_EMAIL", "").strip()
+    smtp_pass = os.environ.get("SYSTEM_EMAIL_PASS", "").strip()
+    sent, err = _send_system_email(smtp_user, smtp_pass, recovery_email,
+                                   "Admin Password Reset OTP — BatStateU Attendance System",
+                                   body)
+    if not sent:
+        print(f"[ADMIN OTP] Email failed: {err}")
+        return jsonify({"warn": "OTP generated but email failed to send. "
+                                "Check BREVO_API_KEY in Render environment."})
+
+    # Return masked email so frontend can show "sent to k***@gmail.com"
+    masked = recovery_email[0] + "***@" + recovery_email.split("@")[1]
+    return jsonify({"status": "ok", "masked_email": masked})
+
+
+@app.route("/api/admin/verify_otp", methods=["POST"])
+def api_admin_verify_otp():
+    data     = request.json or {}
+    otp_code = data.get("otp", "").strip()
+    admin    = db.get_admin_account()
+    if not admin:
+        return jsonify({"error": "Admin account not found."}), 400
+
+    result = db.verify_otp(admin["recovery_email"], otp_code)
+    if result == "ok":
+        return jsonify({"status": "ok"})
+    elif result == "expired":
+        return jsonify({"error": "OTP has expired. Please request a new one."}), 400
+    elif result == "locked":
+        return jsonify({"error": "Too many wrong attempts. Request a new OTP."}), 429
+    else:
+        return jsonify({"error": "Incorrect OTP. Please try again."}), 400
+
+
+@app.route("/api/admin/reset_password", methods=["POST"])
+def api_admin_reset_password():
+    data         = request.json or {}
+    new_password = data.get("password", "").strip()
+    if len(new_password) < 6:
+        return jsonify({"error": "Password must be at least 6 characters."}), 400
+    db.update_admin_password(new_password)
+    return jsonify({"status": "ok"})
+
+
+@app.route("/api/admin/set_recovery_email", methods=["POST"])
+def api_admin_set_recovery_email():
+    """Called from admin settings to set/update recovery email."""
+    token = _get_admin_token(request)
+    if not db.verify_admin_session_token(token):
+        return jsonify({"error": "Unauthorized."}), 401
+    data  = request.json or {}
+    email = data.get("email", "").strip().lower()
+    if not email or "@" not in email:
+        return jsonify({"error": "Valid email required."}), 400
+    db.update_admin_recovery_email(email)
+    return jsonify({"status": "ok"})
+
+
+# ── ADMIN ACTIVITY MONITOR ────────────────────────────────────────────────────
+
+@app.route("/api/admin/activity")
+def api_admin_activity():
+    """Return activity summary for all instructors. Admin-only."""
+    token = _get_admin_token(request)
+    if not db.verify_admin_session_token(token):
+        return jsonify({"error": "Unauthorized."}), 401
+    return jsonify(db.get_instructor_activity_summary())
+
+
+@app.route("/api/admin/activity/<int:instructor_id>")
+def api_admin_instructor_sessions(instructor_id):
+    """Return recent sessions for a specific instructor drill-down."""
+    token = _get_admin_token(request)
+    if not db.verify_admin_session_token(token):
+        return jsonify({"error": "Unauthorized."}), 401
+    sessions = db.get_instructor_recent_sessions(instructor_id, limit=20)
+    return jsonify(sessions)
 
 
 if __name__ == "__main__":

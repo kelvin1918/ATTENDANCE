@@ -198,12 +198,12 @@ class FaceRecognizer:
         self._section          = SECTION
         self._subject          = SUBJECT
         self._session_start    = _dt.now()  # overwritten by set_session
-        self._late_minutes     = 15         # default 15-minute grace period
+        self._late_minutes     = 1         # default 15-minute grace period
 
     # ── public API ──────────────────────────────────────────────────────────
 
     def set_session(self, instructor_email, class_code, section, subject,
-                    late_minutes: int = 15):
+                    late_minutes: int = 1):
         self._instructor_email = instructor_email
         self._class_code       = class_code
         self._section          = section
