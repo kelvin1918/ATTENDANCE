@@ -548,7 +548,7 @@
                     <div class="user-role">System Admin</div>
                 </div>
             </div>
-            <button onclick="openRecoveryEmailModal()"
+            <button id="recovery-email-btn"
                     style="width:100%;background:none;border:1px solid #E5E7EB;border-radius:8px;
                            padding:8px 12px;cursor:pointer;font-size:0.75rem;font-weight:600;
                            color:#6B7280;margin-bottom:8px;display:flex;align-items:center;gap:8px;
@@ -1378,27 +1378,117 @@
     function closeActivityDetail() {
         document.getElementById('activity-detail').classList.add('hidden');
     }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // RECOVERY EMAIL — wired via addEventListener
+    // ══════════════════════════════════════════════════════════════════════════
+    (function() {
+        function openRecoveryModal() {
+            var modal = document.getElementById('rec-modal');
+            var msg   = document.getElementById('rec-msg');
+            var input = document.getElementById('rec-input');
+            msg.textContent = '';
+            input.value = '';
+            modal.style.display = 'flex';
+            _admFetch('/api/admin/get_recovery_email')
+                .then(function(r){ return r.ok ? r.json() : null; })
+                .then(function(d){ if(d && d.email) input.value = d.email; })
+                .catch(function(){});
+        }
+
+        function closeRecoveryModal() {
+            document.getElementById('rec-modal').style.display = 'none';
+        }
+
+        async function saveRecoveryEmail() {
+            var email = document.getElementById('rec-input').value.trim();
+            var msg   = document.getElementById('rec-msg');
+            var btn   = document.getElementById('rec-save');
+            if (!email || !email.includes('@')) {
+                msg.style.color = '#D32F2F';
+                msg.textContent = 'Enter a valid email address.';
+                return;
+            }
+            btn.disabled = true; btn.textContent = 'Saving…';
+            try {
+                var res  = await _admFetch('/api/admin/set_recovery_email', {
+                    method: 'POST', body: JSON.stringify({ email: email })
+                });
+                var data = await res.json();
+                if (!res.ok) {
+                    msg.style.color = '#D32F2F';
+                    msg.textContent = data.error || 'Failed to save.';
+                } else {
+                    msg.style.color = '#16A34A';
+                    msg.textContent = '✓ Recovery email saved!';
+                    setTimeout(closeRecoveryModal, 1200);
+                }
+            } catch {
+                msg.style.color = '#D32F2F';
+                msg.textContent = 'Network error.';
+            } finally { btn.disabled = false; btn.textContent = 'Save'; }
+        }
+
+        // Wire button after DOM is ready
+        window.addEventListener('DOMContentLoaded', function() {
+            var openBtn = document.getElementById('recovery-email-btn');
+            var modal   = document.getElementById('rec-modal');
+            if (openBtn) openBtn.addEventListener('click', openRecoveryModal);
+            document.getElementById('rec-cancel').addEventListener('click', closeRecoveryModal);
+            document.getElementById('rec-save').addEventListener('click', saveRecoveryEmail);
+            document.getElementById('rec-input').addEventListener('keypress', function(e){
+                if (e.key === 'Enter') saveRecoveryEmail();
+            });
+            modal.addEventListener('click', function(e){ if(e.target===modal) closeRecoveryModal(); });
+        });
+    })();
+
 </script>
 
 <!-- ── RECOVERY EMAIL MODAL ──────────────────────────────────────────────── -->
-<div id="recovery-email-modal" class="modal-overlay hidden">
-    <div class="modal-box" style="max-width:420px;">
-        <h3 style="margin-bottom:6px;">Recovery Email</h3>
-        <p style="font-size:0.8rem;color:#6B7280;margin-bottom:16px;">
-            This email receives the OTP when you use "Forgot Password" on the admin login.
-            Set it to an email you can access.
-        </p>
-        <div class="form-group">
-            <label class="form-label">Recovery Email Address</label>
-            <input id="recovery-email-input" type="email" class="form-input"
-                   placeholder="e.g. kelvinlloydafrica@gmail.com">
+<div id="rec-modal"
+     style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);
+            z-index:9000;align-items:center;justify-content:center;">
+    <div style="background:#fff;border-radius:16px;padding:32px 28px;
+                width:400px;max-width:92vw;
+                box-shadow:0 24px 64px rgba(0,0,0,0.25);">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;">
+            <div style="width:36px;height:36px;background:#FEF2F2;border-radius:10px;
+                        display:flex;align-items:center;justify-content:center;">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
+                     stroke="#D32F2F" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="2" y="4" width="20" height="16" rx="2"/>
+                    <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/>
+                </svg>
+            </div>
+            <div>
+                <div style="font-size:0.95rem;font-weight:800;color:#111827;">Recovery Email</div>
+                <div style="font-size:0.75rem;color:#6B7280;">For admin forgot-password OTP</div>
+            </div>
         </div>
-        <div id="recovery-email-err"
-             style="font-size:0.8rem;min-height:18px;margin-bottom:8px;text-align:center;"></div>
-        <div class="modal-actions">
-            <button class="btn-cancel" onclick="closeRecoveryEmailModal()">Cancel</button>
-            <button class="btn-confirm" id="recovery-email-save-btn"
-                    onclick="saveRecoveryEmail()">Save</button>
+        <p style="font-size:0.8rem;color:#6B7280;margin-bottom:16px;line-height:1.5;">
+            When you click "Forgot Password" on the admin login, the OTP code
+            will be sent to this email address.
+        </p>
+        <input id="rec-input" type="email"
+               placeholder="e.g. kelvinlloydafrica@gmail.com"
+               style="width:100%;border:1.5px solid #E5E7EB;border-radius:10px;
+                      padding:11px 14px;font-size:0.85rem;font-weight:500;
+                      outline:none;box-sizing:border-box;margin-bottom:6px;"
+               onfocus="this.style.borderColor='#D32F2F'"
+               onblur="this.style.borderColor='#E5E7EB'">
+        <div id="rec-msg" style="font-size:0.78rem;font-weight:600;
+                                  min-height:20px;margin-bottom:14px;
+                                  text-align:center;"></div>
+        <div style="display:flex;gap:10px;justify-content:flex-end;">
+            <button id="rec-cancel"
+                    style="background:#F3F4F6;border:none;border-radius:8px;
+                           padding:9px 22px;font-size:0.82rem;font-weight:600;
+                           cursor:pointer;color:#374151;">Cancel</button>
+            <button id="rec-save"
+                    style="background:#D32F2F;border:none;border-radius:8px;
+                           padding:9px 22px;font-size:0.82rem;font-weight:700;
+                           cursor:pointer;color:#fff;">Save</button>
         </div>
     </div>
 </div>
