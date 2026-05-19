@@ -159,7 +159,7 @@ function updateLocalBanner() {
     const ready   = window._localStationReady;
     const port    = window._localPort || 5000;
     const baseUrl = `http://127.0.0.1:${port}`;
-    const EXE_DL  = '/download/local_station.exe'; // served by Render
+    const EXE_DL  = 'https://drive.google.com/uc?export=download&id=1RQqRHrlmUjE8XNr_jeWn5scjKGVipmk9';
 
     if (ready) {
         banner.className = 'mt-4 rounded-2xl px-5 py-3 border bg-green-50 border-green-200';
