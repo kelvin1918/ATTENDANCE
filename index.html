@@ -10,6 +10,64 @@
     <link rel="stylesheet" href="style.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
     <link rel="icon" type="image/png" href="face.png">
+    <style>
+        /* ── History 3-column layout ────────────────────────────────────────── */
+        .history-layout {
+            display: grid;
+            grid-template-columns: 240px 260px 1fr;
+            gap: 20px;
+            height: calc(100vh - 210px);
+            min-height: 400px;
+            transition: grid-template-columns 0.25s ease;
+        }
+        /* Collapsed: folders slide away, files + detail expand */
+        .history-layout.folders-hidden {
+            grid-template-columns: 0px 280px 1fr;
+        }
+        .history-layout.folders-hidden .history-col-folders {
+            overflow: hidden;
+            opacity: 0;
+            pointer-events: none;
+            min-width: 0;
+            padding: 0;
+        }
+        .history-col-folders,
+        .history-col-files,
+        .history-col-detail {
+            overflow-y: auto;
+            min-width: 0;
+            transition: opacity 0.2s ease;
+        }
+        .history-col-folders { padding-right: 4px; }
+        .history-col-files   { border-left: 1px solid #F3F4F6; padding-left: 16px; }
+        .history-col-detail  { border-left: 1px solid #F3F4F6; padding-left: 16px; }
+        .history-detail-inner {
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            overflow-y: auto;
+        }
+        /* Toggle button */
+        .history-toggle-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 9px;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: #9CA3AF;
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 3px 8px;
+            border-radius: 8px;
+            transition: background 0.15s, color 0.15s;
+        }
+        .history-toggle-btn:hover { background: #FEF2F2; color: #D32F2F; }
+        /* Hide mobile hidden class on desktop */
+        .history-col-hidden-mobile { display: block; }
+    </style>
 </head>
 <body class="flex h-screen overflow-hidden bg-[#FDFDFD]">
 
@@ -98,94 +156,15 @@
                             <label class="text-[10px] font-black text-gray-400 uppercase ml-1">Full Name</label>
                             <input type="text" id="prof-name" class="reg-input prof-field" placeholder="Juan Dela Cruz" readonly>
                         </div>
-                        <div class="space-y-1">
-                            <label class="text-[10px] font-black text-gray-400 uppercase ml-1">Contact Number</label>
-                            <input type="text" id="prof-number" class="reg-input prof-field" placeholder="e.g. 09123456789" readonly>
-                        </div>
+
                         <div class="space-y-1">
                             <label class="text-[10px] font-black text-gray-400 uppercase ml-1">Email Address (Read-only)</label>
                             <input type="email" id="prof-email" readonly class="reg-input bg-gray-50 opacity-60 cursor-not-allowed border-none">
                         </div>
-                        <div class="space-y-1">
-                            <label class="text-[10px] font-black text-gray-400 uppercase ml-1">Password (Read-only)</label>
-                            <input type="password" value="********" readonly class="reg-input bg-gray-50 opacity-60 cursor-not-allowed border-none">
-                        </div>
-                    </div>
-                </section>
-                <section class="space-y-8 pt-8 border-t border-gray-100">
-                    <h3 class="font-black text-xs text-red-600 uppercase tracking-widest border-l-4 border-red-600 pl-3">Mailing Setup</h3>
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-8">
-                        <div class="bg-gray-50 rounded-2xl p-6 border border-gray-100 space-y-2">
-                            <div class="flex items-center space-x-2 text-gray-900 mb-2">
-                                <i data-lucide="mail" class="w-5 h-5 text-red-600"></i>
-                                <span class="text-xs font-black uppercase tracking-widest">Gmail Address</span>
-                            </div>
-                            <input type="text" id="mail-gmail" class="reg-input mail-field" placeholder="your-email@gmail.com" readonly>
-                        </div>
-                        <div class="bg-gray-50 rounded-2xl p-6 border border-gray-100 space-y-2 relative">
-                            <div class="flex items-center space-x-2 text-gray-900 mb-2">
-                                <i data-lucide="key-round" class="w-5 h-5 text-red-600"></i>
-                                <span class="text-xs font-black uppercase tracking-widest">App Password</span>
-                                <div class="relative group">
-                                    <div class="w-4 h-4 rounded-full bg-gray-200 flex items-center justify-center text-[10px] font-black text-gray-500 cursor-help transition hover:bg-red-100 hover:text-red-700">?</div>
-                                    <div class="absolute top-full left-1/2 -translate-x-1/2 mt-3 w-80 p-7 bg-gray-900 rounded-3xl shadow-2xl transition-all duration-300 transform scale-95 opacity-0 group-hover:flex group-hover:scale-100 group-hover:opacity-100 flex-col items-center text-center text-white hidden z-30 border border-gray-700">
-                                        <h4 class="font-black text-xs uppercase tracking-widest mb-3">Generate Google App Password</h4>
-                                        <p class="text-[9px] font-bold text-gray-400 uppercase tracking-[0.1em] mb-4 border-b border-gray-700 pb-3">Follow these instructions immediately:</p>
-                                        <ol class="text-[10px] font-medium text-left space-y-2.5 list-decimal list-inside">
-                                            <li>Tap "<span class="font-bold">Manage Account</span>" on google profile.</li>
-                                            <li>Click "<span class="font-bold">Security & Sign in</span>".</li>
-                                            <li>Turn-on "<span class="font-bold">2-step verification</span>".</li>
-                                            <li>After turning on, search "<span class="font-bold">App Password</span>" in search bar.</li>
-                                            <li>Copy "<span class="font-bold">16-char password</span>" immediately.</li>
-                                        </ol>
-                                    </div>
-                                </div>
-                            </div>
-                            <input type="password" id="mail-app-pass" class="reg-input mail-field" placeholder="xxxx xxxx xxxx xxxx" readonly>
-                        </div>
 
-                        <!-- Test Connection — full width row -->
-                        <div class="md:col-span-2">
-                            <button id="testSmtpBtn" onclick="testSmtpConnection()"
-                                class="flex items-center gap-2 px-5 py-2.5 bg-gray-900 text-white text-xs font-black rounded-xl hover:bg-gray-700 transition disabled:opacity-50 disabled:cursor-not-allowed">
-                                <i data-lucide="plug-zap" class="w-4 h-4"></i>
-                                Test Connection
-                            </button>
-                            <!-- Result banner — hidden until test runs -->
-                            <div id="smtpTestResult" class="hidden mt-3 p-4 rounded-xl text-xs font-bold leading-relaxed whitespace-pre-line"></div>
-                        </div>
-                        <div class="bg-gray-50 rounded-2xl p-6 border border-gray-100 space-y-4 md:col-span-2">
-                            <div class="flex items-center space-x-2 text-gray-900 mb-2">
-                                <i data-lucide="clock" class="w-5 h-5 text-red-600"></i>
-                                <span class="text-xs font-black uppercase tracking-widest">Attendance Time Setup (Grace Period)</span>
-                            </div>
-                            <div class="grid grid-cols-2 gap-8">
-                                <div class="space-y-2">
-                                    <div class="flex justify-between items-center">
-                                        <label class="text-[10px] font-black text-gray-400 uppercase tracking-widest">Present Until</label>
-                                        <span class="text-[9px] font-bold text-green-600 bg-green-50 px-2 py-0.5 rounded-md uppercase">On Time</span>
-                                    </div>
-                                    <div class="relative">
-                                        <input type="number" id="time-present" class="reg-input mail-field pr-12" placeholder="15" readonly>
-                                        <span class="absolute right-4 top-1/2 -translate-y-1/2 text-[10px] font-bold text-gray-400">MINS</span>
-                                    </div>
-                                    <p class="text-[8px] text-gray-400 italic">Students arriving within these minutes of start time are marked Present.</p>
-                                </div>
-                                <div class="space-y-2">
-                                    <div class="flex justify-between items-center">
-                                        <label class="text-[10px] font-black text-gray-400 uppercase tracking-widest">Late Until</label>
-                                        <span class="text-[9px] font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded-md uppercase">Considered Late</span>
-                                    </div>
-                                    <div class="relative">
-                                        <input type="number" id="time-late" class="reg-input mail-field pr-12" placeholder="30" readonly>
-                                        <span class="absolute right-4 top-1/2 -translate-y-1/2 text-[10px] font-bold text-gray-400">MINS</span>
-                                    </div>
-                                    <p class="text-[8px] text-gray-400 italic">After this limit, students will be automatically marked as Absent.</p>
-                                </div>
-                            </div>
-                        </div>
                     </div>
                 </section>
+
             </div>
         </div>
     </main>

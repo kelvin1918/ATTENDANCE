@@ -131,6 +131,71 @@ label.field-label{display:block;font-size:12px;font-weight:600;
 #screen-classes{
   flex-direction:column;background:var(--bg)
 }
+
+/* ── SYNC SCREEN ──────────────────────────────────────────────────────── */
+#screen-sync{
+  align-items:center;justify-content:center;
+  background:linear-gradient(135deg,#0a0a0a 0%,#1a0000 50%,#0a0a0a 100%);
+  flex-direction:column;gap:28px;position:relative;overflow:hidden
+}
+#screen-sync::before{
+  content:'';position:absolute;inset:0;
+  background:radial-gradient(ellipse 60% 50% at 50% 30%,rgba(211,47,47,.15),transparent);
+  pointer-events:none
+}
+.sync-card{
+  background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);
+  border-radius:20px;padding:40px 44px;width:420px;text-align:center;
+  position:relative;z-index:1
+}
+.sync-icon{
+  width:56px;height:56px;background:rgba(211,47,47,.15);border-radius:50%;
+  display:flex;align-items:center;justify-content:center;margin:0 auto 20px;
+  border:1px solid rgba(211,47,47,.3)
+}
+.sync-title{
+  font-size:18px;font-weight:700;color:#fff;margin-bottom:6px
+}
+.sync-sub{
+  font-size:13px;color:#666;margin-bottom:28px;line-height:1.5
+}
+.sync-count{
+  font-family:var(--mono);font-size:32px;font-weight:700;color:#fff;
+  line-height:1;margin-bottom:4px
+}
+.sync-count-label{
+  font-size:12px;color:#555;margin-bottom:20px
+}
+.sync-bar-wrap{
+  width:100%;height:4px;background:#1a1a1a;border-radius:99px;
+  overflow:hidden;margin-bottom:14px
+}
+.sync-bar{
+  height:100%;background:var(--red);border-radius:99px;
+  width:0%;transition:width .3s ease
+}
+.sync-status{
+  font-size:12px;color:#555;min-height:18px
+}
+.sync-skip-btn{
+  margin-top:24px;background:transparent;border:1px solid #2a2a2a;
+  color:#555;padding:8px 20px;border-radius:var(--r-sm);font-size:12px;
+  font-family:var(--font);cursor:pointer;transition:all .2s
+}
+.sync-skip-btn:hover{border-color:#444;color:#888}
+.sync-names{
+  max-height:80px;overflow-y:auto;margin-top:12px;
+  scrollbar-width:none;text-align:left
+}
+.sync-names::-webkit-scrollbar{display:none}
+.sync-name-row{
+  display:flex;align-items:center;gap:8px;padding:3px 0;
+  font-size:11px;color:#555;animation:nameIn .2s ease
+}
+.sync-check{
+  width:12px;height:12px;background:#22C55E;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;flex-shrink:0
+}
 .topbar{
   background:var(--surface);border-bottom:1px solid var(--border);
   padding:0 28px;height:62px;display:flex;align-items:center;
@@ -200,26 +265,26 @@ label.field-label{display:block;font-size:12px;font-weight:600;
    SCREEN 3 — CAMERA (main kiosk view)
    ══════════════════════════════════════════════════════════════════════ */
 #screen-camera{
-  flex-direction:column;background:#0D0D0D;color:#fff;height:100vh;overflow:hidden
+  flex-direction:column;background:var(--bg);color:var(--text);height:100vh;overflow:hidden
 }
 
 .cam-topbar{
   height:56px;padding:0 20px;display:flex;align-items:center;
-  justify-content:space-between;background:#161616;
-  border-bottom:1px solid #2a2a2a;flex-shrink:0
+  justify-content:space-between;background:var(--surface);
+  border-bottom:1px solid var(--border);flex-shrink:0
 }
 .cam-class-info{display:flex;align-items:center;gap:12px}
 .cam-class-code{font-family:var(--mono);font-size:13px;font-weight:600;
                 color:var(--red);letter-spacing:.8px}
-.cam-class-name{font-size:14px;font-weight:600;color:#fff}
-.cam-class-sep{color:#444;font-size:16px}
+.cam-class-name{font-size:14px;font-weight:600;color:var(--text)}
+.cam-class-sep{color:var(--border);font-size:16px}
 
 .cam-actions{display:flex;gap:8px;align-items:center}
-.cam-clock{font-family:var(--mono);font-size:13px;color:#888;margin-right:8px}
+.cam-clock{font-family:var(--mono);font-size:13px;color:var(--muted);margin-right:8px}
 
 .cam-body{flex:1;display:flex;overflow:hidden}
 
-/* Feed area */
+/* Feed area — intentionally dark, it's a live video feed */
 .cam-feed-area{
   flex:1;position:relative;background:#000;display:flex;
   align-items:center;justify-content:center;overflow:hidden
@@ -245,70 +310,119 @@ label.field-label{display:block;font-size:12px;font-weight:600;
 
 .cam-no-feed{
   display:flex;flex-direction:column;align-items:center;justify-content:center;
-  gap:12px;color:#444;text-align:center;padding:32px
+  gap:12px;color:var(--muted);text-align:center;padding:32px
 }
-.cam-no-feed svg{opacity:.4}
-.cam-no-feed p{font-size:14px;font-weight:500;color:#666}
+.cam-no-feed svg{opacity:.3}
+.cam-no-feed p{font-size:14px;font-weight:500;color:var(--muted)}
+
+/* ── FACE LOADING OVERLAY ─────────────────────────────────────────────── */
+.cam-loading-overlay{
+  position:absolute;inset:0;background:rgba(0,0,0,.85);
+  display:flex;flex-direction:column;align-items:center;
+  justify-content:center;z-index:20;gap:18px;
+  backdrop-filter:blur(3px)
+}
+.cam-loading-title{
+  font-size:15px;font-weight:700;color:#fff;
+  letter-spacing:.4px;text-align:center
+}
+.cam-loading-sub{
+  font-size:12px;color:#777;margin-top:-10px;text-align:center
+}
+.cam-loading-count-wrap{
+  text-align:center;line-height:1
+}
+.cam-loading-num{
+  font-family:var(--mono);font-size:36px;font-weight:700;color:#fff
+}
+.cam-loading-denom{
+  font-family:var(--mono);font-size:18px;color:#555
+}
+.cam-loading-unit{
+  font-size:12px;color:#666;display:block;margin-top:4px
+}
+.cam-loading-bar-wrap{
+  width:280px;height:5px;background:#222;border-radius:99px;overflow:hidden
+}
+.cam-loading-bar{
+  height:100%;background:var(--red);border-radius:99px;
+  width:0%;transition:width .25s ease
+}
+.cam-loading-names{
+  width:280px;max-height:110px;overflow-y:auto;
+  display:flex;flex-direction:column;gap:3px;
+  scrollbar-width:none
+}
+.cam-loading-names::-webkit-scrollbar{display:none}
+.cam-loading-name-row{
+  display:flex;align-items:center;gap:8px;font-size:12px;color:#aaa;
+  animation:nameIn .18s ease
+}
+@keyframes nameIn{from{opacity:0;transform:translateX(-6px)}to{opacity:1;transform:none}}
+.cam-loading-check{
+  width:13px;height:13px;background:#22C55E;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;flex-shrink:0
+}
 
 /* Side panel */
 .cam-side{
-  width:340px;flex-shrink:0;background:#161616;border-left:1px solid #2a2a2a;
+  width:340px;flex-shrink:0;background:var(--surface);border-left:1px solid var(--border);
   display:flex;flex-direction:column;overflow:hidden
 }
 .cam-side-tabs{
-  display:flex;border-bottom:1px solid #2a2a2a;flex-shrink:0
+  display:flex;border-bottom:1px solid var(--border);flex-shrink:0
 }
 .cam-side-tab{
   flex:1;padding:13px;font-size:12px;font-weight:700;text-align:center;
-  cursor:pointer;color:#666;border-bottom:2px solid transparent;
+  cursor:pointer;color:var(--muted);border-bottom:2px solid transparent;
   transition:all .18s;letter-spacing:.4px;text-transform:uppercase
 }
-.cam-side-tab.active{color:#fff;border-bottom-color:var(--red)}
+.cam-side-tab.active{color:var(--red);border-bottom-color:var(--red)}
 
 .cam-side-content{flex:1;overflow-y:auto;padding:14px}
 .cam-side-content::-webkit-scrollbar{width:4px}
-.cam-side-content::-webkit-scrollbar-thumb{background:#333;border-radius:4px}
+.cam-side-content::-webkit-scrollbar-thumb{background:var(--border);border-radius:4px}
 
 /* Present list */
 .present-count-bar{
   display:flex;align-items:center;justify-content:space-between;
-  padding:10px 14px;background:#1E1E1E;border-radius:var(--r-sm);
+  padding:10px 14px;background:var(--red-light);border-radius:var(--r-sm);
   margin-bottom:12px
 }
-.present-count-label{font-size:12px;color:#888;font-weight:600;
+.present-count-label{font-size:12px;color:var(--red);font-weight:600;
                      text-transform:uppercase;letter-spacing:.4px}
-.present-count-num{font-family:var(--mono);font-size:20px;font-weight:700;color:#fff}
+.present-count-num{font-family:var(--mono);font-size:20px;font-weight:700;color:var(--red)}
 
 .present-item{
   display:flex;align-items:center;gap:10px;padding:9px 10px;
   border-radius:var(--r-sm);margin-bottom:4px;
-  background:#1A1A1A;border:1px solid #252525
+  background:var(--bg);border:1px solid var(--border)
 }
 .present-avatar{width:30px;height:30px;border-radius:50%;background:var(--red);
                 display:flex;align-items:center;justify-content:center;
                 font-size:12px;font-weight:700;color:#fff;flex-shrink:0}
-.present-name{font-size:13px;font-weight:600;color:#E5E7EB;flex:1}
-.present-time{font-size:11px;color:#666;font-family:var(--mono)}
+.present-name{font-size:13px;font-weight:600;color:var(--text);flex:1}
+.present-time{font-size:11px;color:var(--muted);font-family:var(--mono)}
 
 /* Students list in side */
 .student-item{
   display:flex;align-items:center;gap:10px;padding:9px 10px;
   border-radius:var(--r-sm);margin-bottom:4px;
-  background:#1A1A1A;border:1px solid #252525
+  background:var(--bg);border:1px solid var(--border)
 }
 .student-status-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
 .dot-present{background:#22C55E}
-.dot-absent{background:#444}
-.student-name-txt{font-size:13px;color:#D1D5DB;flex:1}
+.dot-absent{background:var(--border)}
+.student-name-txt{font-size:13px;color:var(--text);flex:1}
 
 /* Bottom bar */
 .cam-bottom{
   height:64px;padding:0 16px;display:flex;align-items:center;
-  justify-content:space-between;background:#161616;
-  border-top:1px solid #2a2a2a;flex-shrink:0;gap:10px
+  justify-content:space-between;background:var(--surface);
+  border-top:1px solid var(--border);flex-shrink:0;gap:10px
 }
 .cam-source-select{
-  background:#222;border:1px solid #333;color:#aaa;
+  background:var(--bg);border:1px solid var(--border);color:var(--text);
   border-radius:var(--r-sm);padding:7px 12px;font-size:13px;
   font-family:var(--font);cursor:pointer;outline:none
 }
@@ -378,6 +492,45 @@ label.field-label{display:block;font-size:12px;font-weight:600;
 .toast-error{background:var(--red)}
 .toast-info{background:#1E40AF}
 @keyframes toastIn{from{opacity:0;transform:translateX(20px)}to{opacity:1;transform:none}}
+
+/* ── STUDENT STATUS BADGES ─────────────────────────────────────────────── */
+.badge-face-ok{display:inline-flex;align-items:center;gap:3px;padding:1px 7px;
+  border-radius:99px;font-size:10px;font-weight:600;
+  background:#E8F5E9;color:#2E7D32;border:0.5px solid #A5D6A7}
+.badge-face-no{display:inline-flex;align-items:center;gap:3px;padding:1px 7px;
+  border-radius:99px;font-size:10px;font-weight:600;
+  background:#FFF3E0;color:#E65100;border:0.5px solid #FFCC02}
+.badge-sig-ok{display:inline-flex;align-items:center;gap:3px;padding:1px 7px;
+  border-radius:99px;font-size:10px;font-weight:600;
+  background:#E3F2FD;color:#1565C0;border:0.5px solid #90CAF9}
+.badge-sig-no{display:inline-flex;align-items:center;gap:3px;padding:1px 7px;
+  border-radius:99px;font-size:10px;font-weight:600;
+  background:#FCE4EC;color:#C62828;border:0.5px solid #F48FB1}
+
+/* ── STUDENT ACTION BUTTONS ─────────────────────────────────────────── */
+.stu-action-btn{
+  width:22px;height:22px;min-height:unset;padding:0;
+  border-radius:4px;border:0.5px solid #333;
+  background:transparent;color:#666;
+  cursor:pointer;font-size:11px;display:inline-flex;
+  align-items:center;justify-content:center;
+  transition:background .15s,color .15s,border-color .15s
+}
+.stu-action-btn:hover{
+  background:#2a2a2a;color:#fff;border-color:#555
+}
+.stu-del-btn:hover{
+  background:rgba(211,47,47,.15);color:#EF5350;border-color:#D32F2F
+}
+
+/* ── EDIT / SIGNATURE MODAL EXTRAS ─────────────────────────────────────── */
+.preview-sig{width:100%;height:60px;border:0.5px solid #2a2a2a;border-radius:var(--r-sm);
+  background:#111;display:flex;align-items:center;justify-content:center;
+  overflow:hidden;margin-top:6px}
+.preview-sig img{max-height:54px;max-width:100%;object-fit:contain}
+.field-note{font-size:11px;color:#666;margin-top:3px}
+.modal-student-pill{display:flex;align-items:center;gap:10px;padding:10px 12px;
+  background:#1A1A1A;border:1px solid #252525;border-radius:var(--r-sm);margin-bottom:4px}
 </style>
 </head>
 <body>
@@ -433,6 +586,34 @@ label.field-label{display:block;font-size:12px;font-weight:600;
   </div>
 </div>
 
+<!-- ═══ SCREEN 1.5: SYNC ════════════════════════════════════════════════ -->
+<div id="screen-sync" class="screen">
+  <div class="sync-card">
+    <div class="sync-icon">
+      <svg width="24" height="24" fill="none" stroke="#D32F2F" stroke-width="2"
+           viewBox="0 0 24 24">
+        <path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+              stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </div>
+    <div class="sync-title" id="sync-title">Syncing Student Faces</div>
+    <div class="sync-sub" id="sync-sub">
+      Downloading face images for your classes.<br>
+      This only runs for new students — existing files are skipped.
+    </div>
+    <div class="sync-count" id="sync-count">0</div>
+    <div class="sync-count-label" id="sync-count-label">students synced</div>
+    <div class="sync-bar-wrap">
+      <div class="sync-bar" id="sync-bar"></div>
+    </div>
+    <div class="sync-status" id="sync-status">Checking for new faces…</div>
+    <div class="sync-names" id="sync-names"></div>
+    <button class="sync-skip-btn" id="btn-skip-sync">
+      Skip — load classes now
+    </button>
+  </div>
+</div>
+
 <!-- ═══ SCREEN 2: CLASS SELECTOR ═════════════════════════════════════════ -->
 <div id="screen-classes" class="screen">
   <!-- Topbar -->
@@ -474,16 +655,7 @@ label.field-label{display:block;font-size:12px;font-weight:600;
       Offline mode — showing cached class list
     </div>
 
-    <!-- Day filter tabs -->
-    <div class="day-tabs" id="day-tabs">
-      <button class="day-tab" data-day="ALL">All Classes</button>
-      <button class="day-tab" data-day="MON">Mon</button>
-      <button class="day-tab" data-day="TUE">Tue</button>
-      <button class="day-tab" data-day="WED">Wed</button>
-      <button class="day-tab" data-day="THU">Thu</button>
-      <button class="day-tab" data-day="FRI">Fri</button>
-      <button class="day-tab" data-day="SAT">Sat</button>
-    </div>
+    <!-- Day filter removed — all classes shown directly -->
 
     <!-- Class grid -->
     <div id="class-grid" class="class-grid">
@@ -503,7 +675,7 @@ label.field-label{display:block;font-size:12px;font-weight:600;
   <!-- Top bar -->
   <div class="cam-topbar">
     <div class="cam-class-info">
-      <button class="btn-icon" id="btn-back-to-classes" style="border-color:#333;color:#888">
+      <button class="btn-icon" id="btn-back-to-classes">
         <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
           <path d="M19 12H5M12 5l-7 7 7 7" stroke-linecap="round" stroke-linejoin="round"/>
         </svg>
@@ -514,8 +686,7 @@ label.field-label{display:block;font-size:12px;font-weight:600;
     </div>
     <div class="cam-actions">
       <span class="cam-clock mono" id="cam-clock">00:00:00</span>
-      <button class="btn btn-sm" id="btn-open-register"
-              style="background:#1E1E1E;border:1px solid #333;color:#ccc">
+      <button class="btn btn-sm btn-ghost" id="btn-open-register">
         <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
           <path d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" stroke-linecap="round" stroke-linejoin="round"/>
         </svg>
@@ -538,6 +709,21 @@ label.field-label{display:block;font-size:12px;font-weight:600;
       <div class="cam-overlay-top" id="cam-overlay-top" style="display:none">
         <div class="cam-live-dot"></div>
         <span class="cam-live-label">LIVE</span>
+      </div>
+
+      <!-- Face loading overlay -->
+      <div class="cam-loading-overlay hidden" id="cam-loading-overlay">
+        <div class="cam-loading-title" id="cam-loading-title">Preparing Camera</div>
+        <div class="cam-loading-count-wrap">
+          <span class="cam-loading-num" id="cam-loading-num">0</span>
+          <span class="cam-loading-denom" id="cam-loading-denom"></span>
+          <span class="cam-loading-unit">students loaded</span>
+        </div>
+        <div class="cam-loading-bar-wrap">
+          <div class="cam-loading-bar" id="cam-loading-bar"></div>
+        </div>
+        <div class="cam-loading-sub" id="cam-loading-sub">Encoding faces…</div>
+        <div class="cam-loading-names" id="cam-loading-names"></div>
       </div>
 
       <!-- No-camera placeholder -->
@@ -571,6 +757,30 @@ label.field-label{display:block;font-size:12px;font-weight:600;
 
       <!-- Students tab -->
       <div class="cam-side-content hidden" id="tab-students">
+        <!-- Search + Sort controls -->
+        <div style="display:flex;gap:6px;margin-bottom:8px;align-items:center">
+          <div style="position:relative;flex:1">
+            <svg style="position:absolute;left:8px;top:50%;transform:translateY(-50%);opacity:.4"
+                 width="12" height="12" viewBox="0 0 24 24" fill="none"
+                 stroke="currentColor" stroke-width="2.5">
+              <circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>
+            </svg>
+            <input id="stu-search" type="text" placeholder="Search student..."
+              oninput="renderStudentsList()"
+              style="width:100%;padding:5px 8px 5px 26px;font-size:11px;
+                     border:1px solid #E5E7EB;border-radius:8px;outline:none;
+                     background:#F9FAFB;box-sizing:border-box"/>
+          </div>
+          <select id="stu-sort" onchange="renderStudentsList()"
+            style="font-size:11px;padding:5px 6px;border:1px solid #E5E7EB;
+                   border-radius:8px;background:#F9FAFB;outline:none;cursor:pointer;
+                   color:#374151;font-weight:600">
+            <option value="first">First</option>
+            <option value="last">Last</option>
+            <option value="status">Status</option>
+          </select>
+        </div>
+        <div id="stu-filter-count" style="font-size:10px;color:#9CA3AF;margin-bottom:4px;display:none"></div>
         <div id="students-list"></div>
       </div>
     </div>
@@ -584,12 +794,25 @@ label.field-label{display:block;font-size:12px;font-weight:600;
       </svg>
       <select class="cam-source-select" id="cam-source-select">
         <option value="0">Webcam (Built-in)</option>
-        <option value="1">Webcam (External)</option>
         <option value="rtsp">IP Camera (RTSP)</option>
       </select>
       <input id="cam-rtsp-input" class="input hidden"
              placeholder="rtsp://user:pass@192.168.1.x:554/..."
-             style="width:280px;background:#222;border-color:#333;color:#ccc;font-size:13px">
+             style="width:280px;font-size:13px">
+      <!-- Late threshold picker -->
+      <div style="display:flex;align-items:center;gap:5px;margin-left:4px">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none"
+             stroke="#D32F2F" stroke-width="2.5" style="flex-shrink:0">
+          <circle cx="12" cy="12" r="10"/>
+          <polyline points="12 6 12 12 16 14"/>
+        </svg>
+        <span style="font-size:11px;color:#555;font-weight:600;white-space:nowrap">Late after</span>
+        <input id="cam-late-minutes" type="number" min="1" max="60" value="15"
+               style="width:46px;font-size:12px;font-weight:700;text-align:center;
+                      border:1px solid #E5E7EB;border-radius:7px;padding:3px 5px;
+                      background:#FFF5F5;color:#D32F2F;outline:none">
+        <span style="font-size:11px;color:#555;font-weight:600">min</span>
+      </div>
     </div>
     <div class="flex gap8">
       <button class="btn btn-sm" id="btn-start-camera"
@@ -599,8 +822,7 @@ label.field-label{display:block;font-size:12px;font-weight:600;
         </svg>
         Start Camera
       </button>
-      <button class="btn btn-sm hidden" id="btn-stop-camera"
-              style="background:#333;color:#aaa;border:1px solid #444">
+      <button class="btn btn-sm btn-ghost hidden" id="btn-stop-camera">
         <svg width="13" height="13" fill="currentColor" viewBox="0 0 24 24">
           <path d="M6 6h12v12H6z"/>
         </svg>
@@ -626,7 +848,7 @@ label.field-label{display:block;font-size:12px;font-weight:600;
         <label class="field-label">Full Name</label>
         <input class="input" id="reg-name" placeholder="Last Name, First Name">
       </div>
-      <div class="field">
+            <div class="field">
         <label class="field-label">SR Code</label>
         <input class="input" id="reg-sr" placeholder="23-XXXXX">
       </div>
@@ -635,20 +857,68 @@ label.field-label{display:block;font-size:12px;font-weight:600;
         <input class="input" id="reg-email" type="email" placeholder="student@email.com">
       </div>
 
-      <!-- Photo upload -->
+      <!-- 4-Angle Photo uploads -->
       <div class="field">
-        <label class="field-label">Student Photo (for face recognition)</label>
-        <div class="file-upload-area" id="photo-upload-area"
-             onclick="document.getElementById('reg-photo').click()">
-          <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24" style="opacity:.4">
-            <path d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" stroke-linecap="round"/>
-            <circle cx="12" cy="13" r="3" stroke-linecap="round"/>
-          </svg>
-          <p>Click to choose photo</p>
-          <span class="filename" id="photo-filename"></span>
+        <label class="field-label" style="color:#D32F2F;font-weight:700;">
+          Face Photos — 4 Angles Required
+        </label>
+        <p style="font-size:11px;color:#888;margin-bottom:10px;">
+          All 4 angles are needed for accurate detection at distance and from the side.
+        </p>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+          <!-- Front -->
+          <div>
+            <label style="font-size:11px;font-weight:600;color:#555;display:block;margin-bottom:4px;">
+              📷 Front Face <span style="color:#D32F2F;">*</span>
+            </label>
+            <div class="file-upload-area" id="photo-front-area" style="padding:10px;"
+                 onclick="document.getElementById('reg-photo-front').click()">
+              <p style="font-size:11px;margin:0;">Click to upload</p>
+              <span class="filename" id="photo-front-fname" style="font-size:10px;"></span>
+            </div>
+            <input type="file" id="reg-photo-front" accept="image/*" class="hidden"
+                   onchange="handleFileSelect('reg-photo-front','photo-front-area','photo-front-fname')">
+          </div>
+          <!-- Left -->
+          <div>
+            <label style="font-size:11px;font-weight:600;color:#555;display:block;margin-bottom:4px;">
+              👈 Left Side <span style="color:#D32F2F;">*</span>
+            </label>
+            <div class="file-upload-area" id="photo-left-area" style="padding:10px;"
+                 onclick="document.getElementById('reg-photo-left').click()">
+              <p style="font-size:11px;margin:0;">Click to upload</p>
+              <span class="filename" id="photo-left-fname" style="font-size:10px;"></span>
+            </div>
+            <input type="file" id="reg-photo-left" accept="image/*" class="hidden"
+                   onchange="handleFileSelect('reg-photo-left','photo-left-area','photo-left-fname')">
+          </div>
+          <!-- Right -->
+          <div>
+            <label style="font-size:11px;font-weight:600;color:#555;display:block;margin-bottom:4px;">
+              👉 Right Side <span style="color:#D32F2F;">*</span>
+            </label>
+            <div class="file-upload-area" id="photo-right-area" style="padding:10px;"
+                 onclick="document.getElementById('reg-photo-right').click()">
+              <p style="font-size:11px;margin:0;">Click to upload</p>
+              <span class="filename" id="photo-right-fname" style="font-size:10px;"></span>
+            </div>
+            <input type="file" id="reg-photo-right" accept="image/*" class="hidden"
+                   onchange="handleFileSelect('reg-photo-right','photo-right-area','photo-right-fname')">
+          </div>
+          <!-- Up -->
+          <div>
+            <label style="font-size:11px;font-weight:600;color:#555;display:block;margin-bottom:4px;">
+              ☝️ Looking Up <span style="color:#D32F2F;">*</span>
+            </label>
+            <div class="file-upload-area" id="photo-up-area" style="padding:10px;"
+                 onclick="document.getElementById('reg-photo-up').click()">
+              <p style="font-size:11px;margin:0;">Click to upload</p>
+              <span class="filename" id="photo-up-fname" style="font-size:10px;"></span>
+            </div>
+            <input type="file" id="reg-photo-up" accept="image/*" class="hidden"
+                   onchange="handleFileSelect('reg-photo-up','photo-up-area','photo-up-fname')">
+          </div>
         </div>
-        <input type="file" id="reg-photo" accept="image/*" class="hidden"
-               onchange="handleFileSelect('reg-photo','photo-upload-area','photo-filename')">
       </div>
 
       <!-- Signature upload -->
@@ -715,6 +985,174 @@ label.field-label{display:block;font-size:12px;font-weight:600;
   </div>
 </div>
 
+<!-- ═══ MODAL: EDIT STUDENT ══════════════════════════════════════════════ -->
+<div id="modal-edit-student" class="modal-backdrop">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title">Edit Student</span>
+      <button class="modal-close" onclick="closeModal('modal-edit-student')">
+        <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path d="M6 18L18 6M6 6l12 12" stroke-linecap="round"/>
+        </svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="edit-student-id">
+
+      <div class="field">
+        <label class="field-label">Full Name</label>
+        <input class="input" id="edit-name" placeholder="Last Name, First Name Middle I.">
+      </div>
+
+      <div class="field">
+        <label class="field-label">SR Code <span style="color:#555;font-size:10px">(read-only)</span></label>
+        <input class="input" id="edit-sr" disabled style="opacity:.5;cursor:not-allowed">
+      </div>
+
+      <div class="field">
+        <label class="field-label">Email Address</label>
+        <input class="input" id="edit-email" type="email" placeholder="student@email.com">
+      </div>
+
+      <!-- 4-Angle Face Photo Upload Grid -->
+      <div class="field">
+        <label class="field-label" style="color:#D32F2F;font-weight:700">FACE PHOTOS — UPDATE ANGLES</label>
+        <p style="font-size:11px;color:#6B7280;margin-bottom:10px">
+          Upload only the angles you want to replace. Leave blank to keep the current photo for that angle.
+        </p>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+
+          <!-- Front -->
+          <div>
+            <div style="font-size:11px;font-weight:600;color:#374151;margin-bottom:4px">
+              📷 Front Face <span id="edit-status-front" style="font-size:10px;font-weight:500"></span>
+            </div>
+            <div class="file-upload-area" id="edit-area-front" style="padding:12px 8px"
+                 onclick="document.getElementById('edit-file-front').click()">
+              <p style="font-size:11px;margin:0" id="edit-label-front">Click to replace</p>
+              <span class="filename hidden" id="edit-fname-front"></span>
+            </div>
+            <input type="file" id="edit-file-front" accept="image/*" class="hidden"
+                   onchange="handleEditAngle('front')">
+          </div>
+
+          <!-- Left -->
+          <div>
+            <div style="font-size:11px;font-weight:600;color:#374151;margin-bottom:4px">
+              👈 Left Side <span id="edit-status-left" style="font-size:10px;font-weight:500"></span>
+            </div>
+            <div class="file-upload-area" id="edit-area-left" style="padding:12px 8px"
+                 onclick="document.getElementById('edit-file-left').click()">
+              <p style="font-size:11px;margin:0" id="edit-label-left">Click to replace</p>
+              <span class="filename hidden" id="edit-fname-left"></span>
+            </div>
+            <input type="file" id="edit-file-left" accept="image/*" class="hidden"
+                   onchange="handleEditAngle('left')">
+          </div>
+
+          <!-- Right -->
+          <div>
+            <div style="font-size:11px;font-weight:600;color:#374151;margin-bottom:4px">
+              👉 Right Side <span id="edit-status-right" style="font-size:10px;font-weight:500"></span>
+            </div>
+            <div class="file-upload-area" id="edit-area-right" style="padding:12px 8px"
+                 onclick="document.getElementById('edit-file-right').click()">
+              <p style="font-size:11px;margin:0" id="edit-label-right">Click to replace</p>
+              <span class="filename hidden" id="edit-fname-right"></span>
+            </div>
+            <input type="file" id="edit-file-right" accept="image/*" class="hidden"
+                   onchange="handleEditAngle('right')">
+          </div>
+
+          <!-- Up -->
+          <div>
+            <div style="font-size:11px;font-weight:600;color:#374151;margin-bottom:4px">
+              👆 Looking Up <span id="edit-status-up" style="font-size:10px;font-weight:500"></span>
+            </div>
+            <div class="file-upload-area" id="edit-area-up" style="padding:12px 8px"
+                 onclick="document.getElementById('edit-file-up').click()">
+              <p style="font-size:11px;margin:0" id="edit-label-up">Click to replace</p>
+              <span class="filename hidden" id="edit-fname-up"></span>
+            </div>
+            <input type="file" id="edit-file-up" accept="image/*" class="hidden"
+                   onchange="handleEditAngle('up')">
+          </div>
+
+        </div>
+      </div>
+
+      <!-- Signature replace -->
+      <div class="field">
+        <label class="field-label">E-Signature
+          <span id="edit-sig-status" class="field-note"></span>
+        </label>
+        <div class="file-upload-area" id="edit-sig-area"
+             onclick="document.getElementById('edit-sig-file').click()">
+          <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24" style="opacity:.4">
+            <path d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" stroke-linecap="round"/>
+          </svg>
+          <p>Click to replace — leave blank to keep current</p>
+          <span class="filename hidden" id="edit-sig-fname"></span>
+        </div>
+        <input type="file" id="edit-sig-file" accept="image/*" class="hidden"
+               onchange="handleEditSigPreview()">
+        <div class="preview-sig hidden" id="edit-sig-preview">
+          <img id="edit-sig-preview-img" src="" alt="signature preview">
+        </div>
+      </div>
+
+      <div class="modal-actions">
+        <button class="btn btn-ghost" onclick="closeModal('modal-edit-student')">Cancel</button>
+        <button class="btn btn-primary" id="btn-save-edit">Save Changes</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ MODAL: SIGNATURE ONLY ════════════════════════════════════════════ -->
+<div id="modal-sig-only" class="modal-backdrop">
+  <div class="modal" style="max-width:400px">
+    <div class="modal-header">
+      <span class="modal-title" style="color:#1565C0">Upload Signature</span>
+      <button class="modal-close" onclick="closeModal('modal-sig-only')">
+        <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path d="M6 18L18 6M6 6l12 12" stroke-linecap="round"/>
+        </svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="sig-only-student-id">
+      <div class="modal-student-pill" id="sig-only-student-info">
+        <!-- filled by JS -->
+      </div>
+      <div class="field">
+        <label class="field-label">E-Signature Image</label>
+        <div class="file-upload-area" id="sig-only-area"
+             onclick="document.getElementById('sig-only-file').click()">
+          <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24" style="opacity:.4">
+            <path d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" stroke-linecap="round"/>
+          </svg>
+          <p>Click to choose signature image</p>
+          <span class="filename hidden" id="sig-only-fname"></span>
+        </div>
+        <input type="file" id="sig-only-file" accept="image/*" class="hidden"
+               onchange="handleSigOnlyPreview()">
+        <div class="preview-sig hidden" id="sig-only-preview">
+          <img id="sig-only-preview-img" src="" alt="signature preview">
+        </div>
+        <p class="field-note">JPG or PNG · white or transparent background works best</p>
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" onclick="closeModal('modal-sig-only')">Cancel</button>
+        <button class="btn btn-sm" id="btn-upload-sig-only"
+                style="background:#1565C0;color:#fff;border:none;padding:10px 20px;border-radius:var(--r-sm);font-weight:600;cursor:pointer">
+          Upload Signature
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- Toast container -->
 <div id="toast-container"></div>
 
@@ -723,15 +1161,17 @@ label.field-label{display:block;font-size:12px;font-weight:600;
    STATE
    ═══════════════════════════════════════════════════════════════════════ */
 const STATE = {
-  email:        '',
-  name:         '',
-  classes:      [],
-  schedules:    [],
-  allSchedules: [],
-  activeDay:    'TODAY',
-  currentClass: null,
-  students:     [],
-  cameraOn:     false,
+  email:         '',
+  name:          '',
+  instructorId:  null,
+  classes:       [],
+  schedules:     [],
+  allSchedules:  [],
+  rooms:         [],   // admin-configured camera rooms
+  activeDay:     'TODAY',
+  currentClass:  null,
+  students:      [],
+  cameraOn:      false,
 };
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -821,11 +1261,14 @@ async function doLogin() {
       return;
     }
 
-    STATE.email = data.email;
-    STATE.name  = data.name;
-    await loadClasses();
-    showScreen('screen-classes');
-    initClassesScreen();
+    STATE.email         = data.email;
+    STATE.name          = data.name;
+    STATE.instructorId  = data.instructor_id || null;
+
+    // Go to sync screen first — it polls progress and auto-advances
+    // to class list when sync is done (or when skipped)
+    showScreen('screen-sync');
+    startSyncPoll();
 
   } catch (err) {
     errEl.style.display = 'flex';
@@ -837,18 +1280,97 @@ async function doLogin() {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
+   SYNC SCREEN
+   ═══════════════════════════════════════════════════════════════════════ */
+let _syncPollInterval = null;
+let _syncShownCount   = 0;
+
+function startSyncPoll() {
+  _syncShownCount = 0;
+  _syncPollInterval = setInterval(async () => {
+    try {
+      const res  = await fetch('/api/local/sync_progress');
+      const data = await res.json();
+
+      // Update counter and bar
+      const synced = data.synced || 0;
+      const total  = data.total  || 0;
+      document.getElementById('sync-count').textContent = synced;
+      document.getElementById('sync-count-label').textContent =
+        total > 0 ? `of ${total} student${total !== 1 ? 's' : ''} synced` : 'students checked';
+
+      const pct = total > 0 ? Math.round((synced / total) * 100) : 100;
+      document.getElementById('sync-bar').style.width = pct + '%';
+
+      // Status text
+      if (data.done) {
+        document.getElementById('sync-status').textContent =
+          synced > 0
+            ? `✓ ${synced} face${synced !== 1 ? 's' : ''} downloaded`
+            : 'All faces already up to date';
+      } else {
+        document.getElementById('sync-status').textContent =
+          `Downloading… (${data.skipped || 0} already on disk)`;
+      }
+
+      if (data.done) {
+        clearInterval(_syncPollInterval);
+        _syncPollInterval = null;
+        await _advanceToClasses();
+      }
+    } catch { /* poll silently */ }
+  }, 400);
+}
+
+async function _advanceToClasses() {
+  await loadClasses();
+  showScreen('screen-classes');
+  initClassesScreen();
+}
+
+// Skip button — go to classes immediately without waiting for sync to finish
+document.getElementById('btn-skip-sync').addEventListener('click', async () => {
+  if (_syncPollInterval) {
+    clearInterval(_syncPollInterval);
+    _syncPollInterval = null;
+  }
+  await _advanceToClasses();
+});
+
+/* ═══════════════════════════════════════════════════════════════════════
    CLASSES SCREEN
    ═══════════════════════════════════════════════════════════════════════ */
 async function loadClasses() {
-  const res  = await fetch('/api/local/classes', {
-    headers: {'X-Instructor-Email': STATE.email}
-  });
-  const data = await res.json();
+  const headers = {'X-Instructor-Email': STATE.email};
+  const [classRes, roomRes] = await Promise.all([
+    fetch('/api/local/classes', { headers }),
+    fetch('/api/local/rooms',   { headers }),
+  ]);
+  const data     = await classRes.json();
+  const roomData = roomRes.ok ? await roomRes.json() : { rooms: [] };
 
   STATE.classes      = data.all_classes    || [];
   STATE.schedules    = data.today_schedules|| [];
   STATE.allSchedules = data.all_schedules  || [];
-  STATE.today        = data.today;         // "MON" / "TUE" etc.
+  STATE.today        = data.today;
+  STATE.rooms        = roomData.rooms      || [];
+
+  // Rebuild source dropdown with admin-configured rooms
+  const sel = document.getElementById('cam-source-select');
+  // Keep built-in options, remove any previously injected room options
+  sel.querySelectorAll('option[data-room]').forEach(o => o.remove());
+  if (STATE.rooms.length) {
+    const grp = document.createElement('optgroup');
+    grp.label = 'IP Camera Rooms';
+    STATE.rooms.forEach(r => {
+      const opt = document.createElement('option');
+      opt.value        = r.rtsp_url;
+      opt.dataset.room = '1';
+      opt.textContent  = r.room_name;
+      grp.appendChild(opt);
+    });
+    sel.appendChild(grp);
+  }
 
   if (data.offline) {
     document.getElementById('offline-banner').classList.remove('hidden');
@@ -872,16 +1394,8 @@ function initClassesScreen() {
     STATE.name.charAt(0).toUpperCase();
   document.getElementById('topbar-name').textContent = STATE.name;
 
-  // Mark today tab
-  document.querySelectorAll('.day-tab').forEach(tab => {
-    tab.classList.remove('active', 'today-marker');
-    if (tab.dataset.day === STATE.today) tab.classList.add('today-marker');
-    if (tab.dataset.day === STATE.today) tab.classList.add('active');
-    // default: show today's classes
-    if (tab.dataset.day === 'ALL' && !STATE.today) tab.classList.add('active');
-  });
-
-  renderClassGrid(STATE.today || 'ALL');
+  // Always show all classes — day filtering removed
+  renderClassGrid('ALL');
 }
 
 function renderClassGrid(dayFilter) {
@@ -910,42 +1424,56 @@ function renderClassGrid(dayFilter) {
     return;
   }
 
-  grid.innerHTML = filtered.map(cls => {
-    // Find schedule for this class on this day
-    const sched = STATE.allSchedules.find(s =>
-      s.class_code === cls.class_code &&
-      (dayFilter === 'ALL' || (s.day || '').toUpperCase() === dayFilter)
+  // Build one card PER SCHEDULE SLOT so classes with multiple today-slots
+  // (e.g. Electronic Devices 10am AND 7am on Thursday) each get their own card.
+  // For "ALL" view, show each class once with all its schedule slots listed.
+  const cards = [];
+
+  if (dayFilter === 'ALL') {
+    filtered.forEach(cls => {
+      const slots = STATE.allSchedules.filter(s => s.class_code === cls.class_code);
+      const schedHtml = slots.length
+        ? slots.map(s => `
+            <div class="class-schedule">
+              <svg width="12" height="12" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2zm.5 5H11v6l5.2 3.2.8-1.3-4.5-2.7V7z"/>
+              </svg>
+              ${s.day || ''} ${s.time || ''} · ${s.room || 'TBA'}
+            </div>`).join('')
+        : '';
+      const isToday = STATE.allSchedules.some(s =>
+        s.class_code === cls.class_code && (s.day||'').toUpperCase() === STATE.today
+      );
+      cards.push(`
+        <div class="class-card ${isToday ? 'today' : ''}"
+             onclick="openCameraScreen('${cls.class_code}')">
+          <div class="class-code">${cls.course_code || cls.class_code}</div>
+          <div class="class-name">${cls.subject || '—'}</div>
+          <div class="class-meta">${cls.section || ''}</div>
+        </div>`);
+    });
+  } else {
+    // Day filter — one card per matching schedule slot
+    const dayScheds = STATE.allSchedules.filter(
+      s => (s.day || '').toUpperCase() === dayFilter
     );
-    const schedHtml = sched
-      ? `<div class="class-schedule">
-           <svg width="12" height="12" fill="currentColor" viewBox="0 0 24 24">
-             <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2zm.5 5H11v6l5.2 3.2.8-1.3-4.5-2.7V7z"/>
-           </svg>
-           ${sched.time || ''} · ${sched.room || 'TBA'}
-         </div>`
-      : '';
-    const isToday = STATE.allSchedules.some(s =>
-      s.class_code === cls.class_code && (s.day||'').toUpperCase() === STATE.today
-    );
-    return `
-      <div class="class-card ${isToday ? 'today' : ''}"
-           onclick="openCameraScreen('${cls.class_code}')">
-        <div class="class-code">${cls.class_code}</div>
-        <div class="class-name">${cls.subject || '—'}</div>
-        <div class="class-meta">${cls.section || ''}</div>
-        ${schedHtml}
-      </div>`;
-  }).join('');
+    dayScheds.forEach(sched => {
+      const cls = filtered.find(c => c.class_code === sched.class_code);
+      if (!cls) return;
+      cards.push(`
+        <div class="class-card today"
+             onclick="openCameraScreen('${cls.class_code}')">
+          <div class="class-code">${cls.course_code || cls.class_code}</div>
+          <div class="class-name">${cls.subject || '—'}</div>
+          <div class="class-meta">${cls.section || ''}</div>
+        </div>`);
+    });
+  }
+
+  grid.innerHTML = cards.join('');
 }
 
-// Day tab clicks
-document.getElementById('day-tabs').addEventListener('click', e => {
-  const tab = e.target.closest('.day-tab');
-  if (!tab) return;
-  document.querySelectorAll('.day-tab').forEach(t => t.classList.remove('active'));
-  tab.classList.add('active');
-  renderClassGrid(tab.dataset.day);
-});
+// Day tabs removed
 
 // Logout
 document.getElementById('btn-logout').addEventListener('click', () => {
@@ -963,7 +1491,8 @@ async function openCameraScreen(classCode) {
   if (!cls) return;
   STATE.currentClass = cls;
 
-  document.getElementById('cam-class-code').textContent = cls.class_code;
+  // Show friendly short code (e.g. CPET-3201) instead of full long class_code
+  document.getElementById('cam-class-code').textContent = cls.course_code || cls.class_code;
   document.getElementById('cam-class-name').textContent = cls.subject || '';
 
   // Load students for this class
@@ -994,12 +1523,134 @@ document.getElementById('btn-back-to-classes').addEventListener('click', async (
 /* ── Camera controls ──────────────────────────────────────────────────── */
 document.getElementById('cam-source-select').addEventListener('change', function() {
   const rtsp = document.getElementById('cam-rtsp-input');
+  // Show manual RTSP input only for the generic 'rtsp' option, not named rooms
   if (this.value === 'rtsp') rtsp.classList.remove('hidden');
   else rtsp.classList.add('hidden');
 });
 
 document.getElementById('btn-start-camera').addEventListener('click', startCamera);
 document.getElementById('btn-stop-camera').addEventListener('click', stopCamera);
+
+// ── LOADING OVERLAY HELPERS ───────────────────────────────────────────────
+let _loadPollInterval = null;
+let _shownNames       = [];
+
+function _showLoadingOverlay(total) {
+  _shownNames = [];
+  const ov = document.getElementById('cam-loading-overlay');
+  document.getElementById('cam-loading-num').textContent    = '0';
+  document.getElementById('cam-loading-denom').textContent  = total > 0 ? ` / ${total}` : '';
+  document.getElementById('cam-loading-bar').style.width    = '0%';
+  document.getElementById('cam-loading-names').innerHTML    = '';
+  document.getElementById('cam-loading-title').textContent  =
+    total > 0 ? `Loading ${total} student${total !== 1 ? 's' : ''}` : 'Starting Camera';
+  document.getElementById('cam-loading-sub').textContent    =
+    total > 0 ? 'Encoding face angles — camera starts automatically…' : 'No faces registered yet. Starting…';
+
+  ov.classList.remove('hidden');
+  document.getElementById('cam-no-feed').style.display      = 'none';
+  document.getElementById('cam-feed').classList.add('hidden');
+  document.getElementById('cam-scan-line').style.display    = 'none';
+  document.getElementById('cam-overlay-top').style.display  = 'none';
+
+  // Show Stop button (cancels loading) — hide Start
+  document.getElementById('btn-start-camera').classList.add('hidden');
+  const stopBtn = document.getElementById('btn-stop-camera');
+  stopBtn.classList.remove('hidden');
+  stopBtn.textContent = '';
+  stopBtn.innerHTML = `
+    <svg width="13" height="13" fill="currentColor" viewBox="0 0 24 24">
+      <path d="M6 6h12v12H6z"/>
+    </svg> Cancel`;
+}
+
+function _updateLoadingOverlay(loaded, total) {
+  document.getElementById('cam-loading-num').textContent = loaded;
+  const pct = total > 0 ? Math.round((loaded / total) * 100) : 100;
+  document.getElementById('cam-loading-bar').style.width = pct + '%';
+}
+
+function _addLoadedName(name) {
+  if (_shownNames.includes(name)) return;
+  _shownNames.push(name);
+  const list = document.getElementById('cam-loading-names');
+  const row  = document.createElement('div');
+  row.className = 'cam-loading-name-row';
+  row.innerHTML = `
+    <div class="cam-loading-check">
+      <svg width="7" height="7" fill="none" stroke="#fff" stroke-width="3"
+           viewBox="0 0 24 24">
+        <path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </div>
+    <span>${name}</span>`;
+  list.appendChild(row);
+  list.scrollTop = list.scrollHeight;
+}
+
+function _hideLoadingOverlay() {
+  document.getElementById('cam-loading-overlay').classList.add('hidden');
+}
+
+function _startLoadPoll(total) {
+  let lastLoaded = 0;
+  _loadPollInterval = setInterval(async () => {
+    try {
+      const res  = await fetch('/api/local/load_progress');
+      const data = await res.json();
+
+      // Use student-level counts if available, fall back to image counts
+      const stu_total  = data.student_total  || total;
+      const stu_loaded = data.student_loaded || 0;
+      const cur_name   = data.current_student || '';
+
+      // Update title to show student count (not image file count)
+      document.getElementById('cam-loading-title').textContent =
+        stu_total > 0 ? `Loading ${stu_total} student${stu_total !== 1 ? 's' : ''}` : 'Starting Camera';
+
+      // Counter shows students loaded, not image files
+      document.getElementById('cam-loading-num').textContent   = stu_loaded;
+      document.getElementById('cam-loading-denom').textContent = stu_total > 0 ? ` / ${stu_total}` : '';
+      const pct = stu_total > 0 ? Math.round((stu_loaded / stu_total) * 100) : 100;
+      document.getElementById('cam-loading-bar').style.width   = pct + '%';
+
+      // Sub-label shows the angle images being processed behind the scenes
+      if (cur_name && data.total > 0) {
+        const imgPct = Math.round((data.loaded / data.total) * 100);
+        document.getElementById('cam-loading-sub').textContent =
+          `Encoding angles for ${cur_name}… (${data.loaded}/${data.total} images)`;
+      }
+
+      // Add student name row when a new unique student finishes
+      if (cur_name) _addLoadedName(cur_name);
+
+      if (data.done) {
+        clearInterval(_loadPollInterval);
+        _loadPollInterval = null;
+
+        if (data.error) {
+          _hideLoadingOverlay();
+          setCameraUI(false);
+          toast('Camera error: ' + data.error, 'error');
+          return;
+        }
+
+        _hideLoadingOverlay();
+        setCameraUI(true);
+        startPresentPoll();
+        // Reset stop button label back from "Cancel"
+        document.getElementById('btn-stop-camera').innerHTML = `
+          <svg width="13" height="13" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M6 6h12v12H6z"/>
+          </svg> Stop`;
+        const msg = data.total > 0
+          ? `Camera ready — ${data.total} face${data.total !== 1 ? 's' : ''} loaded`
+          : 'Camera ready — no faces registered yet';
+        toast(msg, 'success');
+      }
+    } catch { /* network blip — try next tick */ }
+  }, 300);
+}
 
 async function startCamera() {
   const sel    = document.getElementById('cam-source-select');
@@ -1010,39 +1661,62 @@ async function startCamera() {
   if (sel.value === 'rtsp' && !source) {
     toast('Enter the RTSP URL first.', 'error'); return;
   }
+  if (!source) {
+    toast('Select a camera source first.', 'error'); return;
+  }
+
+  // Capture late threshold — this is the instructor-chosen grace period
+  const lateMin = parseInt(document.getElementById('cam-late-minutes')?.value || '15', 10);
+  // Record session start NOW — before face encoding — so the timer is accurate
+  STATE.sessionStart = Date.now();
 
   const cls = STATE.currentClass;
   try {
     const res = await fetch('/api/local/start_camera', {
-      method: 'POST',
+      method:  'POST',
       headers: {
-        'Content-Type': 'application/json',
+        'Content-Type':       'application/json',
         'X-Instructor-Email': STATE.email
       },
       body: JSON.stringify({
         source,
-        class_code: cls.class_code,
-        section:    cls.section || '',
-        subject:    cls.subject || '',
+        class_code:   cls.class_code,
+        section:      cls.section || '',
+        subject:      cls.subject || '',
+        late_minutes: lateMin,
       })
     });
     const data = await res.json();
     if (!res.ok) { toast(data.error || 'Camera failed.', 'error'); return; }
 
-    setCameraUI(true);
-    toast('Camera started', 'success');
+    // Show overlay immediately with the total count
+    _showLoadingOverlay(data.total || 0);
+    // Begin polling every 300 ms
+    _startLoadPoll(data.total || 0);
+
   } catch {
     toast('Could not connect to camera.', 'error');
   }
 }
 
 async function stopCamera() {
+  if (_loadPollInterval) {
+    clearInterval(_loadPollInterval);
+    _loadPollInterval = null;
+  }
+  _hideLoadingOverlay();
   try {
     await fetch('/api/local/stop_camera', {
-      method: 'POST',
+      method:  'POST',
       headers: {'X-Instructor-Email': STATE.email}
     });
   } catch {}
+  // Reset stop button label in case it was showing "Cancel"
+  const stopBtn = document.getElementById('btn-stop-camera');
+  stopBtn.innerHTML = `
+    <svg width="13" height="13" fill="currentColor" viewBox="0 0 24 24">
+      <path d="M6 6h12v12H6z"/>
+    </svg> Stop`;
   setCameraUI(false);
 }
 
@@ -1056,7 +1730,7 @@ function setCameraUI(on) {
   const btnSp = document.getElementById('btn-stop-camera');
 
   if (on) {
-    feed.src = '/video_feed?' + Date.now(); // bust cache
+    feed.src = '/video_feed?' + Date.now();
     feed.classList.remove('hidden');
     noFd.style.display = 'none';
     scan.style.display = 'block';
@@ -1065,9 +1739,9 @@ function setCameraUI(on) {
     btnSp.classList.remove('hidden');
   } else {
     feed.classList.add('hidden');
-    noFd.style.display = 'flex';
-    scan.style.display = 'none';
-    live.style.display = 'none';
+    noFd.style.display   = 'flex';
+    scan.style.display   = 'none';
+    live.style.display   = 'none';
     btnSt.classList.remove('hidden');
     btnSp.classList.add('hidden');
   }
@@ -1119,27 +1793,417 @@ function renderPresentList(present, scanLog) {
   }).join('');
 }
 
+function _hasFace(student) {
+  // Use the server-computed flag (checks actual disk, not just DB URL)
+  // Falls back to DB photo field for backward compatibility
+  if (student.has_face_local !== undefined) return student.has_face_local;
+  return !!(student.photo && student.photo.trim());
+}
+function _hasSig(student) {
+  // Use the server-computed flag which checks both Cloudinary URL and local file
+  if (student.has_sig !== undefined) return student.has_sig;
+  return !!(student.signature && student.signature.trim());
+}
+
 function renderStudentsList(present = []) {
   const presentSet = new Set(present.map(n => n.toLowerCase().replace(/_/g,' ')));
   const list = document.getElementById('students-list');
-  if (!STATE.students.length) {
-    list.innerHTML = `<p style="color:#555;font-size:13px;text-align:center;padding:20px">
-      No students enrolled</p>`;
+
+  // ── Search + Sort ────────────────────────────────────────────────────────
+  const searchQ  = (document.getElementById('stu-search')?.value || '').trim().toLowerCase();
+  const sortMode = document.getElementById('stu-sort')?.value || 'first';
+
+  let enrolled = (STATE.students || []).filter(
+    s => s.status === 'Enrolled' || s.status === 'Unenrolled'
+  );
+
+  // Apply search filter across full name
+  if (searchQ) {
+    enrolled = enrolled.filter(s => (s.name || '').toLowerCase().includes(searchQ));
+  }
+
+  // Apply sort
+  enrolled = [...enrolled].sort((a, b) => {
+    const na = (a.name || '').trim();
+    const nb = (b.name || '').trim();
+    if (sortMode === 'last') {
+      // Sort by last word in name (last name)
+      const la = na.split(' ').pop().toLowerCase();
+      const lb = nb.split(' ').pop().toLowerCase();
+      return la.localeCompare(lb);
+    } else if (sortMode === 'first') {
+      // Sort by first word (first name)
+      const fa = na.split(' ')[0].toLowerCase();
+      const fb = nb.split(' ')[0].toLowerCase();
+      return fa.localeCompare(fb);
+    } else if (sortMode === 'status') {
+      // Present first, then absent
+      const pa = presentSet.has(na.toLowerCase()) ? 0 : 1;
+      const pb = presentSet.has(nb.toLowerCase()) ? 0 : 1;
+      return pa - pb || na.localeCompare(nb);
+    }
+    return 0;
+  });
+
+  // Show filter result count
+  const countEl = document.getElementById('stu-filter-count');
+  if (countEl) {
+    const total = (STATE.students || []).filter(
+      s => s.status === 'Enrolled' || s.status === 'Unenrolled'
+    ).length;
+    if (searchQ) {
+      countEl.textContent = `${enrolled.length} of ${total} students`;
+      countEl.style.display = 'block';
+    } else {
+      countEl.style.display = 'none';
+    }
+  }
+
+  if (!enrolled.length) {
+    list.innerHTML = searchQ
+      ? `<p style="color:#555;font-size:12px;text-align:center;padding:16px">No match for "<strong>${searchQ}</strong>"</p>`
+      : `<p style="color:#555;font-size:13px;text-align:center;padding:20px">No students enrolled</p>`;
     return;
   }
-  list.innerHTML = STATE.students
-    .filter(s => s.status === 'Enrolled')
-    .map(s => {
-      const isPresent = presentSet.has((s.name||'').toLowerCase());
-      return `
-        <div class="student-item">
-          <div class="student-status-dot ${isPresent ? 'dot-present' : 'dot-absent'}"></div>
-          <span class="student-name-txt">${s.name}</span>
-          ${isPresent
-            ? '<span style="font-size:11px;color:#22C55E;font-weight:600">Present</span>'
-            : '<span style="font-size:11px;color:#555">—</span>'}
-        </div>`;
-    }).join('');
+  list.innerHTML = enrolled.map(s => {
+    const isPresent = presentSet.has((s.name||'').toLowerCase());
+    const hasFace   = _hasFace(s);
+    const hasSig    = _hasSig(s);
+    const sName     = (s.name||'').replace(/'/g,"\\'");
+    // Compact single-row layout: dot · name · badges · actions
+    return `
+      <div class="student-item" style="padding:7px 8px;gap:6px;align-items:center">
+        <div class="student-status-dot ${isPresent?'dot-present':'dot-absent'}" style="flex-shrink:0"></div>
+        <span class="student-name-txt" style="flex:1;font-size:12px;overflow:hidden;
+              text-overflow:ellipsis;white-space:nowrap;min-width:0">
+          ${s.name}
+        </span>
+        <div style="display:flex;align-items:center;gap:3px;flex-shrink:0">
+          <span title="${hasFace?'Face image on disk':'No face image — camera cannot detect'}"
+                class="${hasFace?'badge-face-ok':'badge-face-no'}" style="padding:1px 5px;font-size:9px">
+            ${hasFace?'F✓':'F✗'}
+          </span>
+          <span title="${hasSig?'Signature on file':'No signature — attendance sheet shows text only'}"
+                class="${hasSig?'badge-sig-ok':'badge-sig-no'}" style="padding:1px 5px;font-size:9px">
+            ${hasSig?'S✓':'S✗'}
+          </span>
+          <button onclick="openEditStudent(${s.id})"
+            title="Edit student"
+            class="stu-action-btn">✎</button>
+          <button onclick="deleteStudent(${s.id},'${sName}')"
+            title="Delete student (removes from disk + Cloudinary)"
+            class="stu-action-btn stu-del-btn">✕</button>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// EDIT STUDENT
+// ═══════════════════════════════════════════════════════════════════════
+// handleEditAngle — called when a file is chosen for an angle slot
+function handleEditAngle(angle) {
+  const fileEl  = document.getElementById(`edit-file-${angle}`);
+  const areaEl  = document.getElementById(`edit-area-${angle}`);
+  const labelEl = document.getElementById(`edit-label-${angle}`);
+  const fnameEl = document.getElementById(`edit-fname-${angle}`);
+  const f = fileEl.files[0];
+  if (!f) return;
+  areaEl.classList.add('has-file');
+  areaEl.style.borderColor = '#D32F2F';
+  areaEl.style.background  = '#FEF2F2';
+  labelEl.textContent      = 'Selected';
+  fnameEl.textContent      = f.name;
+  fnameEl.style.display    = 'block';
+}
+
+async function openEditStudent(studentId) {
+  const s = STATE.students.find(x => x.id === studentId);
+  if (!s) return;
+
+  document.getElementById('edit-student-id').value = studentId;
+  document.getElementById('edit-name').value        = s.name    || '';
+  document.getElementById('edit-sr').value          = s.sr_code || '';
+  document.getElementById('edit-email').value       = s.email   || '';
+
+  // Show per-angle status
+  const angleKeys = { front: 'photo_front', left: 'photo_left', right: 'photo_right', up: 'photo_up' };
+  ['front','left','right','up'].forEach(angle => {
+    const hasAngle = !!(s[angleKeys[angle]] && s[angleKeys[angle]].startsWith('http'));
+    const statusEl = document.getElementById(`edit-status-${angle}`);
+    const areaEl   = document.getElementById(`edit-area-${angle}`);
+    const labelEl  = document.getElementById(`edit-label-${angle}`);
+    const fileEl   = document.getElementById(`edit-file-${angle}`);
+    const fnameEl  = document.getElementById(`edit-fname-${angle}`);
+
+    fileEl.value = '';
+    fnameEl.style.display = 'none';
+    areaEl.classList.remove('has-file');
+    areaEl.style.borderColor = '';
+    areaEl.style.background  = '';
+
+    if (hasAngle) {
+      statusEl.textContent = '(on file)';
+      statusEl.style.color = '#2E7D32';
+      labelEl.textContent  = 'Click to replace';
+    } else {
+      statusEl.textContent = '(missing)';
+      statusEl.style.color = '#E65100';
+      labelEl.textContent  = 'Click to upload';
+      areaEl.style.borderColor = '#E65100';
+    }
+  });
+
+  // Signature status
+  const hasSig = _hasSig(s);
+  document.getElementById('edit-sig-status').textContent =
+    hasSig ? '(current: signature on file)' : '(missing - upload for attendance sheet)';
+  document.getElementById('edit-sig-status').style.color = hasSig ? '#1565C0' : '#E65100';
+
+  // Reset signature inputs
+  document.getElementById('edit-sig-file').value = '';
+  document.getElementById('edit-sig-area').classList.remove('has-file');
+  document.getElementById('edit-sig-fname').style.display = 'none';
+  document.getElementById('edit-sig-preview').classList.add('hidden');
+
+  openModal('modal-edit-student');
+}
+
+function handleEditSigPreview() {
+  const f = document.getElementById('edit-sig-file').files[0];
+  if (!f) return;
+  handleFileSelect('edit-sig-file', 'edit-sig-area', 'edit-sig-fname');
+  const reader = new FileReader();
+  reader.onload = e => {
+    document.getElementById('edit-sig-preview-img').src = e.target.result;
+    document.getElementById('edit-sig-preview').classList.remove('hidden');
+  };
+  reader.readAsDataURL(f);
+}
+
+document.getElementById('btn-save-edit').addEventListener('click', async () => {
+  const id   = document.getElementById('edit-student-id').value;
+  const name = document.getElementById('edit-name').value.trim();
+  if (!name) { toast('Name is required.', 'error'); return; }
+
+  const fd = new FormData();
+  fd.append('name',  name);
+  fd.append('email', document.getElementById('edit-email').value.trim());
+
+  // Append each angle photo only if a new file was chosen
+  ['front','left','right','up'].forEach(angle => {
+    const f = document.getElementById(`edit-file-${angle}`).files[0];
+    if (f) fd.append(`photo_${angle}`, f);
+  });
+  const sig = document.getElementById('edit-sig-file').files[0];
+  if (sig)   fd.append('signature', sig);
+
+
+  const btn = document.getElementById('btn-save-edit');
+  btn.disabled = true; btn.textContent = 'Saving…';
+
+  try {
+    const res  = await fetch(`/api/local/edit_student/${id}`, {
+      method:  'POST',
+      headers: {'X-Instructor-Email': STATE.email},
+      body:    fd
+    });
+    const data = await res.json();
+    if (!res.ok) { toast(data.error || 'Save failed.', 'error'); return; }
+
+    // ── Real-time optimistic update ─────────────────────────────────────────
+    // The server runs DB + Cloudinary uploads in a background thread.
+    // We already know what changed — patch STATE.students instantly so the
+    // list reflects the new name/badges without waiting for the background.
+    const idx = STATE.students.findIndex(x => x.id === parseInt(id));
+    if (idx !== -1) {
+      const s = { ...STATE.students[idx] };
+      s.name  = name;
+      s.email = document.getElementById('edit-email').value.trim();
+      // If any angle photo was uploaded, mark face as present
+      const newAngles = ['front','left','right','up'].filter(
+        a => document.getElementById(`edit-file-${a}`).files[0]
+      );
+      if (newAngles.length > 0) {
+        s.has_face_local = true;
+        newAngles.forEach(a => { s[`photo_${a}`] = 'pending'; });
+      }
+      // If signature was uploaded, mark sig as present
+      if (document.getElementById('edit-sig-file').files[0]) {
+        s.has_sig   = true;
+        s.signature = 'pending';
+      }
+      STATE.students[idx] = s;
+      renderStudentsList();  // instant re-render
+    }
+
+    toast(`${name} updated ✓`, 'success');
+    closeModal('modal-edit-student');
+
+    // After 3 s the background thread should be done — do a quiet server
+    // refresh to pull real Cloudinary URLs and confirmed DB values.
+    setTimeout(async () => {
+      try {
+        const sRes = await fetch(`/api/local/students/${STATE.currentClass.class_code}`,
+          {headers: {'X-Instructor-Email': STATE.email}});
+        if (sRes.ok) { STATE.students = await sRes.json(); renderStudentsList(); }
+      } catch { /* silent — list already shows correct state */ }
+    }, 3000);
+
+  } catch {
+    toast('Network error.', 'error');
+  } finally {
+    btn.disabled = false; btn.textContent = 'Save Changes';
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// SIGNATURE-ONLY UPLOAD
+// ═══════════════════════════════════════════════════════════════════════
+function openSigOnly(studentId, studentName) {
+  document.getElementById('sig-only-student-id').value = studentId;
+  document.getElementById('sig-only-file').value       = '';
+  document.getElementById('sig-only-fname').style.display = 'none';
+  document.getElementById('sig-only-area').classList.remove('has-file');
+  document.getElementById('sig-only-preview').classList.add('hidden');
+
+  const initials = studentName.split(' ').map(w=>w[0]).join('').substring(0,2).toUpperCase();
+  document.getElementById('sig-only-student-info').innerHTML = `
+    <div style="width:30px;height:30px;border-radius:50%;background:var(--red);
+                display:flex;align-items:center;justify-content:center;
+                font-size:11px;font-weight:700;color:#fff;flex-shrink:0">
+      ${initials}
+    </div>
+    <div>
+      <div style="font-size:13px;font-weight:600;color:#E5E7EB">${studentName}</div>
+      <div style="font-size:11px;color:#666">${STATE.currentClass?.class_code||''}</div>
+    </div>`;
+
+  openModal('modal-sig-only');
+}
+
+function handleSigOnlyPreview() {
+  const f = document.getElementById('sig-only-file').files[0];
+  if (!f) return;
+  handleFileSelect('sig-only-file', 'sig-only-area', 'sig-only-fname');
+  const reader = new FileReader();
+  reader.onload = e => {
+    document.getElementById('sig-only-preview-img').src = e.target.result;
+    document.getElementById('sig-only-preview').classList.remove('hidden');
+  };
+  reader.readAsDataURL(f);
+}
+
+document.getElementById('btn-upload-sig-only').addEventListener('click', async () => {
+  const id  = document.getElementById('sig-only-student-id').value;
+  const sig = document.getElementById('sig-only-file').files[0];
+  if (!sig) { toast('Choose a signature image first.', 'error'); return; }
+
+  const fd = new FormData();
+  fd.append('signature', sig);
+
+  const btn = document.getElementById('btn-upload-sig-only');
+  btn.disabled = true; btn.textContent = 'Uploading…';
+
+  try {
+    const res  = await fetch(`/api/local/upload_signature/${id}`, {
+      method:  'POST',
+      headers: {'X-Instructor-Email': STATE.email},
+      body:    fd
+    });
+    const data = await res.json();
+    if (!res.ok) { toast(data.error || 'Upload failed.', 'error'); return; }
+
+    toast('Signature uploaded ✓', 'success');
+    closeModal('modal-sig-only');
+
+    // Refresh student list
+    const sRes = await fetch(`/api/local/students/${STATE.currentClass.class_code}`,
+      {headers: {'X-Instructor-Email': STATE.email}});
+    STATE.students = await sRes.json();
+    renderStudentsList();
+  } catch {
+    toast('Network error.', 'error');
+  } finally {
+    btn.disabled = false; btn.textContent = 'Upload Signature';
+  }
+});
+
+async function deleteStudent(studentId, studentName) {
+  // Confirm before deleting
+  const confirmed = await showDeleteConfirm(studentName);
+  if (!confirmed) return;
+
+  try {
+    const res  = await fetch(`/api/local/delete_student/${studentId}`, {
+      method:  'DELETE',
+      headers: {'X-Instructor-Email': STATE.email}
+    });
+    const data = await res.json();
+
+    if (!res.ok) {
+      toast(data.error || 'Delete failed.', 'error');
+      return;
+    }
+
+    toast(`${studentName} deleted`, 'success');
+
+    // Refresh student list
+    const sRes = await fetch(
+      `/api/local/students/${STATE.currentClass.class_code}`,
+      { headers: {'X-Instructor-Email': STATE.email} }
+    );
+    STATE.students = await sRes.json();
+    renderStudentsList();
+
+  } catch {
+    toast('Network error during delete.', 'error');
+  }
+}
+
+function showDeleteConfirm(name) {
+  return new Promise(resolve => {
+    // Reuse the existing customConfirm pattern with a simple overlay
+    const overlay = document.createElement('div');
+    overlay.style.cssText = `position:fixed;inset:0;background:rgba(0,0,0,.7);
+      z-index:2000;display:flex;align-items:center;justify-content:center;
+      backdrop-filter:blur(4px)`;
+    overlay.innerHTML = `
+      <div style="background:#1a1a1a;border:1px solid #2a2a2a;border-radius:16px;
+                  padding:28px 32px;width:340px;text-align:center">
+        <div style="width:44px;height:44px;background:rgba(211,47,47,.15);border-radius:50%;
+                    display:flex;align-items:center;justify-content:center;margin:0 auto 16px;
+                    border:1px solid rgba(211,47,47,.3)">
+          <svg width="18" height="18" fill="none" stroke="#D32F2F" stroke-width="2" viewBox="0 0 24 24">
+            <path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                  stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <p style="font-size:15px;font-weight:700;color:#fff;margin-bottom:8px">Delete Student</p>
+        <p style="font-size:13px;color:#777;margin-bottom:24px;line-height:1.5">
+          Remove <strong style="color:#ccc">${name}</strong> from this class?<br>
+          Their face, photo, and signature will also be deleted<br>from local disk and Cloudinary.
+        </p>
+        <div style="display:flex;gap:10px">
+          <button id="del-cancel"
+            style="flex:1;padding:10px;border-radius:8px;border:1px solid #333;
+                   background:transparent;color:#888;font-family:inherit;
+                   font-size:13px;cursor:pointer">
+            Cancel
+          </button>
+          <button id="del-confirm"
+            style="flex:1;padding:10px;border-radius:8px;border:none;
+                   background:#D32F2F;color:#fff;font-family:inherit;
+                   font-weight:700;font-size:13px;cursor:pointer">
+            Delete
+          </button>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+    overlay.querySelector('#del-cancel').onclick  = () => { overlay.remove(); resolve(false); };
+    overlay.querySelector('#del-confirm').onclick = () => { overlay.remove(); resolve(true);  };
+    overlay.onclick = e => { if (e.target === overlay) { overlay.remove(); resolve(false); } };
+  });
 }
 
 /* ── Side tabs ────────────────────────────────────────────────────────── */
@@ -1164,16 +2228,31 @@ document.getElementById('btn-submit-reg').addEventListener('click', async () => 
   const name = document.getElementById('reg-name').value.trim();
   if (!name) { toast('Full name is required.', 'error'); return; }
 
+  // Validate all 4 angles are uploaded
+  const angles = ['front', 'left', 'right', 'up'];
+  const angleLabels = { front: 'Front Face', left: 'Left Side', right: 'Right Side', up: 'Looking Up' };
+  for (const angle of angles) {
+    const f = document.getElementById(`reg-photo-${angle}`).files[0];
+    if (!f) {
+      toast(`Please upload the ${angleLabels[angle]} photo.`, 'error');
+      return;
+    }
+  }
+
   const fd = new FormData();
   fd.append('class_code', STATE.currentClass.class_code);
   fd.append('name',       name);
   fd.append('sr_code',    document.getElementById('reg-sr').value.trim());
   fd.append('email',      document.getElementById('reg-email').value.trim());
 
-  const photo = document.getElementById('reg-photo').files[0];
-  const sig   = document.getElementById('reg-sig').files[0];
-  if (photo) fd.append('photo',     photo);
-  if (sig)   fd.append('signature', sig);
+  // Append all 4 angle photos
+  for (const angle of angles) {
+    const f = document.getElementById(`reg-photo-${angle}`).files[0];
+    if (f) fd.append(`photo_${angle}`, f);
+  }
+
+  const sig = document.getElementById('reg-sig').files[0];
+  if (sig) fd.append('signature', sig);
 
   const btn = document.getElementById('btn-submit-reg');
   btn.disabled = true; btn.textContent = 'Registering…';
@@ -1201,14 +2280,18 @@ document.getElementById('btn-submit-reg').addEventListener('click', async () => 
     ['reg-name','reg-sr','reg-email'].forEach(id => {
       document.getElementById(id).value = '';
     });
-    document.getElementById('reg-photo').value = '';
-    document.getElementById('reg-sig').value   = '';
-    ['photo-upload-area','sig-upload-area'].forEach(id => {
-      document.getElementById(id).classList.remove('has-file');
+    // Clear all 4 angle photo inputs
+    angles.forEach(angle => {
+      document.getElementById(`reg-photo-${angle}`).value = '';
+      document.getElementById(`photo-${angle}-area`).classList.remove('has-file');
+      const fn = document.getElementById(`photo-${angle}-fname`);
+      if (fn) { fn.textContent = ''; fn.style.display = 'none'; }
     });
-    ['photo-filename','sig-filename'].forEach(id => {
-      document.getElementById(id).style.display = 'none';
-    });
+    document.getElementById('reg-sig').value = '';
+    const sigArea = document.getElementById('sig-upload-area');
+    if (sigArea) sigArea.classList.remove('has-file');
+    const sigFn = document.getElementById('sig-filename');
+    if (sigFn) { sigFn.textContent = ''; sigFn.style.display = 'none'; }
   } catch {
     toast('Network error during registration.', 'error');
   } finally {
@@ -1220,44 +2303,56 @@ document.getElementById('btn-submit-reg').addEventListener('click', async () => 
    SAVE ATTENDANCE — shows summary modal first
    ═══════════════════════════════════════════════════════════════════════ */
 document.getElementById('btn-save-attendance').addEventListener('click', async () => {
-  // Fetch final scan log
+  // Fetch final scan log — now returns {name: {ts, status}} 
   let scanLog = {};
   try {
     const r = await fetch('/api/local/scan_log');
     scanLog = await r.json();
   } catch {}
 
-  const presentNames = new Set(
-    Object.keys(scanLog).map(n => n.replace(/_/g,' ').toLowerCase())
-  );
+  // Build a lookup: normalised name → "Present" | "Late"
+  const detectedMap = {};
+  for (const [name, val] of Object.entries(scanLog)) {
+    const key = name.replace(/_/g, ' ').toLowerCase();
+    // Support both old format (plain timestamp) and new format ({ts, status})
+    detectedMap[key] = (val && typeof val === 'object') ? (val.status || 'Present') : 'Present';
+  }
 
-  // Build records: enrolled students → Present or Absent
+  // Build records: enrolled students → Present, Late, or Absent
   const enrolled = STATE.students.filter(s => s.status === 'Enrolled');
   const records  = enrolled.map(s => ({
     name:    s.name,
     sr_code: s.sr_code || '',
-    status:  presentNames.has((s.name||'').toLowerCase()) ? 'Present' : 'Absent',
+    status:  detectedMap[(s.name || '').toLowerCase()] || 'Absent',
   }));
 
   const presentCnt = records.filter(r => r.status === 'Present').length;
+  const lateCnt    = records.filter(r => r.status === 'Late').length;
   const absentCnt  = records.filter(r => r.status === 'Absent').length;
 
   // Populate summary modal
   document.getElementById('sum-present').textContent = presentCnt;
-  document.getElementById('sum-late').textContent    = 0;
+  document.getElementById('sum-late').textContent    = lateCnt;
   document.getElementById('sum-absent').textContent  = absentCnt;
-  document.getElementById('sum-detail').innerHTML    = records.map(r => `
+  document.getElementById('sum-detail').innerHTML    = records.map(r => {
+    const color = r.status === 'Present' ? '#22C55E'
+                : r.status === 'Late'    ? '#F59E0B'
+                : '#E5E7EB';
+    const textColor = r.status === 'Present' ? 'var(--green)'
+                    : r.status === 'Late'    ? '#D97706'
+                    : 'var(--muted)';
+    return `
     <div style="display:flex;align-items:center;gap:8px;padding:5px 0;
          border-bottom:1px solid #F3F4F6;font-size:13px">
       <div style="width:8px;height:8px;border-radius:50%;flex-shrink:0;
-           background:${r.status==='Present' ? '#22C55E' : '#E5E7EB'}"></div>
+           background:${color}"></div>
       <span style="flex:1">${r.name}</span>
-      <span style="font-weight:600;color:${r.status==='Present'
-        ? 'var(--green)' : 'var(--muted)'};font-size:12px">${r.status}</span>
-    </div>`).join('');
+      <span style="font-weight:600;color:${textColor};font-size:12px">${r.status}</span>
+    </div>`;
+  }).join('');
 
   // Store records for confirm button
-  window._pendingSave = { records, presentCnt, absentCnt };
+  window._pendingSave = { records, presentCnt, lateCnt, absentCnt };
   openModal('modal-summary');
 });
 

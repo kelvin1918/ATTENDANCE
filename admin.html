@@ -387,6 +387,14 @@
         /* Scrollable table body */
         .table-scroll { max-height: 420px; overflow-y: auto; }
 
+        .forgot-link {
+            background: none; border: none; color: #9CA3AF;
+            font-size: 0.78rem; font-weight: 500; cursor: pointer;
+            text-decoration: underline; margin-top: 8px; padding: 0;
+            transition: color 0.2s;
+        }
+        .forgot-link:hover { color: var(--red); }
+
         /* Global hidden utility — used by loading-overlay and login-overlay */
         .hidden { display: none !important; }
     </style>
@@ -436,16 +444,64 @@
 
 <!-- ── LOGIN OVERLAY ────────────────────────────────────────────────────── -->
 <div id="login-overlay">
-    <div class="login-card">
-        <div class="login-logo">
-            <i data-lucide="shield-check"></i>
-        </div>
+
+    <!-- ── STEP 1: Credentials ── -->
+    <div class="login-card" id="adm-step-credentials">
+        <div class="login-logo"><i data-lucide="shield-check"></i></div>
         <h2>Admin Portal</h2>
         <p>Secure access — enter your administrator credentials.</p>
-        <input type="email" id="adm-email" placeholder="Username" autocomplete="username">
-        <input type="password" id="adm-pass" placeholder="Password" autocomplete="current-password">
-        <button class="login-btn" onclick="adminLogin()">Sign In</button>
+        <input type="text"     id="adm-username" placeholder="Username" autocomplete="username">
+        <input type="password" id="adm-pass"     placeholder="Password" autocomplete="current-password">
+        <div id="adm-login-err" style="color:#D32F2F;font-size:0.8rem;text-align:center;min-height:18px;"></div>
+        <button class="login-btn" id="adm-login-btn" onclick="adminLogin()">Sign In</button>
+        <button class="forgot-link" onclick="showAdmStep('forgot')">Forgot password?</button>
     </div>
+
+    <!-- ── STEP 2: Enter email (forgot) ── -->
+    <div class="login-card hidden" id="adm-step-forgot">
+        <div class="login-logo" style="background:#FEF2F2;color:#D32F2F;">
+            <i data-lucide="key-round"></i>
+        </div>
+        <h2 style="font-size:1.1rem;">FORGOT?</h2>
+        <p style="font-size:0.9rem;font-weight:700;letter-spacing:0.02em;">RESET PASSWORD</p>
+        <p style="font-size:0.8rem;color:#6B7280;margin-top:4px;">
+            An OTP will be sent to the admin recovery email.
+        </p>
+        <div id="adm-forgot-err" style="color:#D32F2F;font-size:0.8rem;text-align:center;min-height:18px;"></div>
+        <button class="login-btn" id="adm-send-otp-btn" onclick="adminSendOtp()">Send OTP</button>
+        <button class="forgot-link" onclick="showAdmStep('credentials')">← Back to Login</button>
+    </div>
+
+    <!-- ── STEP 3: Enter OTP ── -->
+    <div class="login-card hidden" id="adm-step-otp">
+        <div class="login-logo" style="background:#EFF6FF;color:#2563EB;">
+            <i data-lucide="mail-check"></i>
+        </div>
+        <h2 style="font-size:1rem;">CHECK YOUR EMAIL</h2>
+        <p id="adm-otp-hint" style="font-size:0.8rem;color:#6B7280;margin-bottom:8px;">
+            Enter the 5-digit code sent to your recovery email.
+        </p>
+        <input type="text" id="adm-otp-input" placeholder="Enter OTP" maxlength="5"
+               style="text-align:center;letter-spacing:0.3em;font-size:1.2rem;font-weight:700;"
+               autocomplete="one-time-code">
+        <div id="adm-otp-err" style="color:#D32F2F;font-size:0.8rem;text-align:center;min-height:18px;"></div>
+        <button class="login-btn" id="adm-verify-otp-btn" onclick="adminVerifyOtp()">Verify OTP</button>
+        <button class="forgot-link" onclick="adminResendOtp()" id="adm-resend-btn">Resend OTP</button>
+    </div>
+
+    <!-- ── STEP 4: New Password ── -->
+    <div class="login-card hidden" id="adm-step-newpass">
+        <div class="login-logo" style="background:#F0FDF4;color:#16A34A;">
+            <i data-lucide="lock-keyhole"></i>
+        </div>
+        <h2 style="font-size:1rem;">SET NEW PASSWORD</h2>
+        <p style="font-size:0.8rem;color:#6B7280;margin-bottom:8px;">Choose a strong password for the admin account.</p>
+        <input type="password" id="adm-newpass1" placeholder="New Password" autocomplete="new-password">
+        <input type="password" id="adm-newpass2" placeholder="Confirm Password" autocomplete="new-password">
+        <div id="adm-newpass-err" style="color:#D32F2F;font-size:0.8rem;text-align:center;min-height:18px;"></div>
+        <button class="login-btn" id="adm-save-pass-btn" onclick="adminSaveNewPassword()">Save Password</button>
+    </div>
+
 </div>
 
 <!-- ── MAIN DASHBOARD ───────────────────────────────────────────────────── -->
@@ -478,6 +534,10 @@
                 <i data-lucide="camera"></i>
                 Camera Rooms
             </button>
+            <button class="nav-item" onclick="showPage('activity', this)">
+                <i data-lucide="activity"></i>
+                Activity Monitor
+            </button>
         </div>
 
         <div class="sidebar-footer">
@@ -488,6 +548,15 @@
                     <div class="user-role">System Admin</div>
                 </div>
             </div>
+            <button id="recovery-email-btn"
+                    style="width:100%;background:none;border:1px solid #E5E7EB;border-radius:8px;
+                           padding:8px 12px;cursor:pointer;font-size:0.75rem;font-weight:600;
+                           color:#6B7280;margin-bottom:8px;display:flex;align-items:center;gap:8px;
+                           transition:all 0.2s;"
+                    onmouseover="this.style.borderColor='var(--red)';this.style.color='var(--red)'"
+                    onmouseout="this.style.borderColor='#E5E7EB';this.style.color='#6B7280'">
+                <i data-lucide="mail" style="width:14px;height:14px;"></i> Recovery Email
+            </button>
             <button class="btn-signout" onclick="handleSignOut()">
                 <i data-lucide="log-out"></i> Sign Out
             </button>
@@ -616,6 +685,70 @@
             </div>
         </div>
 
+        <!-- ── PAGE: ACTIVITY MONITOR ──────────────────────────── -->
+        <div id="page-activity" class="page">
+            <div class="page-header">
+                <h1 class="page-title">Activity Monitor</h1>
+                <p class="page-sub">Instructor Attendance Sessions & Statistics</p>
+            </div>
+
+            <!-- Summary cards -->
+            <div class="stats-grid" id="activity-stats" style="margin-bottom:24px;"></div>
+
+            <!-- Instructor table -->
+            <div class="data-card">
+                <div class="card-header">
+                    <span class="card-title">All Instructors</span>
+                    <span id="activity-refresh-label"
+                          style="font-size:0.72rem;color:var(--muted);font-weight:600;"></span>
+                </div>
+                <div class="card-body" style="padding:0;">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Instructor</th>
+                                <th>Status</th>
+                                <th>Classes</th>
+                                <th>Students</th>
+                                <th>Sessions</th>
+                                <th>Last Active</th>
+                                <th style="text-align:right;">Details</th>
+                            </tr>
+                        </thead>
+                        <tbody id="activity-list"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Drill-down panel (hidden until a row is clicked) -->
+            <div id="activity-detail" class="data-card hidden" style="margin-top:20px;">
+                <div class="card-header">
+                    <span class="card-title" id="activity-detail-title">Recent Sessions</span>
+                    <button onclick="closeActivityDetail()"
+                            style="background:none;border:none;cursor:pointer;color:var(--muted);font-size:0.8rem;">
+                        ✕ Close
+                    </button>
+                </div>
+                <div class="card-body" style="padding:0;">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Subject</th>
+                                <th>Section</th>
+                                <th>Date</th>
+                                <th>Time</th>
+                                <th>Total</th>
+                                <th>Present</th>
+                                <th>Late</th>
+                                <th>Absent</th>
+                            </tr>
+                        </thead>
+                        <tbody id="activity-detail-list"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
     </div><!-- /page-area -->
 </div><!-- /main-content -->
 
@@ -689,6 +822,7 @@
 
         if (pageId === 'instructors') renderInstructorPage();
         if (pageId === 'rooms')       renderRooms();
+        if (pageId === 'activity')    renderActivityPage();
         lucide.createIcons();
     }
 
@@ -727,41 +861,186 @@
         });
     }
 
-    // ── LOGIN ────────────────────────────────────────────────────────────────
-    function adminLogin() {
-        const email = document.getElementById('adm-email').value.trim();
-        const pass  = document.getElementById('adm-pass').value;
-        if (email === "admin" && pass === "admin123") {
-            // 1. Hide login
-            const loginEl = document.getElementById('login-overlay');
-            loginEl.classList.add('hidden');
-            loginEl.style.display = 'none';
+    // ── STEP NAVIGATION ──────────────────────────────────────────────────────
+    function showAdmStep(step) {
+        ['credentials','forgot','otp','newpass'].forEach(s => {
+            document.getElementById('adm-step-' + s).classList.add('hidden');
+        });
+        document.getElementById('adm-step-' + step).classList.remove('hidden');
+        // Clear errors when switching
+        ['adm-login-err','adm-forgot-err','adm-otp-err','adm-newpass-err'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.textContent = '';
+        });
+    }
 
-            // 2. Show loading spinner
-            const loadEl = document.getElementById('loading-overlay');
-            loadEl.classList.remove('hidden');
-            loadEl.style.display = 'flex';
+    // ── VERIFY SESSION ON LOAD ────────────────────────────────────────────────
+    (async () => {
+        try {
+            const res = await _admFetch('/api/admin/verify_session');
+            if (res.ok) {
+                _showAdminDashboard();
+                return;
+            }
+        } catch {}
+        // Clear any stale token
+        sessionStorage.removeItem('admin_token');
+        showAdmStep('credentials');
+        lucide.createIcons();
+    })();
 
-            // 3. After brief delay, show dashboard
-            setTimeout(() => {
-                loadEl.classList.add('hidden');
-                loadEl.style.display = 'none';
+    function _showAdminDashboard() {
+        document.getElementById('login-overlay').classList.add('hidden');
+        document.getElementById('login-overlay').style.display = 'none';
 
-                const mainEl = document.getElementById('main-content');
-                mainEl.classList.remove('hidden');
-                mainEl.style.display = 'flex';
+        // Push a history state so the back button hits popstate instead of going to portal
+        history.pushState({ adminLoggedIn: true }, '', window.location.href);
 
-                lucide.createIcons();
-                renderAdmin();
-                renderRooms();
-            }, 1200);
-        } else {
-            showToast("Invalid credentials. Please try again.");
+        const loadEl = document.getElementById('loading-overlay');
+        loadEl.classList.remove('hidden');
+        loadEl.style.display = 'flex';
+
+        setTimeout(() => {
+            loadEl.classList.add('hidden');
+            loadEl.style.display = 'none';
+            const mainEl = document.getElementById('main-content');
+            mainEl.classList.remove('hidden');
+            mainEl.style.display = 'flex';
+            lucide.createIcons();
+            renderAdmin();
+            renderRooms();
+        }, 800);
+    }
+
+    // Back button intercept — if admin is logged in, push another state instead of navigating away
+    window.addEventListener('popstate', function(e) {
+        const mainVisible = !document.getElementById('main-content').classList.contains('hidden');
+        if (mainVisible) {
+            // Push state again so back button never leaves the dashboard
+            history.pushState({ adminLoggedIn: true }, '', window.location.href);
         }
+    });
+
+    // ── TOKEN HELPER — stored in sessionStorage, sent as header ─────────────
+    function _admToken() { return sessionStorage.getItem('admin_token') || ''; }
+    function _admHdr(extra) {
+        return Object.assign({ 'Content-Type': 'application/json',
+                                'X-Admin-Token': _admToken() }, extra || {});
+    }
+    function _admFetch(url, opts) {
+        opts = opts || {};
+        opts.credentials = 'include';
+        opts.headers = _admHdr(opts.headers);
+        return fetch(url, opts);
+    }
+
+    // ── LOGIN ─────────────────────────────────────────────────────────────────
+    async function adminLogin() {
+        const username = document.getElementById('adm-username').value.trim();
+        const pass     = document.getElementById('adm-pass').value;
+        const errEl    = document.getElementById('adm-login-err');
+        const btn      = document.getElementById('adm-login-btn');
+        if (!username || !pass) { errEl.textContent = 'Enter username and password.'; return; }
+
+        btn.disabled = true; btn.textContent = 'Signing in…';
+        try {
+            const res  = await fetch('/api/admin/login', {
+                method: 'POST',
+                credentials: 'include',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username, password: pass })
+            });
+            const data = await res.json();
+            if (!res.ok) { errEl.textContent = data.error || 'Invalid credentials.'; return; }
+            // Store token in sessionStorage for reliable header-based auth
+            if (data.token) sessionStorage.setItem('admin_token', data.token);
+            _showAdminDashboard();
+        } catch { errEl.textContent = 'Network error. Try again.'; }
+        finally   { btn.disabled = false; btn.textContent = 'Sign In'; }
     }
     document.getElementById('adm-pass').addEventListener('keypress', e => {
         if (e.key === 'Enter') adminLogin();
     });
+
+    // ── SIGN OUT ──────────────────────────────────────────────────────────────
+    async function handleSignOut() {
+        openModal("Sign Out", "Are you sure you want to end your session?", async () => {
+            await _admFetch('/api/admin/logout', { method: 'POST' });
+            sessionStorage.removeItem('admin_token');
+            location.reload();
+        });
+    }
+
+    // ── FORGOT PASSWORD: SEND OTP ─────────────────────────────────────────────
+    async function adminSendOtp() {
+        const errEl = document.getElementById('adm-forgot-err');
+        const btn   = document.getElementById('adm-send-otp-btn');
+        btn.disabled = true; btn.textContent = 'Sending…';
+        try {
+            const res  = await _admFetch('/api/admin/send_otp', { method: 'POST' });
+            const data = await res.json();
+            if (!res.ok) { errEl.textContent = data.error || 'Failed to send OTP.'; return; }
+            if (data.warn) { errEl.style.color = '#D97706'; errEl.textContent = data.warn; }
+            const hint = document.getElementById('adm-otp-hint');
+            if (data.masked_email) hint.textContent = `Code sent to ${data.masked_email}`;
+            showAdmStep('otp');
+        } catch { errEl.textContent = 'Network error.'; }
+        finally   { btn.disabled = false; btn.textContent = 'Send OTP'; }
+    }
+
+    async function adminResendOtp() {
+        document.getElementById('adm-resend-btn').textContent = 'Sending…';
+        await adminSendOtp();
+        document.getElementById('adm-resend-btn').textContent = 'Resend OTP';
+    }
+
+    // ── FORGOT PASSWORD: VERIFY OTP ───────────────────────────────────────────
+    async function adminVerifyOtp() {
+        const otp   = document.getElementById('adm-otp-input').value.trim();
+        const errEl = document.getElementById('adm-otp-err');
+        const btn   = document.getElementById('adm-verify-otp-btn');
+        if (!otp) { errEl.textContent = 'Enter the OTP.'; return; }
+
+        btn.disabled = true; btn.textContent = 'Verifying…';
+        try {
+            const res  = await _admFetch('/api/admin/verify_otp', {
+                method: 'POST',
+                headers: {},
+                body: JSON.stringify({ otp })
+            });
+            const data = await res.json();
+            if (!res.ok) { errEl.textContent = data.error || 'Verification failed.'; return; }
+            showAdmStep('newpass');
+        } catch { errEl.textContent = 'Network error.'; }
+        finally   { btn.disabled = false; btn.textContent = 'Verify OTP'; }
+    }
+    document.getElementById('adm-otp-input').addEventListener('keypress', e => {
+        if (e.key === 'Enter') adminVerifyOtp();
+    });
+
+    // ── FORGOT PASSWORD: SAVE NEW PASSWORD ────────────────────────────────────
+    async function adminSaveNewPassword() {
+        const p1    = document.getElementById('adm-newpass1').value;
+        const p2    = document.getElementById('adm-newpass2').value;
+        const errEl = document.getElementById('adm-newpass-err');
+        const btn   = document.getElementById('adm-save-pass-btn');
+        if (p1.length < 6)  { errEl.textContent = 'Password must be at least 6 characters.'; return; }
+        if (p1 !== p2)      { errEl.textContent = 'Passwords do not match.'; return; }
+
+        btn.disabled = true; btn.textContent = 'Saving…';
+        try {
+            const res  = await _admFetch('/api/admin/reset_password', {
+                method: 'POST',
+                headers: {},
+                body: JSON.stringify({ password: p1 })
+            });
+            const data = await res.json();
+            if (!res.ok) { errEl.textContent = data.error || 'Failed to save.'; return; }
+            showToast('Password updated successfully.');
+            showAdmStep('credentials');
+        } catch { errEl.textContent = 'Network error.'; }
+        finally   { btn.disabled = false; btn.textContent = 'Save Password'; }
+    }
 
     // ── RENDER ADMIN (loads all data for dashboard overview) ─────────────────
     async function renderAdmin() {
@@ -988,6 +1267,231 @@
             }
         );
     }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // ACTIVITY MONITOR
+    // ══════════════════════════════════════════════════════════════════════════
+
+    async function renderActivityPage() {
+        const tbody = document.getElementById('activity-list');
+        const stats = document.getElementById('activity-stats');
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:24px;color:#9CA3AF;">Loading…</td></tr>';
+
+        try {
+            const res  = await _admFetch('/api/admin/activity');
+            if (!res.ok) { tbody.innerHTML = '<tr><td colspan="7">Unauthorized</td></tr>'; return; }
+            const data = await res.json();
+
+            // ── Summary cards ──
+            const totalInstructors = data.length;
+            const activeToday = data.filter(d => d.last_active === new Date().toISOString().split('T')[0]).length;
+            const totalSessions = data.reduce((s, d) => s + d.total_sessions, 0);
+
+            stats.innerHTML = `
+                <div class="stat-card blue">
+                    <div class="stat-label">Total Instructors</div>
+                    <div class="stat-value">${totalInstructors}</div>
+                    <div class="stat-icon blue"><i data-lucide="users"></i></div>
+                </div>
+                <div class="stat-card green">
+                    <div class="stat-label">Total Sessions</div>
+                    <div class="stat-value">${totalSessions}</div>
+                    <div class="stat-icon green"><i data-lucide="file-text"></i></div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Active Today</div>
+                    <div class="stat-value">${activeToday}</div>
+                    <div class="stat-icon" style="background:#FEF3C7;color:#D97706;"><i data-lucide="zap"></i></div>
+                </div>`;
+            lucide.createIcons();
+
+            // ── Instructor rows ──
+            if (!data.length) {
+                tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:24px;color:#9CA3AF;">No instructors found.</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = data.map(d => {
+                const statusColor = d.status === 'approved' ? 'var(--green)' : '#D97706';
+                const lastActive  = d.last_active
+                    ? new Date(d.last_active).toLocaleDateString('en-US', {month:'short',day:'numeric',year:'numeric'})
+                    : '<span style="color:#D1D5DB;">No sessions yet</span>';
+                return `<tr>
+                    <td>
+                        <div style="font-weight:600;font-size:0.85rem;">${d.name}</div>
+                        <div style="font-size:0.72rem;color:var(--muted);">${d.email}</div>
+                    </td>
+                    <td><span style="background:${d.status==='approved'?'#F0FDF4':'#FFFBEB'};
+                                    color:${statusColor};padding:2px 10px;border-radius:99px;
+                                    font-size:0.72rem;font-weight:700;text-transform:uppercase;">
+                        ${d.status}</span></td>
+                    <td style="font-weight:600;">${d.total_classes}</td>
+                    <td style="font-weight:600;">${d.total_students}</td>
+                    <td style="font-weight:600;">${d.total_sessions}</td>
+                    <td style="font-size:0.82rem;">${lastActive}</td>
+                    <td style="text-align:right;">
+                        <button onclick="openActivityDetail(${d.id}, '${d.name.replace(/'/g,"\'")}')"
+                                style="background:var(--red-light);color:var(--red);border:none;
+                                       padding:4px 12px;border-radius:6px;font-size:0.75rem;
+                                       font-weight:700;cursor:pointer;">
+                            View Sessions
+                        </button>
+                    </td>
+                </tr>`;
+            }).join('');
+
+            document.getElementById('activity-refresh-label').textContent =
+                'Updated ' + new Date().toLocaleTimeString();
+
+        } catch (e) { tbody.innerHTML = '<tr><td colspan="7" style="color:#D32F2F;">Failed to load.</td></tr>'; }
+    }
+
+    async function openActivityDetail(instructorId, name) {
+        const detail = document.getElementById('activity-detail');
+        const tbody  = document.getElementById('activity-detail-list');
+        document.getElementById('activity-detail-title').textContent = `${name} — Recent Sessions`;
+        detail.classList.remove('hidden');
+        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:16px;color:#9CA3AF;">Loading…</td></tr>';
+        detail.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+        try {
+            const res  = await _admFetch(`/api/admin/activity/${instructorId}`);
+            const rows = await res.json();
+            if (!rows.length) {
+                tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:16px;color:#9CA3AF;">No sessions recorded yet.</td></tr>';
+                return;
+            }
+            tbody.innerHTML = rows.map(r => `
+                <tr>
+                    <td style="font-weight:600;font-size:0.83rem;">${r.subject || '—'}</td>
+                    <td style="font-size:0.82rem;">${r.section || '—'}</td>
+                    <td style="font-size:0.82rem;">${r.date_fmt}</td>
+                    <td style="font-size:0.82rem;">${r.session_time}</td>
+                    <td style="font-weight:600;">${r.total}</td>
+                    <td style="color:var(--green);font-weight:600;">${r.present}</td>
+                    <td style="color:#D97706;font-weight:600;">${r.late}</td>
+                    <td style="color:var(--red);font-weight:600;">${r.absent}</td>
+                </tr>`).join('');
+        } catch { tbody.innerHTML = '<tr><td colspan="8" style="color:#D32F2F;">Failed to load.</td></tr>'; }
+    }
+
+    function closeActivityDetail() {
+        document.getElementById('activity-detail').classList.add('hidden');
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // RECOVERY EMAIL — wired via addEventListener
+    // ══════════════════════════════════════════════════════════════════════════
+    (function() {
+        function openRecoveryModal() {
+            var modal = document.getElementById('rec-modal');
+            var msg   = document.getElementById('rec-msg');
+            var input = document.getElementById('rec-input');
+            msg.textContent = '';
+            input.value = '';
+            modal.style.display = 'flex';
+            _admFetch('/api/admin/get_recovery_email')
+                .then(function(r){ return r.ok ? r.json() : null; })
+                .then(function(d){ if(d && d.email) input.value = d.email; })
+                .catch(function(){});
+        }
+
+        function closeRecoveryModal() {
+            document.getElementById('rec-modal').style.display = 'none';
+        }
+
+        async function saveRecoveryEmail() {
+            var email = document.getElementById('rec-input').value.trim();
+            var msg   = document.getElementById('rec-msg');
+            var btn   = document.getElementById('rec-save');
+            if (!email || !email.includes('@')) {
+                msg.style.color = '#D32F2F';
+                msg.textContent = 'Enter a valid email address.';
+                return;
+            }
+            btn.disabled = true; btn.textContent = 'Saving…';
+            try {
+                var res  = await _admFetch('/api/admin/set_recovery_email', {
+                    method: 'POST', body: JSON.stringify({ email: email })
+                });
+                var data = await res.json();
+                if (!res.ok) {
+                    msg.style.color = '#D32F2F';
+                    msg.textContent = data.error || 'Failed to save.';
+                } else {
+                    msg.style.color = '#16A34A';
+                    msg.textContent = '✓ Recovery email saved!';
+                    setTimeout(closeRecoveryModal, 1200);
+                }
+            } catch {
+                msg.style.color = '#D32F2F';
+                msg.textContent = 'Network error.';
+            } finally { btn.disabled = false; btn.textContent = 'Save'; }
+        }
+
+        // Wire button after DOM is ready
+        window.addEventListener('DOMContentLoaded', function() {
+            var openBtn = document.getElementById('recovery-email-btn');
+            var modal   = document.getElementById('rec-modal');
+            if (openBtn) openBtn.addEventListener('click', openRecoveryModal);
+            document.getElementById('rec-cancel').addEventListener('click', closeRecoveryModal);
+            document.getElementById('rec-save').addEventListener('click', saveRecoveryEmail);
+            document.getElementById('rec-input').addEventListener('keypress', function(e){
+                if (e.key === 'Enter') saveRecoveryEmail();
+            });
+            modal.addEventListener('click', function(e){ if(e.target===modal) closeRecoveryModal(); });
+        });
+    })();
+
 </script>
+
+<!-- ── RECOVERY EMAIL MODAL ──────────────────────────────────────────────── -->
+<div id="rec-modal"
+     style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);
+            z-index:9000;align-items:center;justify-content:center;">
+    <div style="background:#fff;border-radius:16px;padding:32px 28px;
+                width:400px;max-width:92vw;
+                box-shadow:0 24px 64px rgba(0,0,0,0.25);">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;">
+            <div style="width:36px;height:36px;background:#FEF2F2;border-radius:10px;
+                        display:flex;align-items:center;justify-content:center;">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
+                     stroke="#D32F2F" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="2" y="4" width="20" height="16" rx="2"/>
+                    <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/>
+                </svg>
+            </div>
+            <div>
+                <div style="font-size:0.95rem;font-weight:800;color:#111827;">Recovery Email</div>
+                <div style="font-size:0.75rem;color:#6B7280;">For admin forgot-password OTP</div>
+            </div>
+        </div>
+        <p style="font-size:0.8rem;color:#6B7280;margin-bottom:16px;line-height:1.5;">
+            When you click "Forgot Password" on the admin login, the OTP code
+            will be sent to this email address.
+        </p>
+        <input id="rec-input" type="email"
+               placeholder="e.g. kelvinlloydafrica@gmail.com"
+               style="width:100%;border:1.5px solid #E5E7EB;border-radius:10px;
+                      padding:11px 14px;font-size:0.85rem;font-weight:500;
+                      outline:none;box-sizing:border-box;margin-bottom:6px;"
+               onfocus="this.style.borderColor='#D32F2F'"
+               onblur="this.style.borderColor='#E5E7EB'">
+        <div id="rec-msg" style="font-size:0.78rem;font-weight:600;
+                                  min-height:20px;margin-bottom:14px;
+                                  text-align:center;"></div>
+        <div style="display:flex;gap:10px;justify-content:flex-end;">
+            <button id="rec-cancel"
+                    style="background:#F3F4F6;border:none;border-radius:8px;
+                           padding:9px 22px;font-size:0.82rem;font-weight:600;
+                           cursor:pointer;color:#374151;">Cancel</button>
+            <button id="rec-save"
+                    style="background:#D32F2F;border:none;border-radius:8px;
+                           padding:9px 22px;font-size:0.82rem;font-weight:700;
+                           cursor:pointer;color:#fff;">Save</button>
+        </div>
+    </div>
+</div>
+
 </body>
 </html>

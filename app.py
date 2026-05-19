@@ -17,14 +17,23 @@ Then open:
 import os
 import shutil
 import smtplib
+import secrets
+import random
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from datetime import datetime
 from flask import (
     Flask, request,
-    jsonify, send_file, send_from_directory, Response, abort
+    jsonify, send_file, send_from_directory, Response, abort, make_response
 )
 from werkzeug.utils import secure_filename
+
+# Load .env for local development (Render sets env vars via dashboard)
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
 
 import database as db
 from pdf_generator import generate_attendance_pdf
@@ -81,15 +90,24 @@ def allowed_file(filename):
 
 def get_current_instructor_id(req):
     """
-    Reads instructor email from the Authorization header sent by script.js
-    and returns their instructor id from the database.
-    Returns None if not found.
+    Authenticates the request using the session token cookie.
+    Falls back to X-Instructor-Email header for backward compatibility.
+    Returns instructor id or None if not authenticated.
     """
+    # Primary: secure session token from HttpOnly cookie
+    token = req.cookies.get("session_token", "")
+    if token:
+        instructor = db.verify_session_token(token)
+        if instructor:
+            return instructor["id"]
+
+    # Fallback: email header (kept for API calls that don't send cookies)
     email = req.headers.get("X-Instructor-Email", "")
-    if not email:
-        return None
-    instructor = db.get_instructor_by_email(email)
-    return instructor["id"] if instructor else None
+    if email:
+        instructor = db.get_instructor_by_email(email)
+        return instructor["id"] if instructor else None
+
+    return None
 
 
 
@@ -97,6 +115,7 @@ def get_current_instructor_id(req):
 # ── INIT ──────────────────────────────────────────────────────────────────────
 
 db.init_db()
+db.seed_admin_if_missing()
 
 
 # ════════════════════════════════════════════════════════════════════════════════
@@ -110,7 +129,16 @@ def portal():
 
 @app.route("/home")
 def index():
-    return send_file("index.html")
+    # Server-side session guard — redirect to login if no valid token
+    token = request.cookies.get("session_token", "")
+    if not token or not db.verify_session_token(token):
+        from flask import redirect
+        return redirect("/login")
+    resp = make_response(send_file("index.html"))
+    # Prevent browser from caching the dashboard
+    resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
+    resp.headers["Pragma"]        = "no-cache"
+    return resp
 
 
 @app.route("/favicon.ico")
@@ -647,17 +675,39 @@ def api_download_pdf(class_code, date):
 
 
 
-    filepath = generate_attendance_pdf(
-        class_id     = class_code,
-        subject      = cls["subject"],
-        section      = cls["section"],
-        room         = room,
-        date         = date,
-        time_str     = time_str,
-        faculty_name = faculty_name,
-        records      = attended,
-        session_time = session_time or "",
-    )
+    # ── Pre-fetch all Cloudinary signatures concurrently ────────────────────
+    # This avoids sequential 12s timeouts for 30+ students — all fetches run
+    # in parallel threads so total wait is ~max(individual_fetch) not sum.
+    import threading as _th
+    from pdf_generator import _fetch_image_bytes
+    _fetch_image_bytes._cache.clear()   # fresh cache per PDF request
+
+    def _warm(url):
+        if url and (url.startswith("http://") or url.startswith("https://")):
+            _fetch_image_bytes(url)
+
+    sig_urls = list({rec.get("sig_path", "") for rec in attended})
+    warmers  = [_th.Thread(target=_warm, args=(u,), daemon=True) for u in sig_urls if u]
+    for w in warmers: w.start()
+    for w in warmers: w.join(timeout=15)   # wait up to 15s for all prefetches
+
+    # ── Generate PDF ─────────────────────────────────────────────────────────
+    try:
+        filepath = generate_attendance_pdf(
+            class_id     = class_code,
+            subject      = cls["subject"],
+            section      = cls["section"],
+            room         = room,
+            date         = date,
+            time_str     = time_str,
+            faculty_name = faculty_name,
+            records      = attended,
+            session_time = session_time or "",
+        )
+    except Exception as pdf_err:
+        print(f"[PDF] Generation error: {pdf_err}")
+        import traceback; traceback.print_exc()
+        return jsonify({"error": f"PDF generation failed: {pdf_err}"}), 500
 
     return send_file(
         filepath,
@@ -720,7 +770,27 @@ def api_get_sessions_by_class(class_code):
 def api_get_attendance(class_code, date):
     session_time = request.args.get("session_time")
     rows = db.get_attendance_session(class_code, date, session_time)
-    return jsonify([dict(r) for r in rows])
+    records = [dict(r) for r in rows]
+
+    # ── Enrich with sig_path so the web viewer can render e-signature images ──
+    students_map = {}
+    for s in db.get_students(class_code):
+        sr_key = (s["sr_code"] or "").strip()
+        if sr_key:
+            students_map[sr_key] = s.get("signature", "") or ""
+        name_key = (s["name"] or "").strip().lower()
+        if name_key not in students_map:
+            students_map[name_key] = s.get("signature", "") or ""
+
+    for rec in records:
+        sr  = (rec.get("sr_code") or "").strip()
+        sig = students_map.get(sr, "") if sr else ""
+        if not sig:
+            nk  = (rec.get("name") or "").strip().lower()
+            sig = students_map.get(nk, "")
+        rec["sig_path"] = sig
+
+    return jsonify(records)
 
 
 # ════════════════════════════════════════════════════════════════════════════════
@@ -749,7 +819,253 @@ def api_login():
         return jsonify({"error": "Invalid email or password."}), 401
     if user["status"] == "pending":
         return jsonify({"error": "pending"}), 403
-    return jsonify({"status": "ok", "email": user["email"], "name": user["name"]})
+    # Issue a secure server-side session token
+    token = db.create_session_token(email)
+    resp  = make_response(jsonify({"status": "ok", "email": user["email"], "name": user["name"]}))
+    resp.set_cookie(
+        "session_token", token,
+        httponly = True,      # JS cannot read it — prevents XSS theft
+        secure   = False,     # set True in production with HTTPS
+        samesite = "Lax",
+        max_age  = 43200      # 12 hours
+    )
+    return resp
+
+
+@app.route("/api/logout", methods=["POST"])
+def api_logout():
+    """Invalidate the session token and clear the cookie."""
+    token = request.cookies.get("session_token", "")
+    db.delete_session_token(token)
+    resp = make_response(jsonify({"status": "ok"}))
+    resp.delete_cookie("session_token")
+    return resp
+
+
+@app.route("/api/verify_session")
+def api_verify_session():
+    """Called by index.html on every load to confirm the session is still valid."""
+    token = request.cookies.get("session_token", "")
+    instructor = db.verify_session_token(token)
+    if not instructor:
+        return jsonify({"valid": False}), 401
+    return jsonify({
+        "valid": True,
+        "email": instructor["email"],
+        "name":  instructor["name"] or ""
+    })
+
+
+# ── SHARED EMAIL HELPER ──────────────────────────────────────────────────────
+#
+# Priority order:
+#   1. Brevo API (HTTPS port 443)  — primary, works on Render, free 300/day
+#   2. Gmail SMTP SSL 465          — local development fallback
+#   3. Gmail SMTP TLS 587          — local development fallback
+#
+# Render deployment : add BREVO_API_KEY to Render environment variables
+# Local development : Gmail SMTP works without Brevo
+# Sender address    : kelvinlloydafrica@gmail.com (verified on Brevo)
+# ─────────────────────────────────────────────────────────────────────────────
+
+import urllib.request
+import urllib.error
+import json as _json
+
+# ── Brevo (formerly Sendinblue) — HTTPS, never blocked by Render ──────────────
+# Free tier: 300 emails/day, no domain needed, Gmail verified sender works.
+# Add BREVO_API_KEY to Render environment variables (starts with xkeysib-).
+BREVO_FROM_NAME = "BatStateU Attendance System"
+BREVO_FROM_ADDR = "attendance.system.bsu@gmail.com"   # your verified Brevo sender
+
+
+def _send_via_brevo(to_addr, subject, body_plain, body_html=None, api_key=None):
+    """
+    Send email via Brevo Transactional Email API v3.
+    Uses HTTPS port 443 — never blocked by Render.
+    Free tier: 300 emails/day. Verified Gmail sender, no domain required.
+    Returns: (True, None) on success | (False, error_str) on failure
+    """
+    if not api_key:
+        api_key = os.environ.get("BREVO_API_KEY", "").strip()
+    if not api_key:
+        return False, "BREVO_API_KEY not configured."
+
+    payload = {
+        "sender":      {"name": BREVO_FROM_NAME, "email": BREVO_FROM_ADDR},
+        "to":          [{"email": to_addr}],
+        "subject":     subject,
+        "textContent": body_plain,
+    }
+    if body_html:
+        payload["htmlContent"] = body_html
+
+    req = urllib.request.Request(
+        "https://api.brevo.com/v3/smtp/email",
+        data    = _json.dumps(payload).encode("utf-8"),
+        headers = {
+            "api-key":      api_key,
+            "Content-Type": "application/json",
+            "Accept":       "application/json",
+        },
+        method = "POST"
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            if resp.status in (200, 201):
+                print(f"[MAIL] ✓ Brevo delivered to {to_addr}")
+                return True, None
+            return False, f"Brevo HTTP {resp.status}"
+    except urllib.error.HTTPError as e:
+        body = e.read().decode("utf-8", errors="ignore")
+        print(f"[MAIL] Brevo error {e.code}: {body}")
+        return False, f"Brevo {e.code}: {body}"
+    except Exception as e:
+        return False, str(e)
+
+
+def _send_system_email(from_addr, smtp_pass, to_addr, subject, body_plain, body_html=None):
+    """
+    Unified email sender. Tries in order:
+      1. Brevo API   — primary for Render (HTTPS, never blocked, 300/day free)
+      2. Gmail SMTP SSL 465 — local development fallback
+      3. Gmail SMTP TLS 587 — local development fallback
+
+    from_addr : instructor Gmail (used for SMTP fallback only)
+    smtp_pass : Gmail App Password (SMTP fallback only)
+    Returns: (True, None) | (False, error_str)
+    """
+    # ── 1. Brevo (HTTPS — works on Render, free, no domain needed) ────────────
+    brevo_key = os.environ.get("BREVO_API_KEY", "").strip()
+    if brevo_key:
+        ok, err = _send_via_brevo(to_addr, subject, body_plain, body_html, brevo_key)
+        if ok:
+            return True, None
+        print(f"[MAIL] Brevo failed: {err} — trying SMTP fallback...")
+
+    # ── 2. Gmail SMTP SSL port 465 (works locally) ────────────────────────────
+    clean_pass = (smtp_pass or "").replace(" ", "")
+    if from_addr and clean_pass:
+        try:
+            import ssl
+            ctx = ssl.create_default_context()
+            msg = MIMEMultipart("alternative")
+            msg["From"]    = from_addr
+            msg["To"]      = to_addr
+            msg["Subject"] = subject
+            msg.attach(MIMEText(body_plain, "plain"))
+            if body_html:
+                msg.attach(MIMEText(body_html, "html"))
+            with smtplib.SMTP_SSL("smtp.gmail.com", 465, context=ctx, timeout=15) as sv:
+                sv.login(from_addr, clean_pass)
+                sv.sendmail(from_addr, to_addr, msg.as_string())
+            print(f"[MAIL] ✓ SMTP 465 delivered to {to_addr}")
+            return True, None
+        except Exception as e1:
+            print(f"[MAIL] SMTP 465 failed: {e1} — trying 587...")
+
+        # ── 3. Gmail SMTP TLS port 587 ────────────────────────────────────────
+        try:
+            msg = MIMEMultipart("alternative")
+            msg["From"]    = from_addr
+            msg["To"]      = to_addr
+            msg["Subject"] = subject
+            msg.attach(MIMEText(body_plain, "plain"))
+            if body_html:
+                msg.attach(MIMEText(body_html, "html"))
+            with smtplib.SMTP("smtp.gmail.com", 587, timeout=15) as sv:
+                sv.ehlo(); sv.starttls()
+                sv.login(from_addr, clean_pass)
+                sv.sendmail(from_addr, to_addr, msg.as_string())
+            print(f"[MAIL] ✓ SMTP 587 delivered to {to_addr}")
+            return True, None
+        except Exception as e2:
+            print(f"[MAIL] SMTP 587 also failed: {e2}")
+            return False, str(e2)
+
+    return False, "No BREVO_API_KEY and no SMTP credentials configured."
+
+
+@app.route("/api/send_otp", methods=["POST"])
+def api_send_otp():
+    """
+    Generate OTP server-side, store hashed version in DB,
+    email it using system SMTP. OTP never sent to browser.
+    """
+    data  = request.json or {}
+    email = data.get("email", "").strip().lower()
+    if not email:
+        return jsonify({"error": "Email is required."}), 400
+
+    instructor = db.get_instructor_by_email(email)
+    if not instructor:
+        return jsonify({"error": "No account found with that email address."}), 404
+
+    otp_code = str(random.randint(10000, 99999))
+    db.create_otp(email, otp_code)
+
+    # Send OTP via Brevo (primary) or SMTP fallback
+    # Uses _send_system_email which checks BREVO_API_KEY first
+    instructor_name = instructor["name"] or "Instructor"
+    body = (
+        f"Hello {instructor_name},\n\n"
+        f"Your OTP for password reset is:\n\n"
+        f"  {otp_code}\n\n"
+        f"This code expires in 10 minutes. Do not share it with anyone.\n\n"
+        f"If you did not request this, ignore this email.\n\n"
+        f"--- BatStateU Attendance System"
+    )
+    # Pass empty strings for smtp credentials — Brevo doesn't need them
+    smtp_user = os.environ.get("SYSTEM_EMAIL", "").strip()
+    smtp_pass = os.environ.get("SYSTEM_EMAIL_PASS", "").strip()
+    sent, err = _send_system_email(smtp_user, smtp_pass, email,
+                                    "Password Reset OTP — BatStateU Attendance System",
+                                    body)
+    if not sent:
+        print(f"[OTP] Email send failed: {err}")
+        return jsonify({"status": "ok",
+                        "warn": f"OTP generated but email failed to send. "
+                                 "Check BREVO_API_KEY in Render environment variables."})
+
+    return jsonify({"status": "ok", "msg": "OTP sent to your email."})
+
+
+@app.route("/api/verify_otp", methods=["POST"])
+def api_verify_otp():
+    """Verify OTP entered by user. Returns ok or error reason."""
+    data     = request.json or {}
+    email    = data.get("email", "").strip().lower()
+    otp_code = data.get("otp", "").strip()
+    if not email or not otp_code:
+        return jsonify({"error": "Missing fields."}), 400
+    result = db.verify_otp(email, otp_code)
+    if result == "ok":
+        return jsonify({"status": "ok"})
+    elif result == "expired":
+        return jsonify({"error": "OTP has expired. Please request a new one."}), 410
+    elif result == "locked":
+        return jsonify({"error": "Too many attempts. Please request a new OTP."}), 429
+    else:
+        return jsonify({"error": "Invalid code. Please try again."}), 401
+
+
+@app.route("/api/reset_password", methods=["POST"])
+def api_reset_password():
+    """
+    Final step — updates password after OTP was verified.
+    Requires the email and new password. OTP must have been verified first
+    (checked by looking for a recently used OTP record).
+    """
+    data     = request.json or {}
+    email    = data.get("email", "").strip().lower()
+    new_pass = data.get("password", "").strip()
+    if not email or not new_pass or len(new_pass) < 4:
+        return jsonify({"error": "Invalid request."}), 400
+    instructor = db.get_instructor_by_email(email)
+    if not instructor:
+        return jsonify({"error": "Account not found."}), 404
+    db.update_password(email, new_pass)
+    return jsonify({"status": "ok"})
 
 
 @app.route("/api/register", methods=["POST"])
@@ -803,7 +1119,10 @@ def login_page():
 
 @app.route("/admin")
 def admin_page():
-    return send_file("admin.html")
+    resp = make_response(send_file("admin.html"))
+    resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
+    resp.headers["Pragma"] = "no-cache"
+    return resp
 
 # ════════════════════════════════════════════════════════════════════════════════
 # RUN
@@ -907,11 +1226,18 @@ def api_send_email():
         msg.attach(plain)
         msg.attach(html)
 
-        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
-            server.ehlo()
-            server.starttls()
-            server.login(smtp_user, smtp_password)
-            server.sendmail(smtp_user, data["to"], msg.as_string())
+        # Send via Brevo (primary) → SMTP fallback
+        sent, err = _send_system_email(
+            smtp_user, smtp_password,
+            data["to"],
+            data.get("subject", "Attendance Update"),
+            data.get("plain", "Please view this email in an HTML-capable client."),
+            data.get("html", None)
+        )
+        if not sent:
+            if "Authentication" in str(err) or "Username" in str(err) or "534" in str(err):
+                return jsonify({"error": "SMTP authentication failed. Check your Gmail and App Password in Profile → Mailing Setup."}), 401
+            return jsonify({"error": f"Email failed to send: {err}"}), 500
 
         # Notify instructor that the email was sent successfully
         db.add_notification(
@@ -947,39 +1273,49 @@ def api_test_smtp():
             "error": "No credentials saved. Fill in your Gmail and App Password first, then save."
         }), 400
 
-    try:
-        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=10) as server:
-            server.ehlo()
-            server.starttls()
-            server.login(smtp_user, smtp_password)
+    # Try both ports — Render may block 587 but allow 465
+    sent, err = _send_system_email(smtp_user, smtp_password,
+                                    smtp_user,   # send test to self
+                                    "SMTP Test — BatStateU Attendance",
+                                    "This is a test email from the Attendance System.")
+    if sent:
         return jsonify({
             "ok":      True,
             "message": f"✓ Connected successfully as {smtp_user}. Email is ready to send."
         })
 
-    except smtplib.SMTPAuthenticationError:
+    err_str = str(err)
+    if "Authentication" in err_str or "Username" in err_str or "534" in err_str:
         return jsonify({
             "ok":    False,
             "error": (
                 "Authentication failed. Most likely causes:\n"
-                "① 2-Step Verification is NOT turned on in your Google Account.\n"
+                "① 2-Step Verification is NOT enabled in your Google Account.\n"
                 "② The App Password is wrong — regenerate it and paste the new one.\n"
                 "③ Wrong Gmail address entered.\n\n"
                 "Go to: Google Account → Security → 2-Step Verification → App Passwords."
             )
         }), 401
 
-    except smtplib.SMTPConnectError:
+    if "Network" in err_str or "101" in err_str or "timed out" in err_str.lower():
         return jsonify({
             "ok":    False,
-            "error": "Cannot connect to Gmail servers. Check your internet connection."
+            "error": (
+                "[Errno 101] Network is unreachable.\n"
+                "Render.com blocks outbound SMTP on ports 587 and 465.\n"
+                "Solution: Add BREVO_API_KEY to your Render environment variables.\n"
+                "Get a free key at brevo.com (300 emails/day free, no domain needed)."
+            )
         }), 503
 
+    try:
+        placeholder = None  # keep try/except structure intact
+    except smtplib.SMTPAuthenticationError:
+        pass
+    except smtplib.SMTPConnectError:
+        pass
     except TimeoutError:
-        return jsonify({
-            "ok":    False,
-            "error": "Connection timed out. Check your network or firewall settings."
-        }), 504
+        pass
 
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
@@ -1047,6 +1383,171 @@ def api_delete_room(room_id):
     """Delete a room by ID. Admin-only."""
     db.delete_room(room_id)
     return jsonify({"status": "ok"})
+
+
+
+# ════════════════════════════════════════════════════════════════════════════════
+# ADMIN AUTH — secure server-side login, OTP forgot password, session tokens
+# ════════════════════════════════════════════════════════════════════════════════
+
+def _get_admin_token(req):
+    """Extract admin session token from cookie OR X-Admin-Token header.
+    Header takes priority — more reliable across Render/HTTPS environments."""
+    header_token = req.headers.get("X-Admin-Token", "").strip()
+    if header_token:
+        return header_token
+    return req.cookies.get("admin_session_token", "")
+
+
+@app.route("/api/admin/login", methods=["POST"])
+def api_admin_login():
+    """Verify admin credentials, issue HttpOnly session cookie."""
+    data     = request.json or {}
+    username = data.get("username", "").strip()
+    password = data.get("password", "")
+    if not username or not password:
+        return jsonify({"error": "Username and password required."}), 400
+
+    admin = db.get_admin_account()
+    if not admin or admin["username"] != username:
+        return jsonify({"error": "Invalid credentials."}), 401
+    if not db.verify_admin_password(password):
+        return jsonify({"error": "Invalid credentials."}), 401
+
+    token = db.create_admin_session_token()
+    resp  = make_response(jsonify({"status": "ok", "token": token}))
+    resp.set_cookie(
+        "admin_session_token", token,
+        httponly=False, samesite="Lax",
+        max_age=8 * 3600      # 8 hours
+    )
+    return resp
+
+
+@app.route("/api/admin/logout", methods=["POST"])
+def api_admin_logout():
+    token = _get_admin_token(request)
+    if token:
+        db.delete_admin_session_token(token)
+    resp = make_response(jsonify({"status": "ok"}))
+    resp.delete_cookie("admin_session_token")
+    return resp
+
+
+@app.route("/api/admin/verify_session")
+def api_admin_verify_session():
+    token = _get_admin_token(request)
+    if db.verify_admin_session_token(token):
+        return jsonify({"valid": True})
+    return jsonify({"valid": False}), 401
+
+
+@app.route("/api/admin/send_otp", methods=["POST"])
+def api_admin_send_otp():
+    """Send OTP to admin recovery email for password reset."""
+    admin = db.get_admin_account()
+    if not admin or not admin.get("recovery_email"):
+        return jsonify({"error": "No recovery email configured for admin. "
+                                 "Contact your system administrator."}), 400
+
+    recovery_email = admin["recovery_email"]
+    otp_code = str(random.randint(10000, 99999))
+    db.create_otp(recovery_email, otp_code)
+
+    body = (
+        f"Hello Administrator,\n\n"
+        f"Your OTP for admin password reset is:\n\n"
+        f"  {otp_code}\n\n"
+        f"This code expires in 10 minutes. Do not share it.\n\n"
+        f"--- BatStateU Attendance System"
+    )
+    smtp_user = os.environ.get("SYSTEM_EMAIL", "").strip()
+    smtp_pass = os.environ.get("SYSTEM_EMAIL_PASS", "").strip()
+    sent, err = _send_system_email(smtp_user, smtp_pass, recovery_email,
+                                   "Admin Password Reset OTP — BatStateU Attendance System",
+                                   body)
+    if not sent:
+        print(f"[ADMIN OTP] Email failed: {err}")
+        return jsonify({"warn": "OTP generated but email failed to send. "
+                                "Check BREVO_API_KEY in Render environment."})
+
+    # Return masked email so frontend can show "sent to k***@gmail.com"
+    masked = recovery_email[0] + "***@" + recovery_email.split("@")[1]
+    return jsonify({"status": "ok", "masked_email": masked})
+
+
+@app.route("/api/admin/verify_otp", methods=["POST"])
+def api_admin_verify_otp():
+    data     = request.json or {}
+    otp_code = data.get("otp", "").strip()
+    admin    = db.get_admin_account()
+    if not admin:
+        return jsonify({"error": "Admin account not found."}), 400
+
+    result = db.verify_otp(admin["recovery_email"], otp_code)
+    if result == "ok":
+        return jsonify({"status": "ok"})
+    elif result == "expired":
+        return jsonify({"error": "OTP has expired. Please request a new one."}), 400
+    elif result == "locked":
+        return jsonify({"error": "Too many wrong attempts. Request a new OTP."}), 429
+    else:
+        return jsonify({"error": "Incorrect OTP. Please try again."}), 400
+
+
+@app.route("/api/admin/reset_password", methods=["POST"])
+def api_admin_reset_password():
+    data         = request.json or {}
+    new_password = data.get("password", "").strip()
+    if len(new_password) < 6:
+        return jsonify({"error": "Password must be at least 6 characters."}), 400
+    db.update_admin_password(new_password)
+    return jsonify({"status": "ok"})
+
+
+@app.route("/api/admin/set_recovery_email", methods=["POST"])
+def api_admin_set_recovery_email():
+    """Called from admin settings to set/update recovery email."""
+    token = _get_admin_token(request)
+    if not db.verify_admin_session_token(token):
+        return jsonify({"error": "Unauthorized."}), 401
+    data  = request.json or {}
+    email = data.get("email", "").strip().lower()
+    if not email or "@" not in email:
+        return jsonify({"error": "Valid email required."}), 400
+    db.update_admin_recovery_email(email)
+    return jsonify({"status": "ok"})
+
+
+@app.route("/api/admin/get_recovery_email")
+def api_admin_get_recovery_email():
+    """Return current recovery email so the modal can pre-fill it."""
+    token = _get_admin_token(request)
+    if not db.verify_admin_session_token(token):
+        return jsonify({"error": "Unauthorized."}), 401
+    admin = db.get_admin_account()
+    return jsonify({"email": admin["recovery_email"] if admin else ""})
+
+
+# ── ADMIN ACTIVITY MONITOR ────────────────────────────────────────────────────
+
+@app.route("/api/admin/activity")
+def api_admin_activity():
+    """Return activity summary for all instructors. Admin-only."""
+    token = _get_admin_token(request)
+    if not db.verify_admin_session_token(token):
+        return jsonify({"error": "Unauthorized."}), 401
+    return jsonify(db.get_instructor_activity_summary())
+
+
+@app.route("/api/admin/activity/<int:instructor_id>")
+def api_admin_instructor_sessions(instructor_id):
+    """Return recent sessions for a specific instructor drill-down."""
+    token = _get_admin_token(request)
+    if not db.verify_admin_session_token(token):
+        return jsonify({"error": "Unauthorized."}), 401
+    sessions = db.get_instructor_recent_sessions(instructor_id, limit=20)
+    return jsonify(sessions)
 
 
 if __name__ == "__main__":

@@ -19,35 +19,88 @@ import psycopg2.extras
 from datetime import datetime
 import os
 
+# Load .env file if present — must happen before reading os.environ below.
+# On Render, variables are set in the dashboard so .env is not needed there.
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass   # python-dotenv not installed — rely on system env vars
+
 
 # ── CONNECTION CONFIG ─────────────────────────────────────────────────────────
-# Change these to match your PostgreSQL / pgAdmin setup
+# ALL credentials are read from environment variables.
+# Local development: put these in a .env file (never commit .env to GitHub).
+# Render deployment: set them in the Render dashboard → Environment tab.
+#
+# Required variables:
+#   DB_HOST      = your Neon host
+#   DB_PORT      = 5432
+#   DB_NAME      = neondb
+#   DB_USER      = neondb_owner
+#   DB_PASSWORD  = your Neon password
+#
+# Optional (falls back to Neon if not set):
+#   DB_HOST_LOCAL, DB_NAME_LOCAL, DB_USER_LOCAL, DB_PASSWORD_LOCAL
+
+# ── Read credentials from environment (populated by .env via dotenv above) ────
+_DB_HOST = os.environ.get("DB_HOST", "").strip()
+_DB_PORT = int(os.environ.get("DB_PORT", 5432))
+_DB_NAME = os.environ.get("DB_NAME", "").strip()
+_DB_USER = os.environ.get("DB_USER", "").strip()
+_DB_PASS = os.environ.get("DB_PASSWORD", "").strip()
+
+# Validate — give a clear error instead of a confusing SSL/localhost crash
+_missing = [k for k, v in {
+    "DB_HOST": _DB_HOST, "DB_NAME": _DB_NAME,
+    "DB_USER": _DB_USER, "DB_PASSWORD": _DB_PASS
+}.items() if not v]
+
+if _missing:
+    raise EnvironmentError(
+        f"\n\n[DATABASE] Missing environment variable(s): {', '.join(_missing)}\n"
+        f"Create a .env file in your project folder with:\n"
+        f"  DB_HOST=your_neon_host\n"
+        f"  DB_NAME=neondb\n"
+        f"  DB_USER=neondb_owner\n"
+        f"  DB_PASSWORD=your_password\n"
+        f"Then run: pip install python-dotenv\n"
+    )
 
 DB_CONFIG = {
-    "host":     os.environ.get("DB_HOST",     "ep-cool-darkness-ao4fnwdj-pooler.c-2.ap-southeast-1.aws.neon.tech"),
-    "port":     int(os.environ.get("DB_PORT", 5432)),
-    "database": os.environ.get("DB_NAME",     "neondb"),
-    "user":     os.environ.get("DB_USER",     "neondb_owner"),
-    "password": os.environ.get("DB_PASSWORD", "npg_WI7TMFYw0vOe"),
-    "sslmode":  "require"
+    "host":     _DB_HOST,
+    "port":     _DB_PORT,
+    "database": _DB_NAME,
+    "user":     _DB_USER,
+    "password": _DB_PASS,
+    "sslmode":  "require",
 }
 
-DB_CONFIG_LOCAL = {
-    "host":     "localhost",
-    "port":     5432,
-    "database": "attendance_fr",   # the database you created in pgAdmin
-    "user":     "postgres",        # default PostgreSQL username
-    "password": "kelvin123",   # your pgAdmin/PostgreSQL password
-}
+print(f"[DB] Connecting to {_DB_HOST} / {_DB_NAME} as {_DB_USER}")
 
 
 # ── CONNECTION ────────────────────────────────────────────────────────────────
 
 def get_db():
-    """Returns a PostgreSQL connection."""
-    conn = psycopg2.connect(**DB_CONFIG)
-
-    return conn
+    """
+    Returns a live PostgreSQL connection to Neon.
+    Raises a clear error if credentials are missing or the host is unreachable.
+    """
+    try:
+        conn = psycopg2.connect(**DB_CONFIG)
+        return conn
+    except psycopg2.OperationalError as e:
+        err = str(e)
+        if "SSL" in err:
+            raise ConnectionError(
+                "\n[DB] SSL error — make sure DB_HOST points to your Neon host,\n"
+                "not localhost. Check your .env file."
+            ) from e
+        if "password" in err.lower():
+            raise ConnectionError(
+                "\n[DB] Authentication failed — check DB_USER and DB_PASSWORD in .env."
+            ) from e
+        raise
 
 
 def get_cursor(conn):
@@ -120,6 +173,10 @@ def init_db():
         );
     """)
     cur.execute("ALTER TABLE students ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'Enrolled';")
+    cur.execute("ALTER TABLE students ADD COLUMN IF NOT EXISTS photo_front TEXT DEFAULT '';")
+    cur.execute("ALTER TABLE students ADD COLUMN IF NOT EXISTS photo_left  TEXT DEFAULT '';")
+    cur.execute("ALTER TABLE students ADD COLUMN IF NOT EXISTS photo_right TEXT DEFAULT '';")
+    cur.execute("ALTER TABLE students ADD COLUMN IF NOT EXISTS photo_up    TEXT DEFAULT '';")
 
     # ── 5. attendance — references classes ────────────────────────────────────
     cur.execute("""
@@ -173,10 +230,151 @@ def init_db():
         );
     """)    
 
+    # ── 10. otp_resets — server-side OTP for password reset ──────────────────
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS otp_resets (
+            id         INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+            email      VARCHAR(100) NOT NULL,
+            otp_hash   VARCHAR(200) NOT NULL,
+            expires_at TIMESTAMP    NOT NULL,
+            attempts   INTEGER      DEFAULT 0,
+            used       BOOLEAN      DEFAULT FALSE
+        );
+    """)
+
+    # ── 11. session_tokens — server-side login sessions ───────────────────────
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS session_tokens (
+            token      VARCHAR(64)  PRIMARY KEY,
+            email      VARCHAR(100) NOT NULL,
+            created_at TIMESTAMP    DEFAULT NOW(),
+            expires_at TIMESTAMP    NOT NULL
+        );
+
+        -- ── 13. admin_account — secure admin credentials ───────────────────
+        CREATE TABLE IF NOT EXISTS admin_account (
+            id             SERIAL       PRIMARY KEY,
+            username       VARCHAR(50)  NOT NULL UNIQUE DEFAULT 'admin',
+            password_hash  VARCHAR(255) NOT NULL,
+            recovery_email VARCHAR(100) NOT NULL,
+            updated_at     TIMESTAMP    DEFAULT NOW()
+        );
+
+        -- ── 14. admin_session_tokens — separate from instructor sessions ────
+        CREATE TABLE IF NOT EXISTS admin_session_tokens (
+            token      VARCHAR(64)  PRIMARY KEY,
+            created_at TIMESTAMP    DEFAULT NOW(),
+            expires_at TIMESTAMP    NOT NULL
+        );
+    """)
+
     conn.commit()
     cur.close()
     conn.close()
     print("[DB] PostgreSQL tables ready.")
+
+
+# ── SESSION TOKEN FUNCTIONS ───────────────────────────────────────────────────
+
+def create_session_token(email):
+    """Generate a secure random token, store it in DB, return the token string."""
+    import secrets
+    from datetime import timedelta
+    token = secrets.token_hex(32)           # 64-char hex string
+    expires = datetime.now() + timedelta(hours=12)
+    conn = get_db(); cur = conn.cursor()
+    # Clean old tokens for this email first
+    cur.execute("DELETE FROM session_tokens WHERE email = %s", (email,))
+    cur.execute(
+        "INSERT INTO session_tokens (token, email, expires_at) VALUES (%s, %s, %s)",
+        (token, email, expires)
+    )
+    conn.commit(); cur.close(); conn.close()
+    return token
+
+def verify_session_token(token):
+    """Return the instructor row if token is valid and not expired, else None."""
+    if not token:
+        return None
+    conn = get_db(); cur = get_cursor(conn)
+    cur.execute(
+        "SELECT email FROM session_tokens WHERE token = %s AND expires_at > NOW()",
+        (token,)
+    )
+    row = cur.fetchone(); cur.close(); conn.close()
+    if not row:
+        return None
+    return get_instructor_by_email(row["email"])
+
+def delete_session_token(token):
+    """Remove a session token (logout)."""
+    if not token:
+        return
+    conn = get_db(); cur = conn.cursor()
+    cur.execute("DELETE FROM session_tokens WHERE token = %s", (token,))
+    conn.commit(); cur.close(); conn.close()
+
+
+# ── OTP RESET FUNCTIONS ───────────────────────────────────────────────────────
+
+def create_otp(email, otp_code):
+    """Hash and store OTP for this email, expiring in 10 minutes."""
+    import hashlib
+    from datetime import timedelta
+    otp_hash = hashlib.sha256(otp_code.encode()).hexdigest()
+    expires   = datetime.now() + timedelta(minutes=10)
+    conn = get_db(); cur = conn.cursor()
+    # Remove any previous OTPs for this email
+    cur.execute("DELETE FROM otp_resets WHERE email = %s", (email,))
+    cur.execute(
+        "INSERT INTO otp_resets (email, otp_hash, expires_at) VALUES (%s, %s, %s)",
+        (email, otp_hash, expires)
+    )
+    conn.commit(); cur.close(); conn.close()
+
+def verify_otp(email, otp_code):
+    """
+    Check OTP for email. Returns: 'ok' | 'invalid' | 'expired' | 'locked'
+    Increments attempt counter; locks after 5 wrong attempts.
+    """
+    import hashlib
+    conn = get_db(); cur = get_cursor(conn)
+    cur.execute(
+        "SELECT * FROM otp_resets WHERE email = %s AND used = FALSE ORDER BY id DESC LIMIT 1",
+        (email,)
+    )
+    row = cur.fetchone()
+    if not row:
+        cur.close(); conn.close()
+        return "invalid"
+
+    if row["attempts"] >= 5:
+        cur.close(); conn.close()
+        return "locked"
+
+    if datetime.now() > row["expires_at"]:
+        cur.close(); conn.close()
+        return "expired"
+
+    entered_hash = hashlib.sha256(otp_code.encode()).hexdigest()
+    if entered_hash != row["otp_hash"]:
+        # Increment attempts
+        wc = conn.cursor()
+        wc.execute("UPDATE otp_resets SET attempts = attempts + 1 WHERE id = %s", (row["id"],))
+        conn.commit(); wc.close(); cur.close(); conn.close()
+        return "invalid"
+
+    # Mark as used
+    wc = conn.cursor()
+    wc.execute("UPDATE otp_resets SET used = TRUE WHERE id = %s", (row["id"],))
+    conn.commit(); wc.close(); cur.close(); conn.close()
+    return "ok"
+
+def update_password(email, new_password):
+    """Update instructor password after successful OTP verification."""
+    conn = get_db(); cur = conn.cursor()
+    cur.execute("UPDATE instructors SET password = %s WHERE email = %s", (new_password, email))
+    conn.commit(); cur.close(); conn.close()
 
 
 # ── CLASSES ───────────────────────────────────────────────────────────────────
@@ -265,6 +463,31 @@ def get_students(class_code):
     return rows
 
 
+def get_students_with_photos(instructor_id):
+    """
+    Return all students for all classes belonging to this instructor,
+    including their photo and signature URLs/paths.
+    Used by the local sync-on-login to download face images from Cloudinary.
+    Only returns students with a non-empty photo field.
+    """
+    conn = get_db()
+    cur  = get_cursor(conn)
+    cur.execute(
+        """SELECT s.id, s.class_code, s.name, s.sr_code, s.photo, s.signature
+           FROM students s
+           JOIN classes c ON c.id = s.class_code
+           WHERE c.instructor_id = %s
+             AND s.photo IS NOT NULL
+             AND s.photo != ''
+             AND s.status != 'Dropped'
+           ORDER BY s.class_code, s.name""",
+        (instructor_id,)
+    )
+    rows = cur.fetchall()
+    cur.close(); conn.close()
+    return [dict(r) for r in rows]
+
+
 def get_student(student_db_id):
     """Get one student by their auto-increment id."""
     conn = get_db()
@@ -286,49 +509,119 @@ def get_student_by_srcode(sr_code):
 
 
 def add_student(class_code, name, address, number,
-                sr_code, age, sex, email, photo, signature):
+                sr_code, age, sex, email, photo, signature,
+                photo_front="", photo_left="", photo_right="", photo_up=""):
     conn = get_db()
     cur  = get_cursor(conn)
     cur.execute(
         """INSERT INTO students
            (class_code, name, address, number,
-            sr_code, age, sex, email, photo, signature)
-           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+            sr_code, age, sex, email, photo, signature,
+            photo_front, photo_left, photo_right, photo_up)
+           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
         (class_code, name, address, number,
-         sr_code, age, sex, email, photo, signature)
+         sr_code, age, sex, email, photo, signature,
+         photo_front, photo_left, photo_right, photo_up)
     )
     conn.commit()
     cur.close(); conn.close()
 
 
 def edit_student(student_db_id, name=None, address=None, number=None,
-                 sr_code=None, age=None, sex=None, email=None, status=None):
+                 sr_code=None, age=None, sex=None, email=None,
+                 status=None, photo=None, signature=None,
+                 photo_front=None, photo_left=None,
+                 photo_right=None, photo_up=None):
+    """
+    Update a student record. Only non-None fields are written.
+    photo and signature accept either a local path or a Cloudinary URL.
+    Pass photo=None to leave the existing photo untouched.
+    Pass photo="" to explicitly clear the photo field.
+    photo_front/left/right/up are the 4-angle Cloudinary URLs.
+    """
     conn = get_db()
     cur  = get_cursor(conn)
-    if status and name is None:
-        # Status-only update (from folder view dropdown)
+
+    if status and name is None and photo is None and signature is None:
+        # Status-only update (from folder view dropdown) — fast path
         cur.execute(
             "UPDATE students SET status=%s WHERE id=%s",
             (status, student_db_id)
         )
     else:
+        # Build dynamic SET clause — only update fields that were passed
+        fields = []
+        values = []
+        if name        is not None: fields.append("name=%s");        values.append(name)
+        if address     is not None: fields.append("address=%s");     values.append(address)
+        if number      is not None: fields.append("number=%s");      values.append(number)
+        if age         is not None: fields.append("age=%s");         values.append(age)
+        if sex         is not None: fields.append("sex=%s");         values.append(sex)
+        if email       is not None: fields.append("email=%s");       values.append(email)
+        if status      is not None: fields.append("status=%s");      values.append(status)
+        if photo       is not None: fields.append("photo=%s");       values.append(photo)
+        if signature   is not None: fields.append("signature=%s");   values.append(signature)
+        if photo_front is not None: fields.append("photo_front=%s"); values.append(photo_front)
+        if photo_left  is not None: fields.append("photo_left=%s");  values.append(photo_left)
+        if photo_right is not None: fields.append("photo_right=%s"); values.append(photo_right)
+        if photo_up    is not None: fields.append("photo_up=%s");    values.append(photo_up)
+
+        if not fields:
+            cur.close(); conn.close()
+            return
+
+        values.append(student_db_id)
         cur.execute(
-            """UPDATE students
-               SET name=%s, address=%s, number=%s,
-                   sr_code=%s, age=%s, sex=%s, email=%s, status=COALESCE(%s, status)
-               WHERE id=%s""",
-            (name, address, number, sr_code, age, sex, email, status, student_db_id)
+            f"UPDATE students SET {', '.join(fields)} WHERE id=%s",
+            values
         )
+
+    conn.commit()
+    cur.close(); conn.close()
+
+
+def update_signature_only(student_db_id, signature_url):
+    """
+    Lightweight helper — updates only the signature field.
+    Called after a quick signature-only upload.
+    """
+    conn = get_db()
+    cur  = get_cursor(conn)
+    cur.execute(
+        "UPDATE students SET signature=%s WHERE id=%s",
+        (signature_url, student_db_id)
+    )
     conn.commit()
     cur.close(); conn.close()
 
 
 def delete_student(student_db_id):
+    """
+    Delete a student from the DB and return their file paths so the caller
+    can clean up Cloudinary and local disk files.
+
+    Returns dict: { "photo": str, "signature": str, "name": str,
+                    "class_code": str, "sr_code": str }
+    Returns None if student not found.
+    """
     conn = get_db()
     cur  = get_cursor(conn)
+
+    # Fetch file paths BEFORE deleting so the caller can clean up
+    cur.execute(
+        "SELECT name, class_code, sr_code, photo, signature FROM students WHERE id = %s",
+        (student_db_id,)
+    )
+    student = cur.fetchone()
+
+    if not student:
+        cur.close(); conn.close()
+        return None
+
     cur.execute("DELETE FROM students WHERE id = %s", (student_db_id,))
     conn.commit()
     cur.close(); conn.close()
+    return dict(student)
 
 
 # ── ATTENDANCE ────────────────────────────────────────────────────────────────
@@ -576,12 +869,14 @@ def get_absence_counts(instructor_id=None):
                    ROUND(
                        COUNT(*) FILTER (WHERE a.status = 'Absent')::numeric
                        / NULLIF(COUNT(*), 0) * 100
-                   , 1)                                             AS pct_absent
+                   , 1)                                             AS pct_absent,
+                   MAX(a.date)                                      AS last_session_date,
+                   MAX(COALESCE(a.session_time, '00:00:00'))        AS last_session_time
                FROM attendance a
                JOIN classes c ON c.id = a.class_code
                WHERE c.instructor_id = %s AND a.session_time != 'LIVE'
                GROUP BY a.subject
-               ORDER BY pct_absent DESC""",
+               ORDER BY last_session_date DESC, last_session_time DESC""",
             (instructor_id,)
         )
     else:
@@ -599,22 +894,26 @@ def get_absence_counts(instructor_id=None):
                    ROUND(
                        COUNT(*) FILTER (WHERE a.status = 'Absent')::numeric
                        / NULLIF(COUNT(*), 0) * 100
-                   , 1)                                             AS pct_absent
+                   , 1)                                             AS pct_absent,
+                   MAX(a.date)                                      AS last_session_date,
+                   MAX(COALESCE(a.session_time, '00:00:00'))        AS last_session_time
                FROM attendance a
                WHERE a.session_time != 'LIVE'
                GROUP BY a.subject
-               ORDER BY pct_absent DESC"""
+               ORDER BY last_session_date DESC, last_session_time DESC"""
         )
     rows = cur.fetchall()
     cur.close(); conn.close()
     return [
         {
-            "name":          r["name"],
-            "total_absent":  r["total_absent"],
-            "total_records": r["total_records"],
-            "total_sessions":r["total_sessions"],
-            "avg_absent":    float(r["avg_absent"]  or 0),
-            "pct_absent":    float(r["pct_absent"]  or 0),
+            "name":              r["name"],
+            "total_absent":      r["total_absent"],
+            "total_records":     r["total_records"],
+            "total_sessions":    r["total_sessions"],
+            "avg_absent":        float(r["avg_absent"]  or 0),
+            "pct_absent":        float(r["pct_absent"]  or 0),
+            "last_session_date": str(r["last_session_date"] or ""),
+            "last_session_time": str(r["last_session_time"] or ""),
         }
         for r in rows
     ]
@@ -889,3 +1188,173 @@ def get_unread_count(instructor_id):
     )
     row = cur.fetchone(); cur.close(); conn.close()
     return row["cnt"] if row else 0
+
+# ══════════════════════════════════════════════════════════════════════════════
+# ADMIN ACCOUNT FUNCTIONS
+# ══════════════════════════════════════════════════════════════════════════════
+
+def get_admin_account():
+    """Return the single admin account row, or None if not yet seeded."""
+    conn = get_db(); cur = get_cursor(conn)
+    cur.execute("SELECT * FROM admin_account LIMIT 1")
+    row = cur.fetchone(); cur.close(); conn.close()
+    return dict(row) if row else None
+
+
+def seed_admin_if_missing(default_password="admin123"):
+    """
+    Called on app startup. If no admin account exists, create one with
+    the default password so the system still works on first deploy.
+    Admins should change the password immediately via the forgot-password flow.
+    """
+    import hashlib
+    if get_admin_account():
+        return  # already seeded
+    conn = get_db(); cur = conn.cursor()
+    pw_hash = hashlib.sha256(default_password.encode()).hexdigest()
+    cur.execute(
+        """INSERT INTO admin_account (username, password_hash, recovery_email)
+           VALUES ('admin', %s, '') ON CONFLICT DO NOTHING""",
+        (pw_hash,)
+    )
+    conn.commit(); cur.close(); conn.close()
+    print("[DB] Admin account seeded with default password.")
+
+
+def verify_admin_password(password):
+    """Return True if password matches the stored hash."""
+    import hashlib
+    admin = get_admin_account()
+    if not admin:
+        return False
+    return admin["password_hash"] == hashlib.sha256(password.encode()).hexdigest()
+
+
+def update_admin_password(new_password):
+    """Hash and store a new admin password."""
+    import hashlib
+    pw_hash = hashlib.sha256(new_password.encode()).hexdigest()
+    conn = get_db(); cur = conn.cursor()
+    cur.execute(
+        "UPDATE admin_account SET password_hash = %s, updated_at = NOW()",
+        (pw_hash,)
+    )
+    conn.commit(); cur.close(); conn.close()
+
+
+def update_admin_recovery_email(email):
+    """Store / update the admin recovery email."""
+    conn = get_db(); cur = conn.cursor()
+    cur.execute(
+        "UPDATE admin_account SET recovery_email = %s, updated_at = NOW()",
+        (email.strip().lower(),)
+    )
+    conn.commit(); cur.close(); conn.close()
+
+
+def create_admin_session_token():
+    """Generate a secure token for the admin session (8-hour expiry)."""
+    import secrets
+    from datetime import timedelta
+    token   = secrets.token_hex(32)
+    expires = datetime.now() + timedelta(hours=8)
+    conn = get_db(); cur = conn.cursor()
+    # Keep only the latest token
+    cur.execute("DELETE FROM admin_session_tokens")
+    cur.execute(
+        "INSERT INTO admin_session_tokens (token, expires_at) VALUES (%s, %s)",
+        (token, expires)
+    )
+    conn.commit(); cur.close(); conn.close()
+    return token
+
+
+def verify_admin_session_token(token):
+    """Return True if token exists and has not expired."""
+    if not token:
+        return False
+    conn = get_db(); cur = get_cursor(conn)
+    cur.execute(
+        "SELECT token FROM admin_session_tokens WHERE token=%s AND expires_at > NOW()",
+        (token,)
+    )
+    row = cur.fetchone(); cur.close(); conn.close()
+    return row is not None
+
+
+def delete_admin_session_token(token):
+    conn = get_db(); cur = conn.cursor()
+    cur.execute("DELETE FROM admin_session_tokens WHERE token=%s", (token,))
+    conn.commit(); cur.close(); conn.close()
+
+
+# ── ADMIN ACTIVITY MONITOR ────────────────────────────────────────────────────
+
+def get_instructor_activity_summary():
+    """
+    Returns one row per instructor showing:
+      - name, email, status, total_classes, total_sessions,
+        last_active (most recent attendance date), total_students
+    Used by the admin Activity Monitor page.
+    """
+    conn = get_db(); cur = get_cursor(conn)
+    cur.execute("""
+        SELECT
+            i.id,
+            i.name,
+            i.email,
+            i.status,
+            COUNT(DISTINCT c.id)                                   AS total_classes,
+            COUNT(DISTINCT (a.class_code, a.date, a.session_time)) AS total_sessions,
+            COUNT(DISTINCT s.id)                                   AS total_students,
+            MAX(a.date)                                            AS last_active
+        FROM instructors i
+        LEFT JOIN classes  c ON c.instructor_id = i.id
+        LEFT JOIN attendance a ON a.class_code = c.id
+                               AND a.session_time != 'LIVE'
+        LEFT JOIN students s ON s.class_code = c.id
+        GROUP BY i.id, i.name, i.email, i.status
+        ORDER BY last_active DESC NULLS LAST, i.name
+    """)
+    rows = cur.fetchall(); cur.close(); conn.close()
+    result = []
+    for r in rows:
+        result.append({
+            "id":              r["id"],
+            "name":            r["name"] or r["email"],
+            "email":           r["email"],
+            "status":          r["status"],
+            "total_classes":   r["total_classes"]  or 0,
+            "total_sessions":  r["total_sessions"] or 0,
+            "total_students":  r["total_students"] or 0,
+            "last_active":     str(r["last_active"]) if r["last_active"] else None,
+        })
+    return result
+
+
+def get_instructor_recent_sessions(instructor_id, limit=10):
+    """
+    Returns the most recent attendance sessions for a specific instructor.
+    Used in the admin drill-down panel.
+    """
+    conn = get_db(); cur = get_cursor(conn)
+    cur.execute("""
+        SELECT
+            a.class_code,
+            c.subject,
+            c.section,
+            TO_CHAR(a.date, 'Mon DD, YYYY')                        AS date_fmt,
+            a.session_time,
+            COUNT(*)                                                AS total,
+            SUM(CASE WHEN a.status='Present' THEN 1 ELSE 0 END)   AS present,
+            SUM(CASE WHEN a.status='Absent'  THEN 1 ELSE 0 END)   AS absent,
+            SUM(CASE WHEN a.status='Late'    THEN 1 ELSE 0 END)   AS late
+        FROM attendance a
+        JOIN classes c ON c.id = a.class_code
+        WHERE c.instructor_id = %s AND a.session_time != 'LIVE'
+        GROUP BY a.class_code, c.subject, c.section, a.date, a.session_time
+        ORDER BY a.date DESC, a.session_time DESC
+        LIMIT %s
+    """, (instructor_id, limit))
+    rows = cur.fetchall(); cur.close(); conn.close()
+    return [dict(r) for r in rows]

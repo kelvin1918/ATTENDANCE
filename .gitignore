@@ -14,3 +14,6 @@ Debugs.md
 format.md
 camera_test.py
 test.py
+migrate_faces.py
+migration_report.txt
+local_cache.json
