@@ -799,6 +799,20 @@ label.field-label{display:block;font-size:12px;font-weight:600;
       <input id="cam-rtsp-input" class="input hidden"
              placeholder="rtsp://user:pass@192.168.1.x:554/..."
              style="width:280px;font-size:13px">
+      <!-- Late threshold picker -->
+      <div style="display:flex;align-items:center;gap:5px;margin-left:4px">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none"
+             stroke="#D32F2F" stroke-width="2.5" style="flex-shrink:0">
+          <circle cx="12" cy="12" r="10"/>
+          <polyline points="12 6 12 12 16 14"/>
+        </svg>
+        <span style="font-size:11px;color:#555;font-weight:600;white-space:nowrap">Late after</span>
+        <input id="cam-late-minutes" type="number" min="1" max="60" value="15"
+               style="width:46px;font-size:12px;font-weight:700;text-align:center;
+                      border:1px solid #E5E7EB;border-radius:7px;padding:3px 5px;
+                      background:#FFF5F5;color:#D32F2F;outline:none">
+        <span style="font-size:11px;color:#555;font-weight:600">min</span>
+      </div>
     </div>
     <div class="flex gap8">
       <button class="btn btn-sm" id="btn-start-camera"
@@ -1651,6 +1665,11 @@ async function startCamera() {
     toast('Select a camera source first.', 'error'); return;
   }
 
+  // Capture late threshold — this is the instructor-chosen grace period
+  const lateMin = parseInt(document.getElementById('cam-late-minutes')?.value || '15', 10);
+  // Record session start NOW — before face encoding — so the timer is accurate
+  STATE.sessionStart = Date.now();
+
   const cls = STATE.currentClass;
   try {
     const res = await fetch('/api/local/start_camera', {
@@ -1661,9 +1680,10 @@ async function startCamera() {
       },
       body: JSON.stringify({
         source,
-        class_code: cls.class_code,
-        section:    cls.section || '',
-        subject:    cls.subject || '',
+        class_code:   cls.class_code,
+        section:      cls.section || '',
+        subject:      cls.subject || '',
+        late_minutes: lateMin,
       })
     });
     const data = await res.json();
@@ -2283,44 +2303,56 @@ document.getElementById('btn-submit-reg').addEventListener('click', async () => 
    SAVE ATTENDANCE — shows summary modal first
    ═══════════════════════════════════════════════════════════════════════ */
 document.getElementById('btn-save-attendance').addEventListener('click', async () => {
-  // Fetch final scan log
+  // Fetch final scan log — now returns {name: {ts, status}} 
   let scanLog = {};
   try {
     const r = await fetch('/api/local/scan_log');
     scanLog = await r.json();
   } catch {}
 
-  const presentNames = new Set(
-    Object.keys(scanLog).map(n => n.replace(/_/g,' ').toLowerCase())
-  );
+  // Build a lookup: normalised name → "Present" | "Late"
+  const detectedMap = {};
+  for (const [name, val] of Object.entries(scanLog)) {
+    const key = name.replace(/_/g, ' ').toLowerCase();
+    // Support both old format (plain timestamp) and new format ({ts, status})
+    detectedMap[key] = (val && typeof val === 'object') ? (val.status || 'Present') : 'Present';
+  }
 
-  // Build records: enrolled students → Present or Absent
+  // Build records: enrolled students → Present, Late, or Absent
   const enrolled = STATE.students.filter(s => s.status === 'Enrolled');
   const records  = enrolled.map(s => ({
     name:    s.name,
     sr_code: s.sr_code || '',
-    status:  presentNames.has((s.name||'').toLowerCase()) ? 'Present' : 'Absent',
+    status:  detectedMap[(s.name || '').toLowerCase()] || 'Absent',
   }));
 
   const presentCnt = records.filter(r => r.status === 'Present').length;
+  const lateCnt    = records.filter(r => r.status === 'Late').length;
   const absentCnt  = records.filter(r => r.status === 'Absent').length;
 
   // Populate summary modal
   document.getElementById('sum-present').textContent = presentCnt;
-  document.getElementById('sum-late').textContent    = 0;
+  document.getElementById('sum-late').textContent    = lateCnt;
   document.getElementById('sum-absent').textContent  = absentCnt;
-  document.getElementById('sum-detail').innerHTML    = records.map(r => `
+  document.getElementById('sum-detail').innerHTML    = records.map(r => {
+    const color = r.status === 'Present' ? '#22C55E'
+                : r.status === 'Late'    ? '#F59E0B'
+                : '#E5E7EB';
+    const textColor = r.status === 'Present' ? 'var(--green)'
+                    : r.status === 'Late'    ? '#D97706'
+                    : 'var(--muted)';
+    return `
     <div style="display:flex;align-items:center;gap:8px;padding:5px 0;
          border-bottom:1px solid #F3F4F6;font-size:13px">
       <div style="width:8px;height:8px;border-radius:50%;flex-shrink:0;
-           background:${r.status==='Present' ? '#22C55E' : '#E5E7EB'}"></div>
+           background:${color}"></div>
       <span style="flex:1">${r.name}</span>
-      <span style="font-weight:600;color:${r.status==='Present'
-        ? 'var(--green)' : 'var(--muted)'};font-size:12px">${r.status}</span>
-    </div>`).join('');
+      <span style="font-weight:600;color:${textColor};font-size:12px">${r.status}</span>
+    </div>`;
+  }).join('');
 
   // Store records for confirm button
-  window._pendingSave = { records, presentCnt, absentCnt };
+  window._pendingSave = { records, presentCnt, lateCnt, absentCnt };
   openModal('modal-summary');
 });
 

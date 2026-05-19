@@ -188,6 +188,7 @@ class FaceRecognizer:
         self._face_scores     = []    # cosine similarity scores
         self._present_set     = set()
         self._scan_log        = {}    # {name: first_seen_unix}
+        self._scan_status     = {}    # {name: "Present" | "Late"}
         self._pending_counts  = {}    # {name: consecutive_count}
 
         self._running         = False
@@ -203,13 +204,16 @@ class FaceRecognizer:
     # ── public API ──────────────────────────────────────────────────────────
 
     def set_session(self, instructor_email, class_code, section, subject,
-                    late_minutes: int = 1):
+                    late_minutes: int = 1, session_start=None):
         self._instructor_email = instructor_email
         self._class_code       = class_code
         self._section          = section
         self._subject          = subject
-        self._session_start    = _dt.now()   # camera-on timestamp
-        self._late_minutes     = late_minutes      # default: 15 min grace period
+        # Use the timestamp from when the instructor pressed Start Camera
+        # (passed in from local_app.py) so face-encoding time is included
+        # in the late countdown, not skipped.
+        self._session_start    = session_start if session_start is not None else _dt.now()
+        self._late_minutes     = late_minutes
         print(f"[CLOUD] Session set → {class_code} | {subject} | {section} "
               f"| Late after {late_minutes} min")
 
@@ -291,13 +295,18 @@ class FaceRecognizer:
             return list(self._present_set)
 
     def get_scan_log(self):
+        """Returns {name: {"ts": unix_timestamp, "status": "Present"|"Late"}}"""
         with self._lock:
-            return dict(self._scan_log)
+            return {
+                name: {"ts": ts, "status": self._scan_status.get(name, "Present")}
+                for name, ts in self._scan_log.items()
+            }
 
     def reset_attendance(self):
         with self._lock:
             self._present_set    = set()
             self._scan_log       = {}
+            self._scan_status    = {}
             self._pending_counts = {}
 
     def stop_and_reset(self):
@@ -308,6 +317,7 @@ class FaceRecognizer:
         with self._lock:
             self._present_set    = set()
             self._scan_log       = {}
+            self._scan_status    = {}
             self._pending_counts = {}
             self._latest_frame   = None
             self._face_boxes     = []
@@ -392,10 +402,14 @@ class FaceRecognizer:
                     with self._lock:
                         if name not in self._present_set:
                             self._present_set.add(name)
-                            ts = time.time()
-                            self._scan_log[name] = ts
+                            ts     = time.time()
+                            elapsed = (_dt.now() - self._session_start).total_seconds() / 60
+                            status  = "Late" if elapsed > self._late_minutes else "Present"
+                            self._scan_log[name]    = ts
+                            self._scan_status[name] = status
                             ts_str = _dt.fromtimestamp(ts).strftime("%H:%M:%S")
-                            print(f"[DETECT] ✓ Confirmed: {name} (score={score:.3f})")
+                            print(f"[DETECT] ✓ Confirmed: {name} → {status} "
+                                  f"({elapsed:.1f} min, score={score:.3f})")
                             self._cloud_sync(name, ts_str)
                 else:
                     print(f"[DETECT] Pending: {name} ({count}/{CONFIRM_FRAMES}, score={score:.3f})")

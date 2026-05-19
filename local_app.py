@@ -257,7 +257,11 @@ def _load_class_faces_bg(class_code, session_meta):
         known_enc, known_names = enc_list, name_list
         _current_class_code    = class_code
         recognizer             = FaceRecognizer(known_enc, known_names, app)
-        recognizer.set_session(email, class_code, section, subject)
+        recognizer.set_session(
+            email, class_code, section, subject,
+            late_minutes   = session_meta.get("late_minutes", 15),
+            session_start  = session_meta.get("session_start"),
+        )
         recognizer.start(source)
         _camera_active = True
         print(f"[CAMERA] Started — {len(known_names)} embedding(s) for {class_code}")
@@ -1148,10 +1152,11 @@ def api_local_start_camera():
     source_raw = data.get("source", "0")
     source     = int(source_raw) if str(source_raw) in ("0", "1") else source_raw
 
-    class_code = data.get("class_code", "")
-    section    = data.get("section", "")
-    subject    = data.get("subject", "")
-    email      = request.headers.get("X-Instructor-Email", "")
+    class_code   = data.get("class_code", "")
+    section      = data.get("section", "")
+    subject      = data.get("subject", "")
+    email        = request.headers.get("X-Instructor-Email", "")
+    late_minutes = int(data.get("late_minutes", 15))  # instructor-chosen grace period
 
     if not class_code:
         return jsonify({"error": "class_code required"}), 400
@@ -1168,11 +1173,14 @@ def api_local_start_camera():
     with _load_lock:
         _load_progress = {"loaded": 0, "total": total, "done": False, "error": None}
 
+    from datetime import datetime as _dt
     session_meta = {
-        "source":  source,
-        "email":   email,
-        "section": section,
-        "subject": subject,
+        "source":        source,
+        "email":         email,
+        "section":       section,
+        "subject":       subject,
+        "late_minutes":  late_minutes,
+        "session_start": _dt.now(),   # clock starts NOW, not after encoding
     }
 
     threading.Thread(
