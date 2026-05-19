@@ -37,9 +37,7 @@ import urllib.request
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.enums import TA_CENTER, TA_LEFT
 
-# ── OUTPUT DIR ───────────────────────────────────────────────────────────────
-PDF_DIR  = "pdf"
-os.makedirs(PDF_DIR, exist_ok=True)
+# PDF is generated in-memory (BytesIO) — no disk writes needed on Render
 
 # ── COLOURS ──────────────────────────────────────────────────────────────────
 BLACK      = colors.black
@@ -118,10 +116,10 @@ def generate_attendance_pdf(class_id, subject, section, room, date,
         records = []
 
     filename = f"Log_{_safe(date)}_{_safe(session_time or 'session')}_{_safe(section)}.pdf"
-    filepath  = os.path.join(PDF_DIR, filename)
+    buf      = BytesIO()
 
     doc = SimpleDocTemplate(
-        filepath,
+        buf,
         pagesize=(PAGE_W, PAGE_H),
         leftMargin=LEFT_M,  rightMargin=RIGHT_M,
         topMargin=TOP_M,    bottomMargin=BOTTOM_M,
@@ -433,5 +431,6 @@ def _sig_cell(sig_path, status, sig_col, norm9c_style):
 
     # ── BUILD ────────────────────────────────────────────────────────────────
     doc.build(story)
-    print(f"[PDF] Saved: {filepath}")
-    return filepath
+    buf.seek(0)
+    print(f"[PDF] Generated in-memory: {filename}")
+    return buf, filename
