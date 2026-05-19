@@ -585,24 +585,34 @@ function initCharts(data = []) {
         const color = getColor(pct);
         if (label) label.textContent = d.name;
 
+        let _chartHovered = false;
         const centerPlugin = {
             id: `center${i}`,
+            afterEvent(chart, args) {
+                const type = args.event.type;
+                const wasHovered = _chartHovered;
+                _chartHovered = (type === 'mousemove') && chart.getElementsAtEventForMode(
+                    args.event.native, 'nearest', { intersect: true }, false
+                ).length > 0;
+                if (wasHovered !== _chartHovered) chart.draw();
+            },
             afterDraw(chart) {
                 if (chart.config.type !== 'doughnut') return;
+                if (_chartHovered) return;   // ← hide center text while tooltip is visible
                 const { ctx: c, chartArea: { top, left, width, height } } = chart;
                 const cx = left + width / 2;
                 const cy = top  + height / 2;
                 c.save();
-                c.font = 'bold 20px Inter, sans-serif';
+                c.font = 'bold 22px Inter, sans-serif';
                 c.fillStyle = '#1a1a1a';
                 c.textAlign = 'center';
                 c.textBaseline = 'middle';
-                c.fillText(pct + '%', cx, cy - 7);
-                c.font = '600 7.5px Inter, sans-serif';
+                c.fillText(pct + '%', cx, cy - 10);
+                c.font = '700 7px Inter, sans-serif';
                 c.fillStyle = '#9CA3AF';
                 c.textAlign = 'center';
                 c.letterSpacing = '0.5px';
-                c.fillText('AVERAGE ABSENCE', cx, cy + 12);
+                c.fillText('AVERAGE ABSENCE', cx, cy + 13);
                 c.restore();
             }
         };
@@ -888,7 +898,10 @@ async function historyLoadDetail(class_code, date, session_time) {
         };
         const renderRows = (list, color, label) => list.length === 0
             ? '<p class="text-[10px] text-gray-300 font-bold py-2 pl-2">None</p>'
-            : list.map(r => `
+            : list.map(r => {
+                const isAbsent = label === 'Absent';
+                const timeStr  = (!isAbsent && r.timestamp) ? formatDisplayTime(r.timestamp) : '';
+                return `
                 <div class="flex items-center justify-between p-3 bg-white rounded-2xl border border-gray-100 mb-2">
                     <div>
                         <p class="text-sm font-black text-gray-900">${r.name}</p>
@@ -896,9 +909,10 @@ async function historyLoadDetail(class_code, date, session_time) {
                     </div>
                     <div class="text-right flex flex-col items-end gap-0.5">
                         <span class="text-[9px] font-black px-2 py-0.5 rounded-lg uppercase ${statusBadge(label)}">${label}</span>
-                        <p class="text-[9px] text-gray-400">${r.timestamp ? formatDisplayTime(r.timestamp) : '—'}</p>
+                        ${timeStr ? `<p class="text-[9px] font-bold text-gray-500">${timeStr}</p>` : ''}
                     </div>
-                </div>`).join('');
+                </div>`;
+            }).join('');
 
         panel.innerHTML = `
             <div class="flex justify-between items-start mb-6">
