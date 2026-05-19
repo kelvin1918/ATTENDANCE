@@ -637,11 +637,15 @@ def api_download_pdf(class_code, date):
     room         = schedules[0]["room"] if schedules else "TBA"
     time_str     = schedules[0]["time"] if schedules else ""
 
-    # Get faculty name — use stored name, fall back to email parse only if name is blank
+    # Get faculty name — name is stored as typed in registration (may be "Kelvinlloydafrica")
+    # If it has no spaces, reformat from email for a readable display name
     instructor   = db.get_instructor_by_id(cls["instructor_id"]) if cls.get("instructor_id") else None
     if instructor:
-        faculty_name = instructor["name"].strip() if instructor["name"].strip() \
-                       else instructor["email"].split("@")[0].replace(".", " ").replace("_", " ").title()
+        raw_name = (instructor.get("name") or "").strip()
+        if not raw_name or " " not in raw_name:
+            # Fall back to email-based split for single-word names
+            raw_name = instructor["email"].split("@")[0].replace(".", " ").replace("_", " ")
+        faculty_name = raw_name.title()
     else:
         faculty_name = "Instructor"
 
@@ -691,9 +695,9 @@ def api_download_pdf(class_code, date):
     for w in warmers: w.start()
     for w in warmers: w.join(timeout=15)   # wait up to 15s for all prefetches
 
-    # ── Generate PDF ─────────────────────────────────────────────────────────
+    # ── Generate PDF in-memory — safe on Render (no ephemeral disk writes) ──
     try:
-        filepath = generate_attendance_pdf(
+        pdf_buf, pdf_name = generate_attendance_pdf(
             class_id     = class_code,
             subject      = cls["subject"],
             section      = cls["section"],
@@ -710,9 +714,9 @@ def api_download_pdf(class_code, date):
         return jsonify({"error": f"PDF generation failed: {pdf_err}"}), 500
 
     return send_file(
-        filepath,
+        pdf_buf,
         as_attachment = True,
-        download_name = os.path.basename(filepath),
+        download_name = pdf_name,
         mimetype      = "application/pdf"
     )
 

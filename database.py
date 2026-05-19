@@ -1014,7 +1014,7 @@ def delete_schedule(schedule_id):
 
 def get_all_instructors():
     conn = get_db(); cur = get_cursor(conn)
-    cur.execute("SELECT id, email, status FROM instructors ORDER BY id")
+    cur.execute("SELECT id, name, email, status FROM instructors ORDER BY id")
     rows = cur.fetchall(); cur.close(); conn.close()
     return rows
 
