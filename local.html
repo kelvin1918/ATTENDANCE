@@ -1780,7 +1780,9 @@ function renderPresentList(present, scanLog) {
     return;
   }
   list.innerHTML = present.map(name => {
-    const ts   = scanLog[name] ? new Date(scanLog[name]*1000)
+    const raw  = scanLog[name];
+    const unix = raw && typeof raw === 'object' ? raw.ts : raw;
+    const ts   = unix ? new Date(unix*1000)
       .toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit'}) : '';
     const init = name.charAt(0).toUpperCase();
     const disp = name.replace(/_/g,' ');

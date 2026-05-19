@@ -593,15 +593,16 @@ function initCharts(data = []) {
                 const cx = left + width / 2;
                 const cy = top  + height / 2;
                 c.save();
-                c.font = 'bold 22px Inter, sans-serif';
+                c.font = 'bold 20px Inter, sans-serif';
                 c.fillStyle = '#1a1a1a';
                 c.textAlign = 'center';
                 c.textBaseline = 'middle';
-                c.fillText(pct + '%', cx, cy - 9);
-                c.font = '700 8px Inter, sans-serif';
+                c.fillText(pct + '%', cx, cy - 7);
+                c.font = '600 7.5px Inter, sans-serif';
                 c.fillStyle = '#9CA3AF';
                 c.textAlign = 'center';
-                c.fillText('AVERAGE ABSENCE', cx, cy + 11);
+                c.letterSpacing = '0.5px';
+                c.fillText('AVERAGE ABSENCE', cx, cy + 12);
                 c.restore();
             }
         };
@@ -831,7 +832,7 @@ async function historyLoadFiles(class_code) {
             const ap  = d.getHours() >= 12 ? 'PM' : 'AM';
             return `${String(h12).padStart(2,'0')}-${mm}-${ss}${ap}`;
         })() : '';
-        const fileLabel = `Log_${_hMo}-${_hDy}-${_hYr}${_hT ? '_'+_hT : ''}_Report.pdf`;
+        const fileLabel = `${_hMo}-${_hDy}-${_hYr}${_hT ? '_'+_hT : ''}_Report.pdf`;
 
         // Display time in 12-hour format for subtitle
         const dispTime = s.session_time
@@ -1321,7 +1322,12 @@ function renderFolderView(cls, class_code, students) {
         </div>
 
         <div class="bg-white p-6 rounded-[2rem] border border-gray-100 shadow-sm">
-            <h3 class="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-4">Class List</h3>
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-[10px] font-black text-gray-400 uppercase tracking-widest">Class List</h3>
+                <span class="text-[10px] font-black text-gray-400 uppercase tracking-widest">
+                    ${filtered.length} / ${students.length} student${students.length !== 1 ? 's' : ''}
+                </span>
+            </div>
             <div id="studentListArea" class="space-y-4">
                 ${filtered.length === 0 && students.length === 0 ? `
                     <div class="text-center py-20 border-2 border-dashed border-gray-100 rounded-[2rem]">
@@ -1670,7 +1676,28 @@ function editFolder(class_code) {
     const f = classFolders.find(f => f.id === class_code);
     if (!f) return;
     editIdx = classFolders.indexOf(f);
-    document.getElementById('modalSubject').value = f.subject;
+
+    // Populate dropdown first — same as openFolderModal()
+    populateSubjectSuggestions();
+
+    // Try to pre-select the matching schedule by subject name
+    const subjectSelect = document.getElementById('modalSubject');
+    let matched = false;
+    for (const opt of subjectSelect.options) {
+        if (opt.dataset.subject && opt.dataset.subject.toLowerCase() === f.subject.toLowerCase()) {
+            subjectSelect.value = opt.value;
+            // Trigger autofill so modalSubjectName gets set
+            autoFillClassModal(opt.value);
+            matched = true;
+            break;
+        }
+    }
+    // If no schedule match, fall back to showing the raw subject name
+    if (!matched) {
+        subjectSelect.value = '';
+        document.getElementById('modalSubjectName').value = f.subject;
+    }
+
     document.getElementById('modalSection').value = f.section;
     document.getElementById('modalYear').value    = f.course_code;
     document.getElementById('classModal').classList.remove('hidden');
