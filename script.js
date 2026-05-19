@@ -900,16 +900,24 @@ async function historyLoadDetail(class_code, date, session_time) {
             ? '<p class="text-[10px] text-gray-300 font-bold py-2 pl-2">None</p>'
             : list.map(r => {
                 const isAbsent = label === 'Absent';
-                const timeStr  = (!isAbsent && r.timestamp) ? formatDisplayTime(r.timestamp) : '';
+                // Absent: never show time (not detected). Present/Late: show detected time.
+                let timeStr = '';
+                if (!isAbsent && r.timestamp) {
+                    const formatted = formatDisplayTime(r.timestamp);
+                    timeStr = (formatted && formatted !== '\u2014') ? formatted : '';
+                }
                 return `
                 <div class="flex items-center justify-between p-3 bg-white rounded-2xl border border-gray-100 mb-2">
                     <div>
                         <p class="text-sm font-black text-gray-900">${r.name}</p>
                         <p class="text-[9px] text-gray-400 font-bold">${r.sr_code || ''}</p>
                     </div>
-                    <div class="text-right flex flex-col items-end gap-0.5">
+                    <div class="text-right flex flex-col items-end gap-1">
                         <span class="text-[9px] font-black px-2 py-0.5 rounded-lg uppercase ${statusBadge(label)}">${label}</span>
-                        ${timeStr ? `<p class="text-[9px] font-bold text-gray-500">${timeStr}</p>` : ''}
+                        ${isAbsent ? '' : timeStr
+                            ? `<span class="inline-flex items-center gap-1 text-[9px] font-bold text-gray-500"><svg xmlns='http://www.w3.org/2000/svg' width='9' height='9' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><circle cx='12' cy='12' r='10'/><polyline points='12 6 12 12 16 14'/></svg>${timeStr}</span>`
+                            : `<span class="text-[9px] text-gray-300 font-bold italic">no time recorded</span>`
+                        }
                     </div>
                 </div>`;
             }).join('');
