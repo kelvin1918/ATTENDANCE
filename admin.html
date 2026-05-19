@@ -548,6 +548,15 @@
                     <div class="user-role">System Admin</div>
                 </div>
             </div>
+            <button onclick="openRecoveryEmailModal()"
+                    style="width:100%;background:none;border:1px solid #E5E7EB;border-radius:8px;
+                           padding:8px 12px;cursor:pointer;font-size:0.75rem;font-weight:600;
+                           color:#6B7280;margin-bottom:8px;display:flex;align-items:center;gap:8px;
+                           transition:all 0.2s;"
+                    onmouseover="this.style.borderColor='var(--red)';this.style.color='var(--red)'"
+                    onmouseout="this.style.borderColor='#E5E7EB';this.style.color='#6B7280'">
+                <i data-lucide="mail" style="width:14px;height:14px;"></i> Recovery Email
+            </button>
             <button class="btn-signout" onclick="handleSignOut()">
                 <i data-lucide="log-out"></i> Sign Out
             </button>
@@ -868,7 +877,7 @@
     // ── VERIFY SESSION ON LOAD ────────────────────────────────────────────────
     (async () => {
         try {
-            const res = await fetch('/api/admin/verify_session');
+            const res = await fetch('/api/admin/verify_session', {credentials:'include'});
             if (res.ok) {
                 // Already logged in — skip login overlay
                 _showAdminDashboard();
@@ -883,6 +892,9 @@
     function _showAdminDashboard() {
         document.getElementById('login-overlay').classList.add('hidden');
         document.getElementById('login-overlay').style.display = 'none';
+
+        // Push a history state so the back button hits popstate instead of going to portal
+        history.pushState({ adminLoggedIn: true }, '', window.location.href);
 
         const loadEl = document.getElementById('loading-overlay');
         loadEl.classList.remove('hidden');
@@ -900,6 +912,15 @@
         }, 800);
     }
 
+    // Back button intercept — if admin is logged in, push another state instead of navigating away
+    window.addEventListener('popstate', function(e) {
+        const mainVisible = !document.getElementById('main-content').classList.contains('hidden');
+        if (mainVisible) {
+            // Push state again so back button never leaves the dashboard
+            history.pushState({ adminLoggedIn: true }, '', window.location.href);
+        }
+    });
+
     // ── LOGIN ─────────────────────────────────────────────────────────────────
     async function adminLogin() {
         const username = document.getElementById('adm-username').value.trim();
@@ -912,6 +933,7 @@
         try {
             const res  = await fetch('/api/admin/login', {
                 method: 'POST',
+                credentials: 'include',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ username, password: pass })
             });
@@ -928,7 +950,7 @@
     // ── SIGN OUT ──────────────────────────────────────────────────────────────
     async function handleSignOut() {
         openModal("Sign Out", "Are you sure you want to end your session?", async () => {
-            await fetch('/api/admin/logout', { method: 'POST' });
+            await fetch('/api/admin/logout', { method: 'POST', credentials: 'include' });
             location.reload();
         });
     }
@@ -939,7 +961,7 @@
         const btn   = document.getElementById('adm-send-otp-btn');
         btn.disabled = true; btn.textContent = 'Sending…';
         try {
-            const res  = await fetch('/api/admin/send_otp', { method: 'POST' });
+            const res  = await fetch('/api/admin/send_otp', { method: 'POST', credentials: 'include' });
             const data = await res.json();
             if (!res.ok) { errEl.textContent = data.error || 'Failed to send OTP.'; return; }
             if (data.warn) { errEl.style.color = '#D97706'; errEl.textContent = data.warn; }
@@ -967,6 +989,7 @@
         try {
             const res  = await fetch('/api/admin/verify_otp', {
                 method: 'POST',
+                credentials: 'include',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ otp })
             });
@@ -993,6 +1016,7 @@
         try {
             const res  = await fetch('/api/admin/reset_password', {
                 method: 'POST',
+                credentials: 'include',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ password: p1 })
             });
@@ -1240,7 +1264,7 @@
         tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:24px;color:#9CA3AF;">Loading…</td></tr>';
 
         try {
-            const res  = await fetch('/api/admin/activity');
+            const res  = await fetch('/api/admin/activity', {credentials:'include'});
             if (!res.ok) { tbody.innerHTML = '<tr><td colspan="7">Unauthorized</td></tr>'; return; }
             const data = await res.json();
 
@@ -1317,7 +1341,7 @@
         detail.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
         try {
-            const res  = await fetch(`/api/admin/activity/${instructorId}`);
+            const res  = await fetch(`/api/admin/activity/${instructorId}`, {credentials:'include'});
             const rows = await res.json();
             if (!rows.length) {
                 tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:16px;color:#9CA3AF;">No sessions recorded yet.</td></tr>';
@@ -1341,5 +1365,29 @@
         document.getElementById('activity-detail').classList.add('hidden');
     }
 </script>
+
+<!-- ── RECOVERY EMAIL MODAL ──────────────────────────────────────────────── -->
+<div id="recovery-email-modal" class="modal-overlay hidden">
+    <div class="modal-box" style="max-width:420px;">
+        <h3 style="margin-bottom:6px;">Recovery Email</h3>
+        <p style="font-size:0.8rem;color:#6B7280;margin-bottom:16px;">
+            This email receives the OTP when you use "Forgot Password" on the admin login.
+            Set it to an email you can access.
+        </p>
+        <div class="form-group">
+            <label class="form-label">Recovery Email Address</label>
+            <input id="recovery-email-input" type="email" class="form-input"
+                   placeholder="e.g. kelvinlloydafrica@gmail.com">
+        </div>
+        <div id="recovery-email-err"
+             style="font-size:0.8rem;min-height:18px;margin-bottom:8px;text-align:center;"></div>
+        <div class="modal-actions">
+            <button class="btn-cancel" onclick="closeRecoveryEmailModal()">Cancel</button>
+            <button class="btn-confirm" id="recovery-email-save-btn"
+                    onclick="saveRecoveryEmail()">Save</button>
+        </div>
+    </div>
+</div>
+
 </body>
 </html>

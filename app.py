@@ -1119,7 +1119,10 @@ def login_page():
 
 @app.route("/admin")
 def admin_page():
-    return send_file("admin.html")
+    resp = make_response(send_file("admin.html"))
+    resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
+    resp.headers["Pragma"] = "no-cache"
+    return resp
 
 # ════════════════════════════════════════════════════════════════════════════════
 # RUN
@@ -1510,6 +1513,16 @@ def api_admin_set_recovery_email():
         return jsonify({"error": "Valid email required."}), 400
     db.update_admin_recovery_email(email)
     return jsonify({"status": "ok"})
+
+
+@app.route("/api/admin/get_recovery_email")
+def api_admin_get_recovery_email():
+    """Return current recovery email so the modal can pre-fill it."""
+    token = _get_admin_token(request)
+    if not db.verify_admin_session_token(token):
+        return jsonify({"error": "Unauthorized."}), 401
+    admin = db.get_admin_account()
+    return jsonify({"email": admin["recovery_email"] if admin else ""})
 
 
 # ── ADMIN ACTIVITY MONITOR ────────────────────────────────────────────────────
