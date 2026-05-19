@@ -1391,7 +1391,11 @@ def api_delete_room(room_id):
 # ════════════════════════════════════════════════════════════════════════════════
 
 def _get_admin_token(req):
-    """Extract admin session token from HttpOnly cookie."""
+    """Extract admin session token from cookie OR X-Admin-Token header.
+    Header takes priority — more reliable across Render/HTTPS environments."""
+    header_token = req.headers.get("X-Admin-Token", "").strip()
+    if header_token:
+        return header_token
     return req.cookies.get("admin_session_token", "")
 
 
@@ -1411,10 +1415,10 @@ def api_admin_login():
         return jsonify({"error": "Invalid credentials."}), 401
 
     token = db.create_admin_session_token()
-    resp  = make_response(jsonify({"status": "ok"}))
+    resp  = make_response(jsonify({"status": "ok", "token": token}))
     resp.set_cookie(
         "admin_session_token", token,
-        httponly=True, samesite="Lax",
+        httponly=False, samesite="Lax",
         max_age=8 * 3600      # 8 hours
     )
     return resp

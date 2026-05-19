@@ -877,14 +877,14 @@
     // ── VERIFY SESSION ON LOAD ────────────────────────────────────────────────
     (async () => {
         try {
-            const res = await fetch('/api/admin/verify_session', {credentials:'include'});
+            const res = await _admFetch('/api/admin/verify_session');
             if (res.ok) {
-                // Already logged in — skip login overlay
                 _showAdminDashboard();
                 return;
             }
         } catch {}
-        // Not logged in — show login
+        // Clear any stale token
+        sessionStorage.removeItem('admin_token');
         showAdmStep('credentials');
         lucide.createIcons();
     })();
@@ -921,6 +921,19 @@
         }
     });
 
+    // ── TOKEN HELPER — stored in sessionStorage, sent as header ─────────────
+    function _admToken() { return sessionStorage.getItem('admin_token') || ''; }
+    function _admHdr(extra) {
+        return Object.assign({ 'Content-Type': 'application/json',
+                                'X-Admin-Token': _admToken() }, extra || {});
+    }
+    function _admFetch(url, opts) {
+        opts = opts || {};
+        opts.credentials = 'include';
+        opts.headers = _admHdr(opts.headers);
+        return fetch(url, opts);
+    }
+
     // ── LOGIN ─────────────────────────────────────────────────────────────────
     async function adminLogin() {
         const username = document.getElementById('adm-username').value.trim();
@@ -939,6 +952,8 @@
             });
             const data = await res.json();
             if (!res.ok) { errEl.textContent = data.error || 'Invalid credentials.'; return; }
+            // Store token in sessionStorage for reliable header-based auth
+            if (data.token) sessionStorage.setItem('admin_token', data.token);
             _showAdminDashboard();
         } catch { errEl.textContent = 'Network error. Try again.'; }
         finally   { btn.disabled = false; btn.textContent = 'Sign In'; }
@@ -950,7 +965,8 @@
     // ── SIGN OUT ──────────────────────────────────────────────────────────────
     async function handleSignOut() {
         openModal("Sign Out", "Are you sure you want to end your session?", async () => {
-            await fetch('/api/admin/logout', { method: 'POST', credentials: 'include' });
+            await _admFetch('/api/admin/logout', { method: 'POST' });
+            sessionStorage.removeItem('admin_token');
             location.reload();
         });
     }
@@ -961,7 +977,7 @@
         const btn   = document.getElementById('adm-send-otp-btn');
         btn.disabled = true; btn.textContent = 'Sending…';
         try {
-            const res  = await fetch('/api/admin/send_otp', { method: 'POST', credentials: 'include' });
+            const res  = await _admFetch('/api/admin/send_otp', { method: 'POST' });
             const data = await res.json();
             if (!res.ok) { errEl.textContent = data.error || 'Failed to send OTP.'; return; }
             if (data.warn) { errEl.style.color = '#D97706'; errEl.textContent = data.warn; }
@@ -987,10 +1003,9 @@
 
         btn.disabled = true; btn.textContent = 'Verifying…';
         try {
-            const res  = await fetch('/api/admin/verify_otp', {
+            const res  = await _admFetch('/api/admin/verify_otp', {
                 method: 'POST',
-                credentials: 'include',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {},
                 body: JSON.stringify({ otp })
             });
             const data = await res.json();
@@ -1014,10 +1029,9 @@
 
         btn.disabled = true; btn.textContent = 'Saving…';
         try {
-            const res  = await fetch('/api/admin/reset_password', {
+            const res  = await _admFetch('/api/admin/reset_password', {
                 method: 'POST',
-                credentials: 'include',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {},
                 body: JSON.stringify({ password: p1 })
             });
             const data = await res.json();
@@ -1264,7 +1278,7 @@
         tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:24px;color:#9CA3AF;">Loading…</td></tr>';
 
         try {
-            const res  = await fetch('/api/admin/activity', {credentials:'include'});
+            const res  = await _admFetch('/api/admin/activity');
             if (!res.ok) { tbody.innerHTML = '<tr><td colspan="7">Unauthorized</td></tr>'; return; }
             const data = await res.json();
 
@@ -1341,7 +1355,7 @@
         detail.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
         try {
-            const res  = await fetch(`/api/admin/activity/${instructorId}`, {credentials:'include'});
+            const res  = await _admFetch(`/api/admin/activity/${instructorId}`);
             const rows = await res.json();
             if (!rows.length) {
                 tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:16px;color:#9CA3AF;">No sessions recorded yet.</td></tr>';
