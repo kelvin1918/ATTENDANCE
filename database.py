@@ -1312,7 +1312,7 @@ def get_instructor_activity_summary():
         LEFT JOIN classes  c ON c.instructor_id = i.id
         LEFT JOIN attendance a ON a.class_code = c.id
                                AND a.session_time != 'LIVE'
-        LEFT JOIN students s ON s.class_id = c.id
+        LEFT JOIN students s ON s.class_code = c.id
         GROUP BY i.id, i.name, i.email, i.status
         ORDER BY last_active DESC NULLS LAST, i.name
     """)
