@@ -1359,12 +1359,6 @@ function renderFolderView(cls, class_code, students) {
                             </div>
                         </div>
                         <div class="flex items-center space-x-3">
-                            <select onchange="updateStudentStatus(${s.id}, this.value)"
-                                class="text-[10px] font-black uppercase bg-white border border-gray-100 rounded-lg p-2 focus:outline-none focus:ring-1 focus:ring-red-200">
-                                <option value="Enrolled"   ${(s.status||'Enrolled') === 'Enrolled'   ? 'selected' : ''}>Enrolled</option>
-                                <option value="Unenrolled" ${(s.status||'Enrolled') === 'Unenrolled' ? 'selected' : ''}>Unenrolled</option>
-                                <option value="Dropped"    ${(s.status||'Enrolled') === 'Dropped'    ? 'selected' : ''}>Dropped</option>
-                            </select>
                             <button onclick="sendAttendanceEmail(${s.id}, '${encodeURIComponent(s.name)}', '${encodeURIComponent(s.email||'')}', '${encodeURIComponent(currentOpenedFolder)}')"
                                 class="p-2 bg-white text-gray-500 hover:text-[#D32F2F] rounded-lg border border-gray-100 shadow-sm transition flex items-center justify-center"
                                 title="Email student">
