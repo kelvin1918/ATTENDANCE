@@ -620,7 +620,8 @@ def delete_student(student_db_id):
 
     # Fetch file paths BEFORE deleting so the caller can clean up
     cur.execute(
-        "SELECT name, class_code, sr_code, photo, signature FROM students WHERE id = %s",
+        "SELECT name, class_code, sr_code, photo, photo_front, photo_left, "
+        "photo_right, photo_up, signature FROM students WHERE id = %s",
         (student_db_id,)
     )
     student = cur.fetchone()

@@ -15,6 +15,7 @@ Then open:
 """
 
 import os
+import re
 import shutil
 import smtplib
 import secrets
@@ -76,6 +77,36 @@ def _configure_cloudinary():
         return None, "CLOUDINARY_API_SECRET is not set in Render environment."
     cloudinary.config(cloud_name=name, api_key=key, api_secret=secret, secure=True)
     return cloudinary.uploader, None
+
+
+def _cloudinary_public_id(url: str):
+    """Extract public_id from a Cloudinary secure URL, or return None."""
+    if not url or "cloudinary.com" not in url:
+        return None
+    try:
+        after_upload = url.split("/upload/", 1)[1]
+        after_upload = re.sub(r'^v\d+/', '', after_upload)
+        return after_upload.rsplit('.', 1)[0]
+    except Exception:
+        return None
+
+
+def _delete_cloudinary_assets(urls: list):
+    """Delete a list of Cloudinary assets by their URLs. Skips blanks/non-CLD URLs."""
+    cld_up, err = _configure_cloudinary()
+    if not cld_up:
+        print(f"[CLD-DELETE] Cloudinary unavailable: {err}")
+        return
+    for url in urls:
+        pid = _cloudinary_public_id(url)
+        if not pid:
+            continue
+        try:
+            cld_up.destroy(pid)
+            print(f"[CLD-DELETE] Deleted {pid}")
+        except Exception as ex:
+            print(f"[CLD-DELETE] Failed to delete {pid}: {ex}")
+
 
 # ── APP SETUP ─────────────────────────────────────────────────────────────────
 
@@ -226,6 +257,10 @@ def api_edit_class(class_code):
 
 @app.route("/api/delete_class/<class_code>", methods=["DELETE"])
 def api_delete_class(class_code):
+    photo_cols = ("photo", "photo_front", "photo_left", "photo_right", "photo_up", "signature")
+    students = db.get_students(class_code)
+    urls = [s[col] for s in students for col in photo_cols if s.get(col)]
+    _delete_cloudinary_assets(urls)
     db.delete_class(class_code)
     return jsonify({"status": "ok"})
 
@@ -311,7 +346,11 @@ def api_edit_student(student_id):
 
 @app.route("/api/delete_student/<int:student_id>", methods=["DELETE"])
 def api_delete_student(student_id):
-    db.delete_student(student_id)
+    student = db.delete_student(student_id)
+    if student:
+        photo_cols = ("photo", "photo_front", "photo_left", "photo_right", "photo_up", "signature")
+        urls = [student[col] for col in photo_cols if student.get(col)]
+        _delete_cloudinary_assets(urls)
     return jsonify({"status": "ok"})
 
 
