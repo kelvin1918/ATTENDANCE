@@ -537,7 +537,14 @@ def add_student(class_code, name, address, number,
            (class_code, name, address, number,
             sr_code, age, sex, email, photo, signature,
             photo_front, photo_left, photo_right, photo_up, approval_status)
-           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+           ON CONFLICT (class_code, sr_code) DO UPDATE SET
+             name=EXCLUDED.name, address=EXCLUDED.address, number=EXCLUDED.number,
+             age=EXCLUDED.age, sex=EXCLUDED.sex, email=EXCLUDED.email,
+             photo=EXCLUDED.photo, signature=EXCLUDED.signature,
+             photo_front=EXCLUDED.photo_front, photo_left=EXCLUDED.photo_left,
+             photo_right=EXCLUDED.photo_right, photo_up=EXCLUDED.photo_up,
+             approval_status=EXCLUDED.approval_status""",
         (class_code, name, address, number,
          sr_code, age, sex, email, photo, signature,
          photo_front, photo_left, photo_right, photo_up, approval_status)

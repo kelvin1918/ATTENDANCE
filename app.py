@@ -2112,8 +2112,10 @@ def api_registration_submit():
         print(f"[SELF-REG] ✓ {name} pending approval for {class_code}")
         return jsonify({"status": "ok", "name": name})
     except Exception as e:
+        import traceback
         print(f"[SELF-REG] ✗ DB error: {e}")
-        return jsonify({"error": "Failed to save registration. Please try again."}), 500
+        traceback.print_exc()
+        return jsonify({"error": f"Failed to save registration: {e}"}), 500
 
 
 
