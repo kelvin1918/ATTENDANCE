@@ -174,6 +174,7 @@ def init_db():
     """)
     cur.execute("ALTER TABLE students ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'Enrolled';")
     cur.execute("ALTER TABLE students ADD COLUMN IF NOT EXISTS photo_front TEXT DEFAULT '';")
+    cur.execute("ALTER TABLE students ADD COLUMN IF NOT EXISTS approval_status VARCHAR(20) DEFAULT 'Approved';")
     cur.execute("ALTER TABLE students ADD COLUMN IF NOT EXISTS photo_left  TEXT DEFAULT '';")
     cur.execute("ALTER TABLE students ADD COLUMN IF NOT EXISTS photo_right TEXT DEFAULT '';")
     cur.execute("ALTER TABLE students ADD COLUMN IF NOT EXISTS photo_up    TEXT DEFAULT '';")
@@ -1418,5 +1419,37 @@ def delete_registration_token(token: str):
     conn = get_db()
     cur  = get_cursor(conn)
     cur.execute("DELETE FROM registration_tokens WHERE token = %s", (token,))
+    conn.commit()
+    cur.close(); conn.close()
+
+def get_pending_students(instructor_id):
+    """Return all students with approval_status='Pending' for this instructor's classes."""
+    conn = get_db()
+    cur  = get_cursor(conn)
+    cur.execute(
+        """SELECT s.id, s.class_code, s.name, s.sr_code, s.email, s.sex,
+                  s.photo, s.photo_front, s.photo_left, s.photo_right, s.photo_up,
+                  s.signature, s.approval_status, s.created_at,
+                  c.subject, c.section, c.course_code
+           FROM students s
+           JOIN classes c ON c.id = s.class_code
+           WHERE c.instructor_id = %s
+             AND s.approval_status = 'Pending'
+           ORDER BY s.created_at DESC""",
+        (instructor_id,)
+    )
+    rows = cur.fetchall()
+    cur.close(); conn.close()
+    return [dict(r) for r in rows]
+
+
+def set_student_approval(student_id, status):
+    """Set approval_status to 'Approved' or 'Rejected' for a student."""
+    conn = get_db()
+    cur  = get_cursor(conn)
+    cur.execute(
+        "UPDATE students SET approval_status=%s WHERE id=%s",
+        (status, student_id)
+    )
     conn.commit()
     cur.close(); conn.close()

@@ -1277,6 +1277,7 @@ async function openFolderView(class_code) {
     } catch {}
 
     renderFolderView(cls, class_code, students);
+  refreshPendingCount();
 }
 
 function renderFolderView(cls, class_code, students) {
@@ -1303,6 +1304,13 @@ function renderFolderView(cls, class_code, students) {
                     title="Generate a link students can open to register themselves">
                     <i data-lucide="link" class="w-4 h-4"></i>
                     <span>Student Link</span>
+                </button>
+                <button onclick="openPendingApprovals()" id="pendingApprovalsBtn"
+                    class="relative bg-amber-50 text-amber-700 px-5 py-4 rounded-2xl text-[10px] font-black uppercase hover:bg-amber-100 transition flex items-center space-x-2"
+                    title="Review and approve pending student registrations">
+                    <i data-lucide="user-check" class="w-4 h-4"></i>
+                    <span>Approvals</span>
+                    <span id="pendingCount" style="display:none" class="absolute -top-1 -right-1 bg-red-500 text-white text-[9px] font-black w-5 h-5 rounded-full flex items-center justify-center"></span>
                 </button>
                 ${isLocalEnvironment()
                     ? `<button onclick="openRegModal()" class="bg-gray-100 text-gray-600 px-8 py-4 rounded-2xl text-[10px] font-black uppercase hover:bg-gray-200 transition">Registration</button>`
@@ -1760,14 +1768,125 @@ async function shareRegistrationLink(classCode) {
           </button>
         </div>
         <p style="font-size:.75rem;color:#9CA3AF;margin-top:12px;text-align:center">
-          After students submit, their photos will sync to the Local Station automatically on next login.
+          After students submit, you will receive a notification to review and approve them.<br>
+          Approved students sync to the Local Station automatically on next login.
         </p>
+        <button onclick="this.closest('[style*=fixed]').remove();openPendingApprovals()"
+          style="width:100%;padding:11px;margin-top:10px;background:#FEF2F2;color:#D32F2F;
+                  border:2px solid #D32F2F;border-radius:10px;font-weight:700;
+                  cursor:pointer;font-size:.85rem">
+          View Pending Approvals
+        </button>
       </div>`;
     document.body.appendChild(modal);
     modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
 
   } catch {
     showToast('Network error. Please try again.', 'error');
+  }
+}
+
+// ── PENDING APPROVALS ────────────────────────────────────────────────────────
+
+async function refreshPendingCount() {
+  try {
+    const res  = await fetch('/api/registration/pending');
+    const data = await res.json();
+    if (!res.ok) return;
+    const count = (data.students || []).length;
+    const badge = document.getElementById('pendingCount');
+    const btn   = document.getElementById('pendingApprovalsBtn');
+    if (badge) {
+      badge.textContent = count > 9 ? '9+' : count;
+      badge.style.display = count > 0 ? 'flex' : 'none';
+    }
+    if (btn) {
+      btn.style.background = count > 0 ? '#FEF3C7' : '';
+      btn.style.color      = count > 0 ? '#B45309' : '';
+    }
+  } catch {}
+}
+
+async function openPendingApprovals() {
+  try {
+    const res  = await fetch('/api/registration/pending');
+    const data = await res.json();
+    if (!res.ok) { showToast(data.error || 'Failed to load.', 'error'); return; }
+    const students = data.students || [];
+    const emptyHtml = `<div style="text-align:center;padding:40px 20px">
+      <div style="font-size:2.5rem;margin-bottom:12px">✅</div>
+      <p style="color:#374151;font-weight:700">No pending registrations</p>
+      <p style="color:#9CA3AF;font-size:.85rem;margin-top:4px">All student registrations have been reviewed.</p>
+    </div>`;
+    const listHtml = students.length === 0 ? emptyHtml : students.map(s => `
+      <div id="pending-row-${s.id}" style="border:1px solid #E5E7EB;border-radius:14px;padding:16px;margin-bottom:12px;background:#fff">
+        <div style="display:flex;gap:12px;align-items:flex-start">
+          <img src="${s.photo_front || s.photo || ''}" onerror="this.src=''"
+               style="width:64px;height:64px;object-fit:cover;border-radius:10px;border:2px solid #E5E7EB;flex-shrink:0;background:#f3f4f6">
+          <div style="flex:1;min-width:0">
+            <p style="font-weight:800;font-size:.95rem;color:#111;margin:0 0 2px">${s.name}</p>
+            <p style="font-size:.78rem;color:#6B7280;margin:0 0 2px">${s.sr_code} · ${s.sex || ''}</p>
+            <p style="font-size:.75rem;color:#6B7280;margin:0 0 6px">${s.subject} — ${s.section}</p>
+            <div style="display:flex;gap:6px;flex-wrap:wrap">
+              ${['front','left','right','up'].map(a => s['photo_'+a]
+                ? `<img src="${s['photo_'+a]}" style="width:38px;height:38px;object-fit:cover;border-radius:6px;border:1.5px solid #22C55E" title="${a}">`
+                : `<div style="width:38px;height:38px;border-radius:6px;border:1.5px dashed #D1D5DB;display:flex;align-items:center;justify-content:center;font-size:.55rem;color:#9CA3AF;font-weight:700">${a}</div>`
+              ).join('')}
+              ${s.signature ? `<img src="${s.signature}" style="height:38px;max-width:80px;object-fit:contain;border-radius:6px;border:1.5px solid #22C55E" title="sig">` : ''}
+            </div>
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:12px">
+          <button onclick="handleApproval(${s.id},'approve')"
+            style="flex:1;padding:10px;background:#D32F2F;color:#fff;border:none;border-radius:10px;font-weight:700;cursor:pointer;font-size:.85rem">
+            ✓ Approve
+          </button>
+          <button onclick="handleApproval(${s.id},'reject')"
+            style="flex:1;padding:10px;background:#fff;color:#374151;border:2px solid #E5E7EB;border-radius:10px;font-weight:700;cursor:pointer;font-size:.85rem">
+            ✕ Reject
+          </button>
+        </div>
+      </div>`).join('');
+    const modal = document.createElement('div');
+    modal.id = 'pendingModal';
+    modal.style.cssText = `position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;z-index:9999;padding:16px`;
+    modal.innerHTML = `
+      <div style="background:#F9FAFB;border-radius:20px;width:100%;max-width:520px;max-height:88vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.25)">
+        <div style="background:#fff;border-radius:20px 20px 0 0;padding:20px 24px 16px;position:sticky;top:0;z-index:1;border-bottom:1px solid #F3F4F6">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <div>
+              <h3 style="font-size:1.1rem;font-weight:800;color:#1a1a1a;margin:0">Pending Approvals</h3>
+              <p style="font-size:.78rem;color:#6B7280;margin:2px 0 0">${students.length} student${students.length!==1?'s':''} waiting for review</p>
+            </div>
+            <button onclick="document.getElementById('pendingModal').remove()"
+              style="background:none;border:none;font-size:1.2rem;cursor:pointer;color:#999">✕</button>
+          </div>
+        </div>
+        <div style="padding:16px" id="pendingList">${listHtml}</div>
+      </div>`;
+    document.body.appendChild(modal);
+    modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+  } catch(err) {
+    showToast('Network error loading pending approvals.', 'error');
+  }
+}
+
+async function handleApproval(studentId, action) {
+  const row = document.getElementById(`pending-row-${studentId}`);
+  if (row) { row.style.opacity = '0.5'; row.style.pointerEvents = 'none'; }
+  try {
+    const res  = await fetch(`/api/registration/${action}/${studentId}`, {method:'POST'});
+    const data = await res.json();
+    if (!res.ok) { showToast(data.error || 'Failed.', 'error'); return; }
+    if (row) {
+      row.innerHTML = `<div style="text-align:center;padding:14px;color:${action==='approve'?'#22C55E':'#9CA3AF'};font-weight:700;font-size:.9rem">${action==='approve'?'✓ Approved':'✕ Rejected'}</div>`;
+      row.style.opacity = '1';
+      setTimeout(() => row.remove(), 1500);
+    }
+    showToast(action === 'approve' ? 'Student approved!' : 'Student rejected.', action === 'approve' ? 'success' : 'info');
+    if (action === 'approve') { if (currentOpenedFolder) openFolderView(currentOpenedFolder); refreshPendingCount(); }
+  } catch {
+    showToast('Network error.', 'error');
   }
 }
 

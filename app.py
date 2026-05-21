@@ -1697,6 +1697,20 @@ def student_registration_page(token):
     .error-msg{{color:#D32F2F;font-size:.8rem;margin-top:4px;display:none}}
     .required{{color:#D32F2F}}
     .hint{{font-size:.75rem;color:#9CA3AF;margin-top:3px}}
+    /* Confirmation screen */
+    #confirmCard{{display:none}}
+    .confirm-row{{display:flex;justify-content:space-between;padding:8px 0;
+                  border-bottom:1px solid #F3F4F6;font-size:.85rem}}
+    .confirm-row span:first-child{{color:#6B7280;font-weight:600}}
+    .confirm-row span:last-child{{color:#111827;font-weight:700;text-align:right;max-width:60%}}
+    .confirm-photos{{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:12px}}
+    .confirm-photos img{{width:100%;aspect-ratio:1;object-fit:cover;border-radius:10px;
+                         border:2px solid #E5E7EB}}
+    .confirm-photos img.has-img{{border-color:#22C55E}}
+    .btn-outline{{width:100%;padding:13px;background:#fff;color:#D32F2F;
+                  border:2px solid #D32F2F;border-radius:12px;font-size:1rem;
+                  font-weight:700;cursor:pointer;margin-top:10px;transition:all .2s}}
+    .btn-outline:hover{{background:#FEF2F2}}
   </style>
 </head>
 <body>
@@ -1776,11 +1790,32 @@ def student_registration_page(token):
 
   <div class="success" id="successMsg">
     <div class="check">✅</div>
-    <h2>Registration Complete!</h2>
-    <p>Your information has been submitted successfully.<br>
-       Your instructor will be notified and your face will be<br>
-       loaded into the attendance system automatically.</p>
+    <h2>Submitted for Approval!</h2>
+    <p>Your registration has been submitted successfully.<br>
+       Your instructor will review and approve your registration.<br>
+       You will be added to the attendance system once approved.</p>
   </div>
+</div>
+
+<!-- Confirmation Card -->
+<div class="card" id="confirmCard">
+  <div class="header">
+    <h1>Review Your Details</h1>
+    <p>{info['subject']}</p>
+    <div class="badge">{info['section']} · {info['course_code']}</div>
+  </div>
+  <p style="font-size:.82rem;color:#6B7280;margin-bottom:16px;text-align:center">
+    Please review your information carefully before submitting.
+  </p>
+  <div id="confirmDetails"></div>
+  <div class="confirm-photos" id="confirmPhotos"></div>
+  <div id="confirmSigRow" style="margin-top:12px;display:none">
+    <p style="font-size:.75rem;font-weight:700;color:#6B7280;margin-bottom:6px">E-SIGNATURE</p>
+    <img id="confirmSigImg" src="" style="max-height:80px;border-radius:8px;border:2px solid #22C55E">
+  </div>
+  <div class="error-msg" id="confirm-error"></div>
+  <button class="btn" id="confirmSubmitBtn" onclick="doSubmit()">✓ Confirm &amp; Submit</button>
+  <button class="btn-outline" onclick="goBackToForm()">← Edit Details</button>
 </div>
 
 <script>
@@ -1788,10 +1823,8 @@ const TOKEN = "{token}";
 
 function setPhoto(angle, input) {{
   if (!input.files[0]) return;
-  const box    = document.getElementById('box-' + angle);
-  const status = document.getElementById('status-' + angle);
-  box.classList.add('has-photo');
-  status.textContent = '✓ Photo selected';
+  document.getElementById('box-' + angle).classList.add('has-photo');
+  document.getElementById('status-' + angle).textContent = '✓ Photo selected';
   document.getElementById('photo-error').style.display = 'none';
 }}
 
@@ -1801,7 +1834,13 @@ function setSig(input) {{
   document.getElementById('sig-label').textContent = '✓ ' + input.files[0].name;
 }}
 
-document.getElementById('regForm').addEventListener('submit', async (e) => {{
+function goBackToForm() {{
+  document.getElementById('confirmCard').style.display = 'none';
+  document.getElementById('formCard').style.display = 'block';
+}}
+
+// Step 1: Validate and show confirmation screen
+document.getElementById('regForm').addEventListener('submit', (e) => {{
   e.preventDefault();
 
   const name    = document.getElementById('name').value.trim();
@@ -1820,22 +1859,76 @@ document.getElementById('regForm').addEventListener('submit', async (e) => {{
     return;
   }}
 
-  const btn = document.getElementById('submitBtn');
+  // Build confirmation details
+  const details = [
+    ['Full Name', name],
+    ['SR Code', sr_code],
+    ['Email', email],
+    ['Sex', sex || 'Not specified'],
+  ];
+  document.getElementById('confirmDetails').innerHTML =
+    details.map(([k,v]) =>
+      `<div class="confirm-row"><span>${{k}}</span><span>${{v}}</span></div>`
+    ).join('');
+
+  // Preview photos
+  const angles = ['front','left','right','up'];
+  const labels = {{'front':'Front','left':'Left','right':'Right','up':'Up'}};
+  const photosEl = document.getElementById('confirmPhotos');
+  photosEl.innerHTML = '';
+  angles.forEach(angle => {{
+    const file = document.getElementById('file-' + angle).files[0];
+    const wrapper = document.createElement('div');
+    wrapper.style.cssText = 'text-align:center';
+    if (file) {{
+      const img = document.createElement('img');
+      img.src = URL.createObjectURL(file);
+      img.className = 'has-img';
+      img.style.cssText = 'width:100%;aspect-ratio:1;object-fit:cover;border-radius:10px;border:2px solid #22C55E';
+      wrapper.appendChild(img);
+    }} else {{
+      wrapper.innerHTML = `<div style="width:100%;aspect-ratio:1;border-radius:10px;
+        border:2px dashed #E5E7EB;display:flex;align-items:center;justify-content:center;
+        color:#9CA3AF;font-size:.65rem;font-weight:700">${{labels[angle]}}<br>Not uploaded</div>`;
+    }}
+    const lbl = document.createElement('p');
+    lbl.style.cssText = 'font-size:.65rem;font-weight:700;color:#6B7280;margin-top:4px';
+    lbl.textContent = labels[angle];
+    wrapper.appendChild(lbl);
+    photosEl.appendChild(wrapper);
+  }});
+
+  // Preview signature
+  const sigFile = document.getElementById('file-sig').files[0];
+  if (sigFile) {{
+    document.getElementById('confirmSigRow').style.display = 'block';
+    document.getElementById('confirmSigImg').src = URL.createObjectURL(sigFile);
+  }} else {{
+    document.getElementById('confirmSigRow').style.display = 'none';
+  }}
+
+  document.getElementById('formCard').style.display = 'none';
+  document.getElementById('confirmCard').style.display = 'block';
+  window.scrollTo(0, 0);
+}});
+
+// Step 2: Actually submit after confirmation
+async function doSubmit() {{
+  const btn = document.getElementById('confirmSubmitBtn');
   btn.disabled = true;
   btn.textContent = 'Submitting…';
 
   const fd = new FormData();
   fd.append('token',   TOKEN);
-  fd.append('name',    name);
-  fd.append('sr_code', sr_code);
-  fd.append('email',   email);
-  fd.append('sex',     sex);
+  fd.append('name',    document.getElementById('name').value.trim());
+  fd.append('sr_code', document.getElementById('sr_code').value.trim());
+  fd.append('email',   document.getElementById('email').value.trim());
+  fd.append('sex',     document.getElementById('sex').value);
 
   ['front','left','right','up'].forEach(angle => {{
     const f = document.getElementById('file-' + angle).files[0];
     if (f) fd.append('photo_' + angle, f);
   }});
-
   const sig = document.getElementById('file-sig').files[0];
   if (sig) fd.append('signature', sig);
 
@@ -1843,21 +1936,24 @@ document.getElementById('regForm').addEventListener('submit', async (e) => {{
     const res  = await fetch('/api/registration/submit', {{method:'POST', body:fd}});
     const data = await res.json();
     if (!res.ok) {{
-      document.getElementById('form-error').textContent = data.error || 'Submission failed.';
-      document.getElementById('form-error').style.display = 'block';
+      document.getElementById('confirm-error').textContent = data.error || 'Submission failed.';
+      document.getElementById('confirm-error').style.display = 'block';
       btn.disabled = false;
-      btn.textContent = 'Submit Registration';
+      btn.textContent = '✓ Confirm & Submit';
       return;
     }}
+    document.getElementById('confirmCard').style.display = 'none';
+    document.getElementById('formCard').style.display = 'block';
     document.getElementById('formCard').querySelector('form').style.display = 'none';
     document.getElementById('successMsg').style.display = 'block';
+    window.scrollTo(0, 0);
   }} catch {{
-    document.getElementById('form-error').textContent = 'Network error. Please try again.';
-    document.getElementById('form-error').style.display = 'block';
+    document.getElementById('confirm-error').textContent = 'Network error. Please try again.';
+    document.getElementById('confirm-error').style.display = 'block';
     btn.disabled = false;
-    btn.textContent = 'Submit Registration';
+    btn.textContent = '✓ Confirm & Submit';
   }}
-}});
+}}
 </script>
 </body></html>"""
 
@@ -1961,11 +2057,63 @@ def api_registration_submit():
             photo_right = angle_urls.get("photo_right", ""),
             photo_up    = angle_urls.get("photo_up",    ""),
         )
-        print(f"[SELF-REG] ✓ {name} registered for {class_code}")
+        # Mark student as Pending — instructor must approve before they appear in system
+        import psycopg2 as _pg2
+        _conn = db.get_db(); _cur = db.get_cursor(_conn)
+        _cur.execute("UPDATE students SET approval_status='Pending' WHERE sr_code=%s AND class_code=%s",
+                     (sr_code, class_code))
+        _conn.commit(); _cur.close(); _conn.close()
+        # Notify instructor
+        try:
+            cls_info = db.get_class(class_code)
+            if cls_info:
+                db.add_notification(
+                    cls_info["instructor_id"],
+                    "pending_approval",
+                    f"New student registration pending",
+                    f"{name} ({sr_code}) submitted their registration for {info['subject']} — {info['section']}. Please review and approve."
+                )
+        except Exception as _ne:
+            print(f"[SELF-REG] Notification error: {_ne}")
+        print(f"[SELF-REG] ✓ {name} pending approval for {class_code}")
         return jsonify({"status": "ok", "name": name})
     except Exception as e:
         print(f"[SELF-REG] ✗ DB error: {e}")
         return jsonify({"error": "Failed to save registration. Please try again."}), 500
+
+
+
+@app.route("/api/registration/pending")
+def api_pending_registrations():
+    """Return all pending student registrations for the logged-in instructor."""
+    token_cookie = request.cookies.get("session_token", "")
+    session      = db.verify_session_token(token_cookie)
+    if not session:
+        return jsonify({"error": "Unauthorized"}), 401
+    students = db.get_pending_students(session["instructor_id"])
+    return jsonify({"students": students})
+
+
+@app.route("/api/registration/approve/<int:student_id>", methods=["POST"])
+def api_approve_student(student_id):
+    """Instructor approves a pending student registration."""
+    token_cookie = request.cookies.get("session_token", "")
+    session      = db.verify_session_token(token_cookie)
+    if not session:
+        return jsonify({"error": "Unauthorized"}), 401
+    db.set_student_approval(student_id, "Approved")
+    return jsonify({"status": "ok"})
+
+
+@app.route("/api/registration/reject/<int:student_id>", methods=["POST"])
+def api_reject_student(student_id):
+    """Instructor rejects a pending student registration — removes from DB."""
+    token_cookie = request.cookies.get("session_token", "")
+    session      = db.verify_session_token(token_cookie)
+    if not session:
+        return jsonify({"error": "Unauthorized"}), 401
+    db.set_student_approval(student_id, "Rejected")
+    return jsonify({"status": "ok"})
 
 
 @app.route("/api/registration/get_link/<class_code>")
