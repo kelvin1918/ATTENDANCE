@@ -44,46 +44,34 @@ except ImportError:
     CAMERA_ENABLED = False
     print("[INFO] Camera features disabled — running in cloud/dashboard mode.")
 
-# Cloudinary — imported at module level so it is always available.
-# Configuration is applied fresh on every request via _configure_cloudinary().
+# Cloudinary — used for student self-registration photo uploads
 try:
     import cloudinary
     import cloudinary.uploader
-    _CLD_AVAILABLE = True
-    print("[INFO] Cloudinary library imported successfully.")
+    CLOUDINARY_ENABLED = True   # library is present; config applied at request time
+    print("[INFO] Cloudinary library loaded — will configure per-request.")
 except ImportError:
-    _CLD_AVAILABLE = False
-    print("[INFO] Cloudinary package not installed — add cloudinary to requirements.txt")
+    CLOUDINARY_ENABLED = False
+    print("[INFO] Cloudinary not installed — self-registration uploads disabled.")
 
 def _configure_cloudinary():
     """
-    Configure Cloudinary fresh from environment variables on every call.
-    No global enabled-flag — reads env vars directly every time.
-    Returns (uploader_module, None) on success or (None, error_message) on failure.
+    Apply Cloudinary credentials from env vars.
+    Called at the top of every route that needs uploads so that
+    Render's env vars are always read fresh (handles delayed injection).
+    Returns True if credentials are present, False otherwise.
     """
-    if not _CLD_AVAILABLE:
-        msg = "Cloudinary library not installed on server. Add cloudinary to requirements.txt."
-        print(f"[CLD] {msg}")
-        return None, msg
-
-    name   = (os.environ.get("CLOUDINARY_CLOUD_NAME") or "").strip()
-    key    = (os.environ.get("CLOUDINARY_API_KEY")    or "").strip()
-    secret = (os.environ.get("CLOUDINARY_API_SECRET") or "").strip()
-
-    print(f"[CLD] cloud_name={name!r}  "
-          f"api_key={'set' if key else 'MISSING'}  "
-          f"api_secret={'set' if secret else 'MISSING'}")
-
-    if not name:
-        return None, "CLOUDINARY_CLOUD_NAME is not set in Render environment variables."
-    if not key:
-        return None, "CLOUDINARY_API_KEY is not set in Render environment variables."
-    if not secret:
-        return None, "CLOUDINARY_API_SECRET is not set in Render environment variables."
-
-    cloudinary.config(cloud_name=name, api_key=key, api_secret=secret, secure=True)
-    print("[CLD] Configuration applied — ready to upload.")
-    return cloudinary.uploader, None
+    if not CLOUDINARY_ENABLED:
+        return False
+    name   = os.environ.get("CLOUDINARY_CLOUD_NAME", "").strip()
+    key    = os.environ.get("CLOUDINARY_API_KEY",    "").strip()
+    secret = os.environ.get("CLOUDINARY_API_SECRET", "").strip()
+    print(f"[CLD] cloud_name={name!r}  key={'***' if key else '(missing)'}  secret={'***' if secret else '(missing)'}")
+    if name and key and secret:
+        cloudinary.config(cloud_name=name, api_key=key, api_secret=secret)
+        return True
+    print("[CLD] ERROR: One or more Cloudinary env vars are empty on this dyno.")
+    return False
 
 # ── APP SETUP ─────────────────────────────────────────────────────────────────
 
@@ -1877,9 +1865,8 @@ def api_registration_submit():
     Photos go directly to Cloudinary — no local disk needed.
     DB record is created immediately.
     """
-    cld_up, cld_err = _configure_cloudinary()
-    if not cld_up:
-        return jsonify({"error": cld_err}), 500
+    if not _configure_cloudinary():
+        return jsonify({"error": "Cloudinary not configured on server. Check CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET in Render environment."}), 500
 
     token = request.form.get("token", "").strip()
     info  = db.get_registration_token(token)
@@ -1912,7 +1899,7 @@ def api_registration_submit():
             f = request.files[key]
             if f and f.filename:
                 try:
-                    result = cld_up.upload(
+                    result = cloudinary.uploader.upload(
                         f,
                         public_id = f"{safe_name}_{angle}",
                         folder    = f"faces/{safe_class}",
@@ -1922,7 +1909,7 @@ def api_registration_submit():
                     angle_urls[f"photo_{angle}"] = url
                     if angle == "front":
                         # Also upload to students/ folder for display
-                        res2 = cld_up.upload(
+                        res2 = cloudinary.uploader.upload(
                             request.files[key],
                             public_id = safe_name,
                             folder    = f"students/{safe_class}",
@@ -1941,7 +1928,7 @@ def api_registration_submit():
         sig_f = request.files["signature"]
         if sig_f and sig_f.filename:
             try:
-                res3 = cld_up.upload(
+                res3 = cloudinary.uploader.upload(
                     sig_f,
                     public_id = f"{safe_name}_sig",
                     folder    = f"signatures/{safe_class}",
