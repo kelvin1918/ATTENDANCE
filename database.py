@@ -266,6 +266,14 @@ def init_db():
             created_at TIMESTAMP    DEFAULT NOW(),
             expires_at TIMESTAMP    NOT NULL
         );
+
+        -- ── 15. registration_tokens — student self-registration links ────────
+        CREATE TABLE IF NOT EXISTS registration_tokens (
+            token      VARCHAR(64)  PRIMARY KEY,
+            class_code VARCHAR(200) NOT NULL,
+            created_at TIMESTAMP    DEFAULT NOW(),
+            expires_at TIMESTAMP    NOT NULL
+        );
     """)
 
     conn.commit()
@@ -1358,3 +1366,56 @@ def get_instructor_recent_sessions(instructor_id, limit=10):
     """, (instructor_id, limit))
     rows = cur.fetchall(); cur.close(); conn.close()
     return [dict(r) for r in rows]
+
+# ── STUDENT SELF-REGISTRATION TOKEN FUNCTIONS ────────────────────────────────
+
+def create_registration_token(class_code: str, hours_valid: int = 72) -> str:
+    """
+    Generate a secure token that allows students to self-register for a class.
+    Token expires after hours_valid hours (default 72 = 3 days).
+    Returns the token string.
+    """
+    import secrets
+    from datetime import datetime, timedelta
+    conn = get_db()
+    cur  = get_cursor(conn)
+    token      = secrets.token_hex(32)
+    expires_at = datetime.now() + timedelta(hours=hours_valid)
+    cur.execute(
+        """INSERT INTO registration_tokens (token, class_code, expires_at)
+           VALUES (%s, %s, %s)
+           ON CONFLICT (token) DO NOTHING""",
+        (token, class_code, expires_at)
+    )
+    conn.commit()
+    cur.close(); conn.close()
+    return token
+
+
+def get_registration_token(token: str):
+    """
+    Look up a registration token.
+    Returns the row dict if valid and not expired, else None.
+    """
+    from datetime import datetime
+    conn = get_db()
+    cur  = get_cursor(conn)
+    cur.execute(
+        """SELECT rt.*, c.subject, c.section, c.course_code
+           FROM registration_tokens rt
+           JOIN classes c ON c.id = rt.class_code
+           WHERE rt.token = %s AND rt.expires_at > NOW()""",
+        (token,)
+    )
+    row = cur.fetchone()
+    cur.close(); conn.close()
+    return dict(row) if row else None
+
+
+def delete_registration_token(token: str):
+    """Delete a used or expired token."""
+    conn = get_db()
+    cur  = get_cursor(conn)
+    cur.execute("DELETE FROM registration_tokens WHERE token = %s", (token,))
+    conn.commit()
+    cur.close(); conn.close()

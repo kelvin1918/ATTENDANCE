@@ -81,9 +81,19 @@ def _build_app():
     """
     if not INSIGHTFACE_AVAILABLE:
         return None
+
+    # When running as a PyInstaller EXE, look for the model folder beside
+    # the EXE so it works without internet on other PCs.
+    import sys, os as _os
+    if getattr(sys, 'frozen', False):
+        _root_dir = _os.path.dirname(sys.executable)
+    else:
+        _root_dir = _os.path.join(_os.path.expanduser('~'), '.insightface')
+
     app = FaceAnalysis(
-        name       = "buffalo_l",
-        providers  = ["CPUExecutionProvider"],   # CPU only — works everywhere
+        name      = "buffalo_l",
+        root      = _root_dir,
+        providers = ["CPUExecutionProvider"],
     )
     app.prepare(ctx_id=-1, det_size=DET_SIZE)
     return app

@@ -1298,6 +1298,12 @@ function renderFolderView(cls, class_code, students) {
                 <i data-lucide="arrow-left" class="w-4 h-4 mr-2"></i> Back
             </button>
             <div class="flex space-x-3">
+                <button onclick="shareRegistrationLink('${class_code}')"
+                    class="bg-[#FEF2F2] text-[#D32F2F] px-5 py-4 rounded-2xl text-[10px] font-black uppercase hover:bg-red-100 transition flex items-center space-x-2"
+                    title="Generate a link students can open to register themselves">
+                    <i data-lucide="link" class="w-4 h-4"></i>
+                    <span>Student Link</span>
+                </button>
                 ${isLocalEnvironment()
                     ? `<button onclick="openRegModal()" class="bg-gray-100 text-gray-600 px-8 py-4 rounded-2xl text-[10px] font-black uppercase hover:bg-gray-200 transition">Registration</button>`
                             : `<button id="cloud-reg-btn" disabled title="Start the Local Station app first." class="bg-gray-100 text-gray-300 px-8 py-4 rounded-2xl text-[10px] font-black uppercase cursor-not-allowed opacity-40 flex items-center space-x-2"><span>Registration</span></button>`}
@@ -1706,6 +1712,63 @@ function editFolder(class_code) {
     document.getElementById('modalSection').value = f.section;
     document.getElementById('modalYear').value    = f.course_code;
     document.getElementById('classModal').classList.remove('hidden');
+}
+
+// ── STUDENT SELF-REGISTRATION LINK ───────────────────────────────────────────
+
+async function shareRegistrationLink(classCode) {
+  try {
+    const res  = await fetch(`/api/registration/get_link/${encodeURIComponent(classCode)}`);
+    const data = await res.json();
+    if (!res.ok) { showToast(data.error || 'Failed to generate link.', 'error'); return; }
+
+    const link = data.link;
+
+    // Show modal with the link
+    const modal = document.createElement('div');
+    modal.style.cssText = `position:fixed;inset:0;background:rgba(0,0,0,.5);
+      display:flex;align-items:center;justify-content:center;z-index:9999;padding:20px`;
+    modal.innerHTML = `
+      <div style="background:#fff;border-radius:20px;padding:32px;max-width:480px;
+                  width:100%;box-shadow:0 20px 60px rgba(0,0,0,.2)">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+          <h3 style="font-size:1.1rem;font-weight:800;color:#1a1a1a">Student Registration Link</h3>
+          <button onclick="this.closest('[style]').remove()"
+            style="background:none;border:none;font-size:1.2rem;cursor:pointer;color:#999">✕</button>
+        </div>
+        <p style="font-size:.85rem;color:#555;margin-bottom:16px">
+          Share this link with your students. They can open it on any device
+          to register their face photos and e-signature themselves.
+          <strong>Link expires in 72 hours.</strong>
+        </p>
+        <div style="background:#F9FAFB;border:1px solid #E5E7EB;border-radius:12px;
+                    padding:12px 16px;font-size:.8rem;color:#374151;word-break:break-all;
+                    margin-bottom:16px;font-family:monospace">${link}</div>
+        <div style="display:flex;gap:10px">
+          <button onclick="navigator.clipboard.writeText('${link}').then(()=>{
+              this.textContent='✓ Copied!';this.style.background='#22C55E';
+              setTimeout(()=>{this.textContent='Copy Link';this.style.background='#D32F2F';},2000)
+            })"
+            style="flex:1;padding:12px;background:#D32F2F;color:#fff;border:none;
+                   border-radius:10px;font-weight:700;cursor:pointer;font-size:.9rem">
+            Copy Link
+          </button>
+          <button onclick="window.open('${link}','_blank')"
+            style="flex:1;padding:12px;background:#F3F4F6;color:#374151;border:none;
+                   border-radius:10px;font-weight:700;cursor:pointer;font-size:.9rem">
+            Open Link
+          </button>
+        </div>
+        <p style="font-size:.75rem;color:#9CA3AF;margin-top:12px;text-align:center">
+          After students submit, their photos will sync to the Local Station automatically on next login.
+        </p>
+      </div>`;
+    document.body.appendChild(modal);
+    modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
+
+  } catch {
+    showToast('Network error. Please try again.', 'error');
+  }
 }
 
 // ── STUDENT REGISTRATION ──────────────────────────────────────────────────────

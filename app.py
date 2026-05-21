@@ -637,15 +637,11 @@ def api_download_pdf(class_code, date):
     room         = schedules[0]["room"] if schedules else "TBA"
     time_str     = schedules[0]["time"] if schedules else ""
 
-    # Get faculty name — name is stored as typed in registration (may be "Kelvinlloydafrica")
-    # If it has no spaces, reformat from email for a readable display name
+    # Get faculty name — use stored name, fall back to email parse only if name is blank
     instructor   = db.get_instructor_by_id(cls["instructor_id"]) if cls.get("instructor_id") else None
     if instructor:
-        raw_name = (instructor.get("name") or "").strip()
-        if not raw_name or " " not in raw_name:
-            # Fall back to email-based split for single-word names
-            raw_name = instructor["email"].split("@")[0].replace(".", " ").replace("_", " ")
-        faculty_name = raw_name.title()
+        faculty_name = instructor["name"].strip() if instructor["name"].strip() \
+                       else instructor["email"].split("@")[0].replace(".", " ").replace("_", " ").title()
     else:
         faculty_name = "Instructor"
 
@@ -695,9 +691,9 @@ def api_download_pdf(class_code, date):
     for w in warmers: w.start()
     for w in warmers: w.join(timeout=15)   # wait up to 15s for all prefetches
 
-    # ── Generate PDF in-memory — safe on Render (no ephemeral disk writes) ──
+    # ── Generate PDF ─────────────────────────────────────────────────────────
     try:
-        pdf_buf, pdf_name = generate_attendance_pdf(
+        filepath = generate_attendance_pdf(
             class_id     = class_code,
             subject      = cls["subject"],
             section      = cls["section"],
@@ -714,9 +710,9 @@ def api_download_pdf(class_code, date):
         return jsonify({"error": f"PDF generation failed: {pdf_err}"}), 500
 
     return send_file(
-        pdf_buf,
+        filepath,
         as_attachment = True,
-        download_name = pdf_name,
+        download_name = os.path.basename(filepath),
         mimetype      = "application/pdf"
     )
 
@@ -1556,3 +1552,399 @@ def api_admin_instructor_sessions(instructor_id):
 
 if __name__ == "__main__":
     app.run(debug=True, threaded=True, port=5000)
+
+# ══════════════════════════════════════════════════════════════════════════════
+# STUDENT SELF-REGISTRATION — instructor generates link, student fills form
+# ══════════════════════════════════════════════════════════════════════════════
+
+@app.route("/api/registration/generate_link", methods=["POST"])
+def api_generate_registration_link():
+    """
+    Instructor calls this to generate a self-registration link for a class.
+    Returns a token URL that students open on their own device.
+    """
+    token_cookie = request.cookies.get("session_token", "")
+    session      = db.verify_session_token(token_cookie)
+    if not session:
+        return jsonify({"error": "Unauthorized."}), 401
+
+    data       = request.json or {}
+    class_code = data.get("class_code", "").strip()
+    hours      = int(data.get("hours_valid", 72))
+
+    if not class_code:
+        return jsonify({"error": "class_code required."}), 400
+
+    token    = db.create_registration_token(class_code, hours_valid=hours)
+    base_url = request.host_url.rstrip("/")
+    link     = f"{base_url}/register/{token}"
+    return jsonify({"token": token, "link": link, "hours_valid": hours})
+
+
+@app.route("/register/<token>")
+def student_registration_page(token):
+    """
+    Public page — student opens this link to register themselves.
+    No login required.
+    """
+    info = db.get_registration_token(token)
+    if not info:
+        return """
+        <!DOCTYPE html><html><head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width,initial-scale=1">
+        <title>Link Expired</title>
+        <style>
+          body{font-family:sans-serif;display:flex;align-items:center;
+               justify-content:center;min-height:100vh;margin:0;
+               background:#FEF2F2;}
+          .box{background:#fff;border-radius:16px;padding:40px;
+               text-align:center;max-width:400px;box-shadow:0 4px 20px rgba(0,0,0,.1);}
+          h2{color:#D32F2F;margin-bottom:8px}
+          p{color:#555}
+        </style></head><body>
+        <div class="box">
+          <h2>Link Expired or Invalid</h2>
+          <p>This registration link is no longer valid.<br>
+             Please ask your instructor for a new link.</p>
+        </div></body></html>
+        """, 410
+
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0">
+  <title>Student Registration — {info['subject']}</title>
+  <link rel="icon" type="image/png" href="/face.png">
+  <style>
+    *{{box-sizing:border-box;margin:0;padding:0;font-family:'Segoe UI',sans-serif}}
+    body{{background:#f4f4f4;padding:20px;min-height:100vh}}
+    .card{{background:#fff;border-radius:16px;padding:28px;max-width:520px;
+           margin:0 auto;box-shadow:0 4px 20px rgba(0,0,0,.08)}}
+    .header{{text-align:center;margin-bottom:24px}}
+    .header h1{{font-size:1.4rem;color:#1a1a1a;margin-bottom:4px}}
+    .header p{{color:#D32F2F;font-weight:600;font-size:.9rem}}
+    .badge{{display:inline-block;background:#FEF2F2;color:#D32F2F;
+            border-radius:8px;padding:4px 12px;font-size:.8rem;
+            font-weight:700;margin-bottom:16px}}
+    label{{display:block;font-size:.8rem;font-weight:700;color:#374151;
+           margin-bottom:4px;margin-top:14px;text-transform:uppercase;
+           letter-spacing:.5px}}
+    input,select{{width:100%;padding:10px 14px;border:1px solid #E5E7EB;
+                  border-radius:10px;font-size:.95rem;outline:none;
+                  transition:border .2s;background:#F9FAFB}}
+    input:focus,select:focus{{border-color:#D32F2F;background:#fff}}
+    .photo-grid{{display:grid;grid-template-columns:1fr 1fr;gap:10px;
+                 margin-top:8px}}
+    .photo-box{{border:2px dashed #E5E7EB;border-radius:12px;padding:12px;
+                text-align:center;cursor:pointer;transition:all .2s;
+                min-height:90px;display:flex;flex-direction:column;
+                align-items:center;justify-content:center}}
+    .photo-box:hover{{border-color:#D32F2F;background:#FEF2F2}}
+    .photo-box.has-photo{{border-color:#22C55E;background:#F0FDF4}}
+    .photo-box input{{display:none}}
+    .photo-box .icon{{font-size:1.5rem;margin-bottom:4px}}
+    .photo-box .label{{font-size:.75rem;font-weight:700;color:#555}}
+    .photo-box .status{{font-size:.7rem;color:#22C55E;margin-top:2px}}
+    .sig-box{{border:2px dashed #E5E7EB;border-radius:12px;padding:16px;
+              text-align:center;cursor:pointer;margin-top:8px}}
+    .sig-box:hover{{border-color:#D32F2F;background:#FEF2F2}}
+    .sig-box.has-sig{{border-color:#22C55E;background:#F0FDF4}}
+    .sig-box input{{display:none}}
+    .btn{{width:100%;padding:14px;background:#D32F2F;color:#fff;border:none;
+          border-radius:12px;font-size:1rem;font-weight:700;cursor:pointer;
+          margin-top:20px;transition:opacity .2s}}
+    .btn:hover{{opacity:.9}}
+    .btn:disabled{{opacity:.5;cursor:not-allowed}}
+    .success{{display:none;text-align:center;padding:32px 16px}}
+    .success .check{{font-size:3rem;margin-bottom:12px}}
+    .success h2{{color:#22C55E;margin-bottom:8px}}
+    .success p{{color:#555;font-size:.9rem}}
+    .error-msg{{color:#D32F2F;font-size:.8rem;margin-top:4px;display:none}}
+    .required{{color:#D32F2F}}
+    .hint{{font-size:.75rem;color:#9CA3AF;margin-top:3px}}
+  </style>
+</head>
+<body>
+<div class="card" id="formCard">
+  <div class="header">
+    <h1>Student Registration</h1>
+    <p>{info['subject']}</p>
+    <div class="badge">{info['section']} · {info['course_code']}</div>
+  </div>
+
+  <form id="regForm">
+    <label>Full Name <span class="required">*</span></label>
+    <input type="text" id="name" placeholder="e.g. Juan Dela Cruz" required>
+
+    <label>SR Code <span class="required">*</span></label>
+    <input type="text" id="sr_code" placeholder="e.g. 23-12345" required>
+
+    <label>Email Address <span class="required">*</span></label>
+    <input type="email" id="email" placeholder="e.g. 23-12345@g.batstate-u.edu.ph" required>
+
+    <label>Sex</label>
+    <select id="sex">
+      <option value="">Select</option>
+      <option value="Male">Male</option>
+      <option value="Female">Female</option>
+    </select>
+
+    <label>Face Photos <span class="required">*</span>
+      <span class="hint">Take or upload a photo for each angle</span>
+    </label>
+    <div class="photo-grid">
+      <div class="photo-box" id="box-front" onclick="document.getElementById('file-front').click()">
+        <input type="file" id="file-front" accept="image/*" capture="user"
+               onchange="setPhoto('front',this)">
+        <div class="icon">🖼️</div>
+        <div class="label">Front Face</div>
+        <div class="status" id="status-front"></div>
+      </div>
+      <div class="photo-box" id="box-left" onclick="document.getElementById('file-left').click()">
+        <input type="file" id="file-left" accept="image/*" capture="user"
+               onchange="setPhoto('left',this)">
+        <div class="icon">👈</div>
+        <div class="label">Left Side</div>
+        <div class="status" id="status-left"></div>
+      </div>
+      <div class="photo-box" id="box-right" onclick="document.getElementById('file-right').click()">
+        <input type="file" id="file-right" accept="image/*" capture="user"
+               onchange="setPhoto('right',this)">
+        <div class="icon">👉</div>
+        <div class="label">Right Side</div>
+        <div class="status" id="status-right"></div>
+      </div>
+      <div class="photo-box" id="box-up" onclick="document.getElementById('file-up').click()">
+        <input type="file" id="file-up" accept="image/*" capture="user"
+               onchange="setPhoto('up',this)">
+        <div class="icon">👆</div>
+        <div class="label">Looking Up</div>
+        <div class="status" id="status-up"></div>
+      </div>
+    </div>
+    <div class="error-msg" id="photo-error">Please upload at least the front face photo.</div>
+
+    <label>E-Signature
+      <span class="hint">Upload a photo of your handwritten signature</span>
+    </label>
+    <div class="sig-box" id="sig-box" onclick="document.getElementById('file-sig').click()">
+      <input type="file" id="file-sig" accept="image/*" onchange="setSig(this)">
+      <div style="font-size:1.2rem">✍️</div>
+      <div style="font-size:.8rem;color:#777;margin-top:4px" id="sig-label">
+        Tap to upload signature
+      </div>
+    </div>
+
+    <div class="error-msg" id="form-error"></div>
+    <button class="btn" type="submit" id="submitBtn">Submit Registration</button>
+  </form>
+
+  <div class="success" id="successMsg">
+    <div class="check">✅</div>
+    <h2>Registration Complete!</h2>
+    <p>Your information has been submitted successfully.<br>
+       Your instructor will be notified and your face will be<br>
+       loaded into the attendance system automatically.</p>
+  </div>
+</div>
+
+<script>
+const TOKEN = "{token}";
+
+function setPhoto(angle, input) {{
+  if (!input.files[0]) return;
+  const box    = document.getElementById('box-' + angle);
+  const status = document.getElementById('status-' + angle);
+  box.classList.add('has-photo');
+  status.textContent = '✓ Photo selected';
+  document.getElementById('photo-error').style.display = 'none';
+}}
+
+function setSig(input) {{
+  if (!input.files[0]) return;
+  document.getElementById('sig-box').classList.add('has-sig');
+  document.getElementById('sig-label').textContent = '✓ ' + input.files[0].name;
+}}
+
+document.getElementById('regForm').addEventListener('submit', async (e) => {{
+  e.preventDefault();
+
+  const name    = document.getElementById('name').value.trim();
+  const sr_code = document.getElementById('sr_code').value.trim();
+  const email   = document.getElementById('email').value.trim();
+  const sex     = document.getElementById('sex').value;
+  const front   = document.getElementById('file-front').files[0];
+
+  if (!name || !sr_code || !email) {{
+    document.getElementById('form-error').textContent = 'Please fill in all required fields.';
+    document.getElementById('form-error').style.display = 'block';
+    return;
+  }}
+  if (!front) {{
+    document.getElementById('photo-error').style.display = 'block';
+    return;
+  }}
+
+  const btn = document.getElementById('submitBtn');
+  btn.disabled = true;
+  btn.textContent = 'Submitting…';
+
+  const fd = new FormData();
+  fd.append('token',   TOKEN);
+  fd.append('name',    name);
+  fd.append('sr_code', sr_code);
+  fd.append('email',   email);
+  fd.append('sex',     sex);
+
+  ['front','left','right','up'].forEach(angle => {{
+    const f = document.getElementById('file-' + angle).files[0];
+    if (f) fd.append('photo_' + angle, f);
+  }});
+
+  const sig = document.getElementById('file-sig').files[0];
+  if (sig) fd.append('signature', sig);
+
+  try {{
+    const res  = await fetch('/api/registration/submit', {{method:'POST', body:fd}});
+    const data = await res.json();
+    if (!res.ok) {{
+      document.getElementById('form-error').textContent = data.error || 'Submission failed.';
+      document.getElementById('form-error').style.display = 'block';
+      btn.disabled = false;
+      btn.textContent = 'Submit Registration';
+      return;
+    }}
+    document.getElementById('formCard').querySelector('form').style.display = 'none';
+    document.getElementById('successMsg').style.display = 'block';
+  }} catch {{
+    document.getElementById('form-error').textContent = 'Network error. Please try again.';
+    document.getElementById('form-error').style.display = 'block';
+    btn.disabled = false;
+    btn.textContent = 'Submit Registration';
+  }}
+}});
+</script>
+</body></html>"""
+
+
+@app.route("/api/registration/submit", methods=["POST"])
+def api_registration_submit():
+    """
+    Student submits their registration form.
+    Photos go directly to Cloudinary — no local disk needed.
+    DB record is created immediately.
+    """
+    import cloudinary.uploader as cld_up
+
+    token = request.form.get("token", "").strip()
+    info  = db.get_registration_token(token)
+    if not info:
+        return jsonify({"error": "Registration link is invalid or has expired."}), 410
+
+    class_code = info["class_code"]
+    name       = request.form.get("name",    "").strip()
+    sr_code    = request.form.get("sr_code", "").strip()
+    email      = request.form.get("email",   "").strip()
+    sex        = request.form.get("sex",     "").strip()
+
+    if not name or not sr_code or not email:
+        return jsonify({"error": "Name, SR Code and Email are required."}), 400
+
+    if "photo_front" not in request.files:
+        return jsonify({"error": "Front face photo is required."}), 400
+
+    safe_name  = name.replace(" ", "_").replace("/", "_")
+    safe_class = class_code.replace(" ", "_").replace("/", "_")
+
+    # Upload all angle photos directly to Cloudinary
+    angle_urls = {}
+    photo_url  = ""
+    ANGLES     = ["front", "left", "right", "up"]
+
+    for angle in ANGLES:
+        key = f"photo_{angle}"
+        if key in request.files:
+            f = request.files[key]
+            if f and f.filename:
+                try:
+                    result = cld_up.upload(
+                        f,
+                        public_id = f"{safe_name}_{angle}",
+                        folder    = f"faces/{safe_class}",
+                        overwrite = True
+                    )
+                    url = result.get("secure_url", "")
+                    angle_urls[f"photo_{angle}"] = url
+                    if angle == "front":
+                        # Also upload to students/ folder for display
+                        res2 = cld_up.upload(
+                            request.files[key],
+                            public_id = safe_name,
+                            folder    = f"students/{safe_class}",
+                            overwrite = True
+                        )
+                        photo_url = res2.get("secure_url", url)
+                except Exception as ex:
+                    print(f"[SELF-REG] Cloudinary error {angle}: {ex}")
+
+    if not angle_urls.get("photo_front"):
+        return jsonify({"error": "Failed to upload front photo. Please try again."}), 500
+
+    # Upload signature if provided
+    sig_url = ""
+    if "signature" in request.files:
+        sig_f = request.files["signature"]
+        if sig_f and sig_f.filename:
+            try:
+                res3 = cld_up.upload(
+                    sig_f,
+                    public_id = f"{safe_name}_sig",
+                    folder    = f"signatures/{safe_class}",
+                    overwrite = True
+                )
+                sig_url = res3.get("secure_url", "")
+            except Exception as ex:
+                print(f"[SELF-REG] Signature upload error: {ex}")
+
+    # Save to DB
+    try:
+        db.add_student(
+            class_code  = class_code,
+            name        = name,
+            address     = "",
+            number      = "",
+            sr_code     = sr_code,
+            age         = 0,
+            sex         = sex,
+            email       = email,
+            photo       = photo_url,
+            signature   = sig_url,
+            photo_front = angle_urls.get("photo_front", ""),
+            photo_left  = angle_urls.get("photo_left",  ""),
+            photo_right = angle_urls.get("photo_right", ""),
+            photo_up    = angle_urls.get("photo_up",    ""),
+        )
+        print(f"[SELF-REG] ✓ {name} registered for {class_code}")
+        return jsonify({"status": "ok", "name": name})
+    except Exception as e:
+        print(f"[SELF-REG] ✗ DB error: {e}")
+        return jsonify({"error": "Failed to save registration. Please try again."}), 500
+
+
+@app.route("/api/registration/get_link/<class_code>")
+def api_get_registration_link(class_code):
+    """
+    Returns the active registration link for a class, or generates a new one.
+    Used by the instructor dashboard to show/copy the link.
+    """
+    token_cookie = request.cookies.get("session_token", "")
+    session      = db.verify_session_token(token_cookie)
+    if not session:
+        return jsonify({"error": "Unauthorized."}), 401
+
+    token    = db.create_registration_token(class_code, hours_valid=72)
+    base_url = request.host_url.rstrip("/")
+    link     = f"{base_url}/register/{token}"
+    return jsonify({"link": link, "token": token})

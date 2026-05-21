@@ -3,10 +3,20 @@ __pycache__/
 *.pyo
 .env
 .vscode/
+
+# Runtime folders — never commit these
 pdf/
 uploads/
 faces/
 *.db
+
+# PyInstaller output — these are huge, share via Google Drive instead
+build/
+dist/
+*.toc
+*.spec.bak
+AttendanceStation_SETUP*/
+BatStateU_Attendance_Setup*
 
 # Personal notes and test files
 bug encountered.md
