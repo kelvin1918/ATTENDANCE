@@ -1,7 +1,10 @@
 flask
+werkzeug
 psycopg2-binary
-face-recognition
+reportlab
+python-dotenv
+cloudinary
+insightface
+onnxruntime
 opencv-python
 numpy
-reportlab
-werkzeug
