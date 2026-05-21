@@ -474,19 +474,20 @@ def get_students(class_code):
 def get_students_with_photos(instructor_id):
     """
     Return all students for all classes belonging to this instructor,
-    including their photo and signature URLs/paths.
+    including ALL photo angle URLs (photo_front/left/right/up) and signature.
     Used by the local sync-on-login to download face images from Cloudinary.
-    Only returns students with a non-empty photo field.
+    Returns ALL students regardless of whether photo field is filled,
+    because angle URLs may exist even when the legacy photo column is empty.
     """
     conn = get_db()
     cur  = get_cursor(conn)
     cur.execute(
-        """SELECT s.id, s.class_code, s.name, s.sr_code, s.photo, s.signature
+        """SELECT s.id, s.class_code, s.name, s.sr_code,
+                  s.photo, s.signature,
+                  s.photo_front, s.photo_left, s.photo_right, s.photo_up
            FROM students s
            JOIN classes c ON c.id = s.class_code
            WHERE c.instructor_id = %s
-             AND s.photo IS NOT NULL
-             AND s.photo != ''
              AND s.status != 'Dropped'
            ORDER BY s.class_code, s.name""",
         (instructor_id,)
