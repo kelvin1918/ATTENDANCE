@@ -48,12 +48,19 @@ except ImportError:
 try:
     import cloudinary
     import cloudinary.uploader
-    cloudinary.config(
-        cloud_name = os.environ.get("CLOUDINARY_CLOUD_NAME", ""),
-        api_key    = os.environ.get("CLOUDINARY_API_KEY",    ""),
-        api_secret = os.environ.get("CLOUDINARY_API_SECRET", ""),
-    )
-    CLOUDINARY_ENABLED = True
+    _cld_name   = os.environ.get("CLOUDINARY_CLOUD_NAME", "")
+    _cld_key    = os.environ.get("CLOUDINARY_API_KEY",    "")
+    _cld_secret = os.environ.get("CLOUDINARY_API_SECRET", "")
+    if _cld_name and _cld_key and _cld_secret:
+        cloudinary.config(
+            cloud_name = _cld_name,
+            api_key    = _cld_key,
+            api_secret = _cld_secret,
+        )
+        CLOUDINARY_ENABLED = True
+    else:
+        CLOUDINARY_ENABLED = False
+        print("[INFO] Cloudinary env vars missing — self-registration uploads disabled.")
 except ImportError:
     CLOUDINARY_ENABLED = False
     print("[INFO] Cloudinary not available.")
