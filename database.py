@@ -175,6 +175,7 @@ def init_db():
     cur.execute("ALTER TABLE students ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'Enrolled';")
     cur.execute("ALTER TABLE students ADD COLUMN IF NOT EXISTS photo_front TEXT DEFAULT '';")
     cur.execute("ALTER TABLE students ADD COLUMN IF NOT EXISTS approval_status VARCHAR(20) DEFAULT 'Approved';")
+    cur.execute("ALTER TABLE students ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT NOW();")
     cur.execute("ALTER TABLE students ADD COLUMN IF NOT EXISTS photo_left  TEXT DEFAULT '';")
     cur.execute("ALTER TABLE students ADD COLUMN IF NOT EXISTS photo_right TEXT DEFAULT '';")
     cur.execute("ALTER TABLE students ADD COLUMN IF NOT EXISTS photo_up    TEXT DEFAULT '';")
@@ -1426,16 +1427,21 @@ def get_pending_students(instructor_id):
     """Return all students with approval_status='Pending' for this instructor's classes."""
     conn = get_db()
     cur  = get_cursor(conn)
+    # Ensure columns exist before querying (safe for existing deployments)
+    cur.execute("ALTER TABLE students ADD COLUMN IF NOT EXISTS approval_status VARCHAR(20) DEFAULT 'Approved';")
+    cur.execute("ALTER TABLE students ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT NOW();")
+    conn.commit()
     cur.execute(
         """SELECT s.id, s.class_code, s.name, s.sr_code, s.email, s.sex,
                   s.photo, s.photo_front, s.photo_left, s.photo_right, s.photo_up,
-                  s.signature, s.approval_status, s.created_at,
+                  s.signature, s.approval_status,
+                  COALESCE(TO_CHAR(s.created_at, 'YYYY-MM-DD HH24:MI'), '') AS created_at,
                   c.subject, c.section, c.course_code
            FROM students s
            JOIN classes c ON c.id = s.class_code
            WHERE c.instructor_id = %s
              AND s.approval_status = 'Pending'
-           ORDER BY s.created_at DESC""",
+           ORDER BY s.id DESC""",
         (instructor_id,)
     )
     rows = cur.fetchall()
@@ -1447,6 +1453,7 @@ def set_student_approval(student_id, status):
     """Set approval_status to 'Approved' or 'Rejected' for a student."""
     conn = get_db()
     cur  = get_cursor(conn)
+    cur.execute("ALTER TABLE students ADD COLUMN IF NOT EXISTS approval_status VARCHAR(20) DEFAULT 'Approved';")
     cur.execute(
         "UPDATE students SET approval_status=%s WHERE id=%s",
         (status, student_id)

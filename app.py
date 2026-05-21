@@ -2090,8 +2090,12 @@ def api_pending_registrations():
     session      = db.verify_session_token(token_cookie)
     if not session:
         return jsonify({"error": "Unauthorized"}), 401
-    students = db.get_pending_students(session["instructor_id"])
-    return jsonify({"students": students})
+    try:
+        students = db.get_pending_students(session["instructor_id"])
+        return jsonify({"students": students})
+    except Exception as e:
+        print(f"[PENDING] DB error: {e}")
+        return jsonify({"students": [], "warning": str(e)}), 200
 
 
 @app.route("/api/registration/approve/<int:student_id>", methods=["POST"])
