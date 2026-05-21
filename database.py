@@ -461,13 +461,20 @@ def delete_class(class_code):
 
 # ── STUDENTS ──────────────────────────────────────────────────────────────────
 
-def get_students(class_code):
+def get_students(class_code, include_pending=False):
     conn = get_db()
     cur  = get_cursor(conn)
-    cur.execute(
-        "SELECT * FROM students WHERE class_code = %s ORDER BY name",
-        (class_code,)
-    )
+    if include_pending:
+        cur.execute(
+            "SELECT * FROM students WHERE class_code = %s ORDER BY name",
+            (class_code,)
+        )
+    else:
+        cur.execute(
+            "SELECT * FROM students WHERE class_code = %s "
+            "AND (approval_status IS NULL OR approval_status != 'Pending') ORDER BY name",
+            (class_code,)
+        )
     rows = cur.fetchall()
     cur.close(); conn.close()
     return rows
@@ -521,18 +528,19 @@ def get_student_by_srcode(sr_code):
 
 def add_student(class_code, name, address, number,
                 sr_code, age, sex, email, photo, signature,
-                photo_front="", photo_left="", photo_right="", photo_up=""):
+                photo_front="", photo_left="", photo_right="", photo_up="",
+                approval_status="Approved"):
     conn = get_db()
     cur  = get_cursor(conn)
     cur.execute(
         """INSERT INTO students
            (class_code, name, address, number,
             sr_code, age, sex, email, photo, signature,
-            photo_front, photo_left, photo_right, photo_up)
-           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+            photo_front, photo_left, photo_right, photo_up, approval_status)
+           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
         (class_code, name, address, number,
          sr_code, age, sex, email, photo, signature,
-         photo_front, photo_left, photo_right, photo_up)
+         photo_front, photo_left, photo_right, photo_up, approval_status)
     )
     conn.commit()
     cur.close(); conn.close()

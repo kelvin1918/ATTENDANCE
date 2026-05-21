@@ -258,7 +258,7 @@ def api_edit_class(class_code):
 @app.route("/api/delete_class/<class_code>", methods=["DELETE"])
 def api_delete_class(class_code):
     photo_cols = ("photo", "photo_front", "photo_left", "photo_right", "photo_up", "signature")
-    students = db.get_students(class_code)
+    students = db.get_students(class_code, include_pending=True)
     urls = [s[col] for s in students for col in photo_cols if s.get(col)]
     _delete_cloudinary_assets(urls)
     db.delete_class(class_code)
@@ -2078,30 +2078,25 @@ def api_registration_submit():
             except Exception as ex:
                 print(f"[SELF-REG] Signature upload error: {ex}")
 
-    # Save to DB
+    # Save to DB with Pending status — instructor must approve before student appears in class list
     try:
         db.add_student(
-            class_code  = class_code,
-            name        = name,
-            address     = "",
-            number      = "",
-            sr_code     = sr_code,
-            age         = 0,
-            sex         = sex,
-            email       = email,
-            photo       = photo_url,
-            signature   = sig_url,
-            photo_front = angle_urls.get("photo_front", ""),
-            photo_left  = angle_urls.get("photo_left",  ""),
-            photo_right = angle_urls.get("photo_right", ""),
-            photo_up    = angle_urls.get("photo_up",    ""),
+            class_code      = class_code,
+            name            = name,
+            address         = "",
+            number          = "",
+            sr_code         = sr_code,
+            age             = 0,
+            sex             = sex,
+            email           = email,
+            photo           = photo_url,
+            signature       = sig_url,
+            photo_front     = angle_urls.get("photo_front", ""),
+            photo_left      = angle_urls.get("photo_left",  ""),
+            photo_right     = angle_urls.get("photo_right", ""),
+            photo_up        = angle_urls.get("photo_up",    ""),
+            approval_status = "Pending",
         )
-        # Mark student as Pending — instructor must approve before they appear in system
-        import psycopg2 as _pg2
-        _conn = db.get_db(); _cur = db.get_cursor(_conn)
-        _cur.execute("UPDATE students SET approval_status='Pending' WHERE sr_code=%s AND class_code=%s",
-                     (sr_code, class_code))
-        _conn.commit(); _cur.close(); _conn.close()
         # Notify instructor
         try:
             cls_info = db.get_class(class_code)
