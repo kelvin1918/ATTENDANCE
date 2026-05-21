@@ -48,22 +48,30 @@ except ImportError:
 try:
     import cloudinary
     import cloudinary.uploader
-    _cld_name   = os.environ.get("CLOUDINARY_CLOUD_NAME", "")
-    _cld_key    = os.environ.get("CLOUDINARY_API_KEY",    "")
-    _cld_secret = os.environ.get("CLOUDINARY_API_SECRET", "")
-    if _cld_name and _cld_key and _cld_secret:
-        cloudinary.config(
-            cloud_name = _cld_name,
-            api_key    = _cld_key,
-            api_secret = _cld_secret,
-        )
-        CLOUDINARY_ENABLED = True
-    else:
-        CLOUDINARY_ENABLED = False
-        print("[INFO] Cloudinary env vars missing — self-registration uploads disabled.")
+    CLOUDINARY_ENABLED = True   # library is present; config applied at request time
+    print("[INFO] Cloudinary library loaded — will configure per-request.")
 except ImportError:
     CLOUDINARY_ENABLED = False
-    print("[INFO] Cloudinary not available.")
+    print("[INFO] Cloudinary not installed — self-registration uploads disabled.")
+
+def _configure_cloudinary():
+    """
+    Apply Cloudinary credentials from env vars.
+    Called at the top of every route that needs uploads so that
+    Render's env vars are always read fresh (handles delayed injection).
+    Returns True if credentials are present, False otherwise.
+    """
+    if not CLOUDINARY_ENABLED:
+        return False
+    name   = os.environ.get("CLOUDINARY_CLOUD_NAME", "").strip()
+    key    = os.environ.get("CLOUDINARY_API_KEY",    "").strip()
+    secret = os.environ.get("CLOUDINARY_API_SECRET", "").strip()
+    print(f"[CLD] cloud_name={name!r}  key={'***' if key else '(missing)'}  secret={'***' if secret else '(missing)'}")
+    if name and key and secret:
+        cloudinary.config(cloud_name=name, api_key=key, api_secret=secret)
+        return True
+    print("[CLD] ERROR: One or more Cloudinary env vars are empty on this dyno.")
+    return False
 
 # ── APP SETUP ─────────────────────────────────────────────────────────────────
 
@@ -1857,8 +1865,8 @@ def api_registration_submit():
     Photos go directly to Cloudinary — no local disk needed.
     DB record is created immediately.
     """
-    if not CLOUDINARY_ENABLED:
-        return jsonify({"error": "Cloudinary not configured on server."}), 500
+    if not _configure_cloudinary():
+        return jsonify({"error": "Cloudinary not configured on server. Check CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET in Render environment."}), 500
 
     token = request.form.get("token", "").strip()
     info  = db.get_registration_token(token)
