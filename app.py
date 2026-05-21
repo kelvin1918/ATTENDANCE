@@ -44,6 +44,20 @@ except ImportError:
     CAMERA_ENABLED = False
     print("[INFO] Camera features disabled — running in cloud/dashboard mode.")
 
+# Cloudinary — used for student self-registration photo uploads
+try:
+    import cloudinary
+    import cloudinary.uploader
+    cloudinary.config(
+        cloud_name = os.environ.get("CLOUDINARY_CLOUD_NAME", ""),
+        api_key    = os.environ.get("CLOUDINARY_API_KEY",    ""),
+        api_secret = os.environ.get("CLOUDINARY_API_SECRET", ""),
+    )
+    CLOUDINARY_ENABLED = True
+except ImportError:
+    CLOUDINARY_ENABLED = False
+    print("[INFO] Cloudinary not available.")
+
 # ── APP SETUP ─────────────────────────────────────────────────────────────────
 
 app = Flask(__name__, static_folder=".", static_url_path="")
@@ -1836,7 +1850,8 @@ def api_registration_submit():
     Photos go directly to Cloudinary — no local disk needed.
     DB record is created immediately.
     """
-    import cloudinary.uploader as cld_up
+    if not CLOUDINARY_ENABLED:
+        return jsonify({"error": "Cloudinary not configured on server."}), 500
 
     token = request.form.get("token", "").strip()
     info  = db.get_registration_token(token)
@@ -1869,7 +1884,7 @@ def api_registration_submit():
             f = request.files[key]
             if f and f.filename:
                 try:
-                    result = cld_up.upload(
+                    result = cloudinary.uploader.upload(
                         f,
                         public_id = f"{safe_name}_{angle}",
                         folder    = f"faces/{safe_class}",
@@ -1879,7 +1894,7 @@ def api_registration_submit():
                     angle_urls[f"photo_{angle}"] = url
                     if angle == "front":
                         # Also upload to students/ folder for display
-                        res2 = cld_up.upload(
+                        res2 = cloudinary.uploader.upload(
                             request.files[key],
                             public_id = safe_name,
                             folder    = f"students/{safe_class}",
@@ -1898,7 +1913,7 @@ def api_registration_submit():
         sig_f = request.files["signature"]
         if sig_f and sig_f.filename:
             try:
-                res3 = cld_up.upload(
+                res3 = cloudinary.uploader.upload(
                     sig_f,
                     public_id = f"{safe_name}_sig",
                     folder    = f"signatures/{safe_class}",
