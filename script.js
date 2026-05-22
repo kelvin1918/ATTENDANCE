@@ -1319,9 +1319,6 @@ function renderFolderView(cls, class_code, students) {
                     <span id="pendingCount" style="display:none" class="absolute -top-1 -right-1 bg-red-500 text-white text-[9px] font-black w-5 h-5 rounded-full flex items-center justify-center"></span>
                 </button>
                 ${isLocalEnvironment()
-                    ? `<button onclick="openRegModal()" class="bg-gray-100 text-gray-600 px-8 py-4 rounded-2xl text-[10px] font-black uppercase hover:bg-gray-200 transition">Registration</button>`
-                            : `<button id="cloud-reg-btn" disabled title="Start the Local Station app first." class="bg-gray-100 text-gray-300 px-8 py-4 rounded-2xl text-[10px] font-black uppercase cursor-not-allowed opacity-40 flex items-center space-x-2"><span>Registration</span></button>`}
-                ${isLocalEnvironment()
                     ? (hasStudents
                         ? `<button onclick="openCamera()" class="bg-black text-white px-8 py-4 rounded-2xl text-[10px] font-black uppercase flex items-center space-x-2 hover:bg-gray-800 transition"><i data-lucide="camera" class="w-4 h-4"></i> <span>Open Camera</span></button>`
                         : `<button disabled title="Register at least one student before scanning." class="bg-gray-200 text-gray-400 px-8 py-4 rounded-2xl text-[10px] font-black uppercase flex items-center space-x-2 cursor-not-allowed opacity-60"><i data-lucide="camera" class="w-4 h-4"></i> <span>Open Camera</span></button>`)
