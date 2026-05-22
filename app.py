@@ -276,10 +276,12 @@ def api_add_curriculum():
     subject     = (data.get("subject") or "").strip()
     course_code = (data.get("course_code") or "").strip()
     year_level  = (data.get("year_level") or "").strip()
-    if not subject or not course_code or not year_level:
-        return jsonify({"error": "subject, course_code and year_level are required"}), 400
-    new_id = db.add_curriculum(subject, course_code, year_level)
-    return jsonify({"id": new_id, "subject": subject, "course_code": course_code, "year_level": year_level})
+    program     = (data.get("program") or "").strip()
+    if not subject or not course_code or not year_level or not program:
+        return jsonify({"error": "program, subject, course_code and year_level are required"}), 400
+    new_id = db.add_curriculum(subject, course_code, year_level, program)
+    return jsonify({"id": new_id, "subject": subject, "course_code": course_code,
+                    "year_level": year_level, "program": program})
 
 
 @app.route("/api/curriculum/<int:item_id>", methods=["DELETE"])

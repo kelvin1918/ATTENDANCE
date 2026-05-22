@@ -1597,12 +1597,40 @@ async function loadCurriculum() {
     } catch {
         curriculum = [];
     }
+    _populateProgramDropdown();
+}
+
+function _populateProgramDropdown() {
+    const sel = document.getElementById('modalProgram');
+    if (!sel) return;
+    const programs = [...new Set(curriculum.map(c => c.program).filter(Boolean))].sort();
+    const current  = sel.value;
+    sel.innerHTML  = '<option value="">Select Program</option>'
+        + programs.map(p => `<option value="${p}"${p===current?' selected':''}>${p}</option>`).join('');
+}
+
+function onProgramChange(program) {
+    const yrSel = document.getElementById('modalYearLevel');
+    const subSel = document.getElementById('modalSubjectFromCurriculum');
+    if (!yrSel) return;
+    const YEAR_ORDER = ['1st Year','2nd Year','3rd Year','4th Year'];
+    const years = [...new Set(
+        curriculum.filter(c => c.program === program).map(c => c.year_level)
+    )].sort((a,b) => YEAR_ORDER.indexOf(a) - YEAR_ORDER.indexOf(b));
+    yrSel.innerHTML  = '<option value="">Year Level</option>'
+        + years.map(y => `<option value="${y}">${y}</option>`).join('');
+    if (subSel) subSel.innerHTML = '<option value="">Select Subject</option>';
+    const codeEl = document.getElementById('modalYear');
+    if (codeEl) codeEl.value = '';
 }
 
 function onYearLevelChange(yearLevel) {
-    const sel = document.getElementById('modalSubjectFromCurriculum');
+    const sel      = document.getElementById('modalSubjectFromCurriculum');
+    const program  = (document.getElementById('modalProgram')?.value) || '';
     if (!sel) return;
-    const filtered = curriculum.filter(c => c.year_level === yearLevel);
+    const filtered = curriculum.filter(c =>
+        c.year_level === yearLevel && (!program || c.program === program)
+    );
     sel.innerHTML = '<option value="">Select Subject</option>'
         + filtered.map(c => `<option value="${c.id}" data-subject="${c.subject}" data-code="${c.course_code}">${c.subject}</option>`).join('');
     document.getElementById('modalYear').value = '';
@@ -1777,7 +1805,15 @@ function editFolder(class_code) {
 
     document.getElementById('folderModalTitle').textContent = 'Edit Folder';
 
-    // Pre-fill year level + repopulate subject dropdown
+    // Pre-fill program → year level → subject
+    _populateProgramDropdown();
+    // Find program from curriculum entry matching this folder's subject
+    const matchedEntry = curriculum.find(c =>
+        c.subject.toLowerCase() === (f.subject || '').toLowerCase()
+    );
+    const prog = matchedEntry?.program || '';
+    document.getElementById('modalProgram').value = prog;
+    onProgramChange(prog);
     const yl = f.year_level || '';
     document.getElementById('modalYearLevel').value = yl;
     onYearLevelChange(yl);
@@ -2790,7 +2826,9 @@ function openTaskModal()   { editSchedId = -1; document.getElementById('taskModa
 function openFolderModal() {
     editIdx = -1;
     document.getElementById('folderModalTitle').textContent = 'Create Folder';
-    document.getElementById('modalYearLevel').value = '';
+    _populateProgramDropdown();
+    document.getElementById('modalProgram').value = '';
+    document.getElementById('modalYearLevel').innerHTML = '<option value="">Year Level</option>';
     document.getElementById('modalSubjectFromCurriculum').innerHTML = '<option value="">Select Subject</option>';
     document.getElementById('modalYear').value    = '';
     document.getElementById('modalSection').value = '';

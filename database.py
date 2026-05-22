@@ -220,6 +220,7 @@ def init_db():
         );
     """)
     cur.execute("ALTER TABLE classes ADD COLUMN IF NOT EXISTS year_level VARCHAR(20) DEFAULT '';")
+    cur.execute("ALTER TABLE curriculum ADD COLUMN IF NOT EXISTS program VARCHAR(150) NOT NULL DEFAULT '';")
 
     # ── 8. campus_rooms — maps friendly room name to RTSP URL ────────────────
     cur.execute("""
@@ -471,18 +472,18 @@ def edit_class(class_code, course_code, subject, section,
 def get_curriculum():
     conn = get_db()
     cur  = get_cursor(conn)
-    cur.execute("SELECT * FROM curriculum ORDER BY year_level, subject")
+    cur.execute("SELECT * FROM curriculum ORDER BY program, year_level, subject")
     rows = cur.fetchall()
     cur.close(); conn.close()
     return rows
 
 
-def add_curriculum(subject, course_code, year_level):
+def add_curriculum(subject, course_code, year_level, program=''):
     conn = get_db()
     cur  = get_cursor(conn)
     cur.execute(
-        "INSERT INTO curriculum (subject, course_code, year_level) VALUES (%s,%s,%s) RETURNING id",
-        (subject, course_code, year_level)
+        "INSERT INTO curriculum (subject, course_code, year_level, program) VALUES (%s,%s,%s,%s) RETURNING id",
+        (subject, course_code, year_level, program.strip())
     )
     row = cur.fetchone()
     conn.commit()

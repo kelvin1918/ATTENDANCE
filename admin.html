@@ -765,17 +765,24 @@
             <div class="data-card" style="margin-bottom:24px;">
                 <div class="card-header"><span class="card-title">Add Subject</span></div>
                 <div class="card-body" style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;">
+                    <div style="flex:3;min-width:200px;">
+                        <label style="font-size:0.72rem;font-weight:700;color:var(--muted);display:block;margin-bottom:4px;">Program</label>
+                        <input id="cur-program" type="text" list="cur-program-list"
+                               placeholder="e.g. Bachelor of Computer Engineering Technology"
+                               style="width:100%;padding:10px 14px;border:1.5px solid #E5E7EB;border-radius:10px;font-size:0.85rem;outline:none;">
+                        <datalist id="cur-program-list"></datalist>
+                    </div>
                     <div style="flex:2;min-width:160px;">
-                        <label style="font-size:0.72rem;font-weight:700;color:var(--muted);display:block;margin-bottom:4px;">Course Description</label>
+                        <label style="font-size:0.72rem;font-weight:700;color:var(--muted);display:block;margin-bottom:4px;">Subject Description</label>
                         <input id="cur-subject" type="text" placeholder="e.g. Manufacturing Technology"
                                style="width:100%;padding:10px 14px;border:1.5px solid #E5E7EB;border-radius:10px;font-size:0.85rem;outline:none;">
                     </div>
-                    <div style="flex:1;min-width:120px;">
+                    <div style="flex:1;min-width:110px;">
                         <label style="font-size:0.72rem;font-weight:700;color:var(--muted);display:block;margin-bottom:4px;">Course Code</label>
                         <input id="cur-code" type="text" placeholder="e.g. PM-102"
                                style="width:100%;padding:10px 14px;border:1.5px solid #E5E7EB;border-radius:10px;font-size:0.85rem;outline:none;">
                     </div>
-                    <div style="flex:1;min-width:120px;">
+                    <div style="flex:1;min-width:110px;">
                         <label style="font-size:0.72rem;font-weight:700;color:var(--muted);display:block;margin-bottom:4px;">Year Level</label>
                         <select id="cur-year"
                                 style="width:100%;padding:10px 14px;border:1.5px solid #E5E7EB;border-radius:10px;font-size:0.85rem;outline:none;background:#fff;">
@@ -791,22 +798,7 @@
                     </button>
                 </div>
             </div>
-            <div class="data-card">
-                <div class="card-header"><span class="card-title">Subject List</span></div>
-                <div class="card-body" style="padding:0;">
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>Year Level</th>
-                                <th>Course Description</th>
-                                <th>Course Code</th>
-                                <th>Action</th>
-                            </tr>
-                        </thead>
-                        <tbody id="curriculum-list"></tbody>
-                    </table>
-                </div>
-            </div>
+            <div id="curriculum-grouped"></div>
         </div>
 
     </div><!-- /page-area -->
@@ -1515,31 +1507,83 @@
     }
 
     function renderCurriculum() {
-        const tbody = document.getElementById('curriculum-list');
-        if (!tbody) return;
+        const container = document.getElementById('curriculum-grouped');
+        if (!container) return;
+
+        // Update program autocomplete datalist
+        const programs = [...new Set(_curriculumData.map(c => c.program).filter(Boolean))];
+        const datalist = document.getElementById('cur-program-list');
+        if (datalist) datalist.innerHTML = programs.map(p => `<option value="${p}">`).join('');
+
         if (!_curriculumData.length) {
-            tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:#9CA3AF;padding:24px;">No subjects yet. Add one above.</td></tr>';
+            container.innerHTML = '<div class="data-card"><div class="card-body" style="text-align:center;color:#9CA3AF;padding:32px;">No subjects yet. Add one above.</div></div>';
             return;
         }
-        tbody.innerHTML = _curriculumData.map(c => `
-            <tr>
-                <td><span style="font-size:0.75rem;font-weight:700;background:#FEF2F2;color:#D32F2F;padding:3px 10px;border-radius:20px;">${c.year_level}</span></td>
-                <td style="font-weight:600;">${c.subject}</td>
-                <td style="font-family:monospace;color:#6B7280;">${c.course_code}</td>
-                <td><button onclick="adminDeleteCurriculum(${c.id})"
-                        style="background:none;border:none;color:#D32F2F;cursor:pointer;font-size:0.8rem;font-weight:700;">Delete</button></td>
-            </tr>`).join('');
+
+        // Group: program → year_level → subjects
+        const grouped = {};
+        _curriculumData.forEach(c => {
+            const prog = c.program || '(No Program)';
+            const yr   = c.year_level || 'Unknown';
+            if (!grouped[prog])      grouped[prog] = {};
+            if (!grouped[prog][yr])  grouped[prog][yr] = [];
+            grouped[prog][yr].push(c);
+        });
+
+        const YEAR_ORDER = ['1st Year','2nd Year','3rd Year','4th Year'];
+        const sortYears  = years => years.sort((a,b) => {
+            const ia = YEAR_ORDER.indexOf(a), ib = YEAR_ORDER.indexOf(b);
+            return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
+        });
+
+        container.innerHTML = Object.entries(grouped).map(([prog, yearMap]) => `
+            <div class="data-card" style="margin-bottom:18px;">
+                <div class="card-header" style="background:#FEF2F2;border-radius:14px 14px 0 0;padding:14px 20px;">
+                    <span class="card-title" style="color:#D32F2F;font-size:0.95rem;">
+                        🎓 ${prog}
+                    </span>
+                    <span style="font-size:0.75rem;color:#9CA3AF;font-weight:600;margin-left:10px;">
+                        ${Object.values(yearMap).flat().length} subject(s)
+                    </span>
+                </div>
+                <div class="card-body" style="padding:0;">
+                    ${sortYears(Object.keys(yearMap)).map(yr => `
+                        <div style="border-bottom:1px solid #F3F4F6;padding:12px 20px 4px;">
+                            <p style="font-size:0.72rem;font-weight:800;color:#6B7280;text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px;">
+                                ${yr}
+                            </p>
+                            <table style="width:100%;border-collapse:collapse;">
+                                <tbody>
+                                    ${yearMap[yr].map(c => `
+                                        <tr>
+                                            <td style="padding:6px 0;font-weight:600;font-size:0.85rem;">${c.subject}</td>
+                                            <td style="padding:6px 0;font-family:monospace;color:#6B7280;font-size:0.82rem;width:90px;">${c.course_code}</td>
+                                            <td style="padding:6px 0;text-align:right;width:60px;">
+                                                <button onclick="adminDeleteCurriculum(${c.id})"
+                                                    style="background:none;border:none;color:#D32F2F;cursor:pointer;font-size:0.78rem;font-weight:700;opacity:.7;"
+                                                    onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=.7">
+                                                    Remove
+                                                </button>
+                                            </td>
+                                        </tr>`).join('')}
+                                </tbody>
+                            </table>
+                        </div>`).join('')}
+                </div>
+            </div>`).join('');
     }
 
     async function adminAddCurriculum() {
+        const program     = document.getElementById('cur-program').value.trim();
         const subject     = document.getElementById('cur-subject').value.trim();
         const course_code = document.getElementById('cur-code').value.trim();
         const year_level  = document.getElementById('cur-year').value;
-        if (!subject || !course_code) { alert('Subject and course code are required.'); return; }
+        if (!program)     { alert('Program name is required.'); return; }
+        if (!subject || !course_code) { alert('Subject description and course code are required.'); return; }
         const res = await fetch('/api/curriculum', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ subject, course_code, year_level })
+            body: JSON.stringify({ program, subject, course_code, year_level })
         });
         if (res.ok) {
             document.getElementById('cur-subject').value = '';
@@ -1549,7 +1593,7 @@
     }
 
     async function adminDeleteCurriculum(id) {
-        if (!confirm('Delete this subject from the curriculum?')) return;
+        if (!confirm('Remove this subject from the curriculum?')) return;
         await fetch(`/api/curriculum/${id}`, { method: 'DELETE' });
         await loadCurriculum();
     }

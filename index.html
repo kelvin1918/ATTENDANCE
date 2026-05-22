@@ -307,13 +307,13 @@
             <h2 id="folderModalTitle" class="text-2xl font-black text-[#D32F2F] mb-1 tracking-tighter">Create Folder</h2>
             <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-5">Class &amp; Schedule</p>
             <div class="space-y-3">
-                <!-- Year level first → filters curriculum subjects -->
+                <!-- Program first → filters year levels -->
+                <select id="modalProgram" class="reg-input" required onchange="onProgramChange(this.value)">
+                    <option value="">Select Program</option>
+                </select>
+                <!-- Year level → filters subjects -->
                 <select id="modalYearLevel" class="reg-input" required onchange="onYearLevelChange(this.value)">
                     <option value="">Year Level</option>
-                    <option value="1st Year">1st Year</option>
-                    <option value="2nd Year">2nd Year</option>
-                    <option value="3rd Year">3rd Year</option>
-                    <option value="4th Year">4th Year</option>
                 </select>
                 <!-- Subject filtered by year level from curriculum -->
                 <select id="modalSubjectFromCurriculum" class="reg-input" required onchange="onCurriculumSubjectChange(this.value)">
