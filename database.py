@@ -576,13 +576,20 @@ def import_students_to_class(student_ids, target_class_code):
     source = cur.fetchall()
     imported = 0
     for s in source:
+        # Skip if same sr_code already exists in target (NULL-safe check)
+        if s['sr_code']:
+            cur.execute(
+                "SELECT 1 FROM students WHERE class_code=%s AND sr_code=%s LIMIT 1",
+                (target_class_code, s['sr_code'])
+            )
+            if cur.fetchone():
+                continue
         cur.execute("""
             INSERT INTO students
                 (class_code, name, address, number, sr_code, age, sex, email,
                  photo, signature, status, photo_front, photo_left, photo_right,
                  photo_up, approval_status)
             VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'Approved')
-            ON CONFLICT (class_code, sr_code) DO NOTHING
         """, (
             target_class_code,
             s['name'], s['address'], s['number'], s['sr_code'],
