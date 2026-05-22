@@ -327,7 +327,9 @@ def api_import_students(class_code):
         return jsonify({"error": "Class not found"}), 404
     data        = request.json or {}
     student_ids = data.get("student_ids", [])
-    count = db.import_students_to_class(student_ids, class_code)
+    # Only allow importing students from classes this instructor owns
+    safe_ids = db.filter_instructor_student_ids(instructor_id, student_ids)
+    count = db.import_students_to_class(safe_ids, class_code)
     return jsonify({"imported": count})
 
 
@@ -937,6 +939,12 @@ def api_get_attendance(class_code, date):
 
 @app.route("/api/students/<class_code>", methods=["GET"])
 def api_get_students(class_code):
+    instructor_id = get_current_instructor_id(request)
+    if not instructor_id:
+        return jsonify({"error": "Unauthorized"}), 401
+    cls = db.get_class(class_code)
+    if not cls or cls["instructor_id"] != instructor_id:
+        return jsonify({"error": "Class not found"}), 404
     rows = db.get_students(class_code)
     return jsonify([dict(r) for r in rows])
 

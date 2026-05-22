@@ -651,6 +651,22 @@ def import_students_to_class(student_ids, target_class_code):
     return imported
 
 
+def filter_instructor_student_ids(instructor_id, student_ids):
+    """Return only the IDs from student_ids that belong to classes owned by instructor_id."""
+    if not student_ids:
+        return []
+    conn = get_db()
+    cur  = get_cursor(conn)
+    cur.execute("""
+        SELECT s.id FROM students s
+        JOIN classes c ON c.id = s.class_code
+        WHERE s.id = ANY(%s) AND c.instructor_id = %s
+    """, (student_ids, instructor_id))
+    rows = cur.fetchall()
+    cur.close(); conn.close()
+    return [r['id'] for r in rows]
+
+
 def get_shared_sr_codes(class_code, instructor_id):
     """
     Returns the set of sr_codes that belong to class_code AND also appear
