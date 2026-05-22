@@ -2122,24 +2122,22 @@ def api_registration_submit():
 @app.route("/api/registration/pending")
 def api_pending_registrations():
     """Return all pending student registrations for the logged-in instructor."""
-    token_cookie = request.cookies.get("session_token", "")
-    session      = db.verify_session_token(token_cookie)
-    if not session:
+    instructor_id = get_current_instructor_id(request)
+    if not instructor_id:
         return jsonify({"error": "Unauthorized"}), 401
     try:
-        students = db.get_pending_students(session["instructor_id"])
+        students = db.get_pending_students(instructor_id)
         return jsonify({"students": students})
     except Exception as e:
+        import traceback; traceback.print_exc()
         print(f"[PENDING] DB error: {e}")
-        return jsonify({"students": [], "warning": str(e)}), 200
+        return jsonify({"students": [], "error": str(e)}), 500
 
 
 @app.route("/api/registration/approve/<int:student_id>", methods=["POST"])
 def api_approve_student(student_id):
     """Instructor approves a pending student registration."""
-    token_cookie = request.cookies.get("session_token", "")
-    session      = db.verify_session_token(token_cookie)
-    if not session:
+    if not get_current_instructor_id(request):
         return jsonify({"error": "Unauthorized"}), 401
     db.set_student_approval(student_id, "Approved")
     return jsonify({"status": "ok"})
@@ -2147,12 +2145,14 @@ def api_approve_student(student_id):
 
 @app.route("/api/registration/reject/<int:student_id>", methods=["POST"])
 def api_reject_student(student_id):
-    """Instructor rejects a pending student registration — removes from DB."""
-    token_cookie = request.cookies.get("session_token", "")
-    session      = db.verify_session_token(token_cookie)
-    if not session:
+    """Instructor rejects a pending student — deletes record and Cloudinary photos."""
+    if not get_current_instructor_id(request):
         return jsonify({"error": "Unauthorized"}), 401
-    db.set_student_approval(student_id, "Rejected")
+    student = db.delete_student(student_id)
+    if student:
+        photo_cols = ("photo", "photo_front", "photo_left", "photo_right", "photo_up", "signature")
+        urls = [student[col] for col in photo_cols if student.get(col)]
+        _delete_cloudinary_assets(urls)
     return jsonify({"status": "ok"})
 
 

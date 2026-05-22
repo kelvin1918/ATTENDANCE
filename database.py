@@ -498,6 +498,7 @@ def get_students_with_photos(instructor_id):
            JOIN classes c ON c.id = s.class_code
            WHERE c.instructor_id = %s
              AND s.status != 'Dropped'
+             AND (s.approval_status IS NULL OR s.approval_status != 'Pending')
            ORDER BY s.class_code, s.name""",
         (instructor_id,)
     )

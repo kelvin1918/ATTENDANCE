@@ -1883,8 +1883,13 @@ async function handleApproval(studentId, action) {
       row.style.opacity = '1';
       setTimeout(() => row.remove(), 1500);
     }
-    showToast(action === 'approve' ? 'Student approved!' : 'Student rejected.', action === 'approve' ? 'success' : 'info');
-    if (action === 'approve') { if (currentOpenedFolder) openFolderView(currentOpenedFolder); refreshPendingCount(); }
+    showToast(action === 'approve' ? 'Student approved!' : 'Student rejected and removed.', action === 'approve' ? 'success' : 'info');
+    if (action === 'approve' && currentOpenedFolder) openFolderView(currentOpenedFolder);
+    refreshPendingCount();
+    // Update the "X students waiting for review" subtitle in the modal
+    const remaining = document.querySelectorAll('[id^="pending-row-"]').length;
+    const subtitle = document.querySelector('#pendingModal p');
+    if (subtitle) subtitle.textContent = `${remaining} student${remaining !== 1 ? 's' : ''} waiting for review`;
   } catch {
     showToast('Network error.', 'error');
   }
