@@ -108,20 +108,10 @@
             <input type="email" id="ins-email" placeholder="Email Address" autocomplete="off" spellcheck="false">
             <input type="password" id="ins-pass" placeholder="Password" autocomplete="new-password">
             <button class="btn-red" id="btn-signin" onclick="handleLogin()">Sign In</button>
-            <button class="btn-link" onclick="toggleMainView('reg')">Don't have an account? <b>Register</b></button>
             <a class="forgot-link" onclick="toggleMainView('forgot-email')">Forgot Password?</a>
-        </div>
-
-        <!-- REGISTER VIEW -->
-        <div id="view-reg" class="hidden">
-            <div class="logo">REGISTER</div>
-            <h2>New Instructor</h2>
-            <p style="font-size:0.8rem;color:#888;margin-bottom:15px;">Admin approval required.</p>
-            <input type="text"     id="reg-name"  placeholder="Full Name">
-            <input type="email"    id="reg-email" placeholder="Email Address">
-            <input type="password" id="reg-pass"  placeholder="Password">
-            <button class="btn-red" onclick="handleRegister()">Register</button>
-            <button class="btn-link" onclick="toggleMainView('login')">Already have an account? <b>Login</b></button>
+            <p style="font-size:0.75rem;color:#bbb;margin-top:18px;text-align:center;">
+                Contact your administrator to request an account.
+            </p>
         </div>
 
         <!-- FORGOT PASSWORD — EMAIL INPUT -->
@@ -431,7 +421,7 @@
                 const data = await res.json();
 
                 if (res.status === 403) {
-                    showAlert('Your account is still pending approval.', 'error');
+                    showAlert('Your account is not yet active. Contact the administrator.', 'error');
                 } else if (!res.ok) {
                     showAlert(data.error || 'Invalid email or password.', 'error');
                 } else {
@@ -450,27 +440,6 @@
             btn.disabled = false; btn.textContent = 'Sign In';
         }
 
-        // ── REGISTER ─────────────────────────────────────────────────────────
-        async function handleRegister() {
-            const n = document.getElementById('reg-name').value.trim();
-            const e = document.getElementById('reg-email').value.trim();
-            const p = document.getElementById('reg-pass').value.trim();
-            if (!n || !e || !p)   return showAlert('Fill all fields!', 'error');
-            if (!e.includes('@')) return showAlert('Invalid email format!', 'error');
-            try {
-                const res  = await fetch('/api/register', {
-                    method:  'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body:    JSON.stringify({ name: n, email: e, password: p })
-                });
-                const data = await res.json();
-                if (!res.ok) return showAlert(data.error || 'Registration failed.', 'error');
-                showAlert('Success! Wait for Admin approval.', 'success');
-                setTimeout(() => toggleMainView('login'), 2000);
-            } catch {
-                showAlert('Server error.', 'error');
-            }
-        }
     </script>
 </body>
 </html>

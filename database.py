@@ -1230,6 +1230,15 @@ def register_instructor(email, password, name=''):
     )
     conn.commit(); cur.close(); conn.close()
 
+def create_instructor_by_admin(name, email, password):
+    """Create an instructor account directly — already approved, no pending step."""
+    conn = get_db(); cur = get_cursor(conn)
+    cur.execute(
+        "INSERT INTO instructors (name, email, password, status) VALUES (%s, %s, %s, 'approved')",
+        (name, email, password)
+    )
+    conn.commit(); cur.close(); conn.close()
+
 def approve_instructor(instructor_id):
     conn = get_db(); cur = get_cursor(conn)
     cur.execute("UPDATE instructors SET status='approved' WHERE id=%s", (instructor_id,))

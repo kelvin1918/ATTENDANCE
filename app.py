@@ -1218,29 +1218,40 @@ def api_reset_password():
 
 @app.route("/api/register", methods=["POST"])
 def api_register():
-    data  = request.json
-    email = data.get("email", "").strip()
-    pwd   = data.get("password", "").strip()
-    name  = data.get("name", "").strip()
-    if not email or not pwd or not name:
-        return jsonify({"error": "Fill all fields."}), 400
-    existing = db.get_instructor_by_email(email)
-    if existing:
-        return jsonify({"error": "Email already registered."}), 409
-    db.register_instructor(email, pwd, name)
-    return jsonify({"status": "ok"})
+    # Public self-registration is disabled. Accounts are created by the admin only.
+    return jsonify({"error": "Account registration is managed by the administrator."}), 403
 
 
 @app.route("/api/instructors", methods=["GET"])
 def api_get_instructors():
+    if not db.verify_admin_session_token(_get_admin_token(request)):
+        return jsonify({"error": "Unauthorized"}), 401
     rows = db.get_all_instructors()
     return jsonify([dict(r) for r in rows])
 
 
+@app.route("/api/admin/create-instructor", methods=["POST"])
+def api_admin_create_instructor():
+    if not db.verify_admin_session_token(_get_admin_token(request)):
+        return jsonify({"error": "Unauthorized"}), 401
+    data  = request.json or {}
+    name  = data.get("name",  "").strip()
+    email = data.get("email", "").strip()
+    pwd   = data.get("password", "").strip()
+    if not name or not email or not pwd:
+        return jsonify({"error": "Name, email, and password are required."}), 400
+    if db.get_instructor_by_email(email):
+        return jsonify({"error": "An account with that email already exists."}), 409
+    # Create account pre-approved — no pending queue needed
+    db.create_instructor_by_admin(name, email, pwd)
+    return jsonify({"status": "ok"})
+
+
 @app.route("/api/instructors/<int:instructor_id>/approve", methods=["POST"])
 def api_approve_instructor(instructor_id):
+    if not db.verify_admin_session_token(_get_admin_token(request)):
+        return jsonify({"error": "Unauthorized"}), 401
     db.approve_instructor(instructor_id)
-    # Notify the instructor that their account was approved
     db.add_notification(
         instructor_id = instructor_id,
         notif_type    = "approved",
@@ -1252,6 +1263,8 @@ def api_approve_instructor(instructor_id):
 
 @app.route("/api/instructors/<int:instructor_id>", methods=["DELETE"])
 def api_delete_instructor(instructor_id):
+    if not db.verify_admin_session_token(_get_admin_token(request)):
+        return jsonify({"error": "Unauthorized"}), 401
     db.delete_instructor(instructor_id)
     return jsonify({"status": "ok"})
 
