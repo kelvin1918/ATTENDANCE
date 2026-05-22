@@ -527,6 +527,99 @@ def get_student_by_srcode(sr_code):
     return row
 
 
+def search_instructor_students(instructor_id, query, exclude_class_code):
+    """
+    Find Approved students across all classes owned by instructor whose name
+    or SR code matches query.  Students already in exclude_class_code are
+    omitted.  Deduplicates by sr_code so the same student only appears once
+    even if they are in several classes.
+    """
+    conn = get_db()
+    cur  = get_cursor(conn)
+    q = f"%{query}%"
+    cur.execute("""
+        SELECT DISTINCT ON (COALESCE(s.sr_code, s.id::text))
+               s.id, s.name, s.sr_code, s.class_code, c.subject, c.section
+        FROM   students s
+        JOIN   classes  c ON c.id = s.class_code
+        WHERE  c.instructor_id    = %s
+          AND  s.approval_status  = 'Approved'
+          AND  (s.sr_code IS NULL OR s.sr_code NOT IN (
+                   SELECT sr_code FROM students
+                   WHERE  class_code = %s AND sr_code IS NOT NULL
+               ))
+          AND  (s.name ILIKE %s OR s.sr_code ILIKE %s)
+        ORDER  BY COALESCE(s.sr_code, s.id::text), s.name
+        LIMIT  20
+    """, (instructor_id, exclude_class_code, q, q))
+    rows = cur.fetchall()
+    cur.close(); conn.close()
+    return rows
+
+
+def import_students_to_class(student_ids, target_class_code):
+    """
+    Copy existing student rows (by id list) into target_class_code.
+    Reuses all existing Cloudinary photo URLs — no re-upload needed.
+    Sets approval_status='Approved' for every imported student.
+    Returns count of rows actually inserted (skips already-present sr_codes).
+    """
+    if not student_ids:
+        return 0
+    conn = get_db()
+    cur  = get_cursor(conn)
+    cur.execute("""
+        SELECT name, address, number, sr_code, age, sex, email,
+               photo, signature, status, photo_front, photo_left, photo_right, photo_up
+        FROM   students WHERE id = ANY(%s)
+    """, (student_ids,))
+    source = cur.fetchall()
+    imported = 0
+    for s in source:
+        cur.execute("""
+            INSERT INTO students
+                (class_code, name, address, number, sr_code, age, sex, email,
+                 photo, signature, status, photo_front, photo_left, photo_right,
+                 photo_up, approval_status)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'Approved')
+            ON CONFLICT (class_code, sr_code) DO NOTHING
+        """, (
+            target_class_code,
+            s['name'], s['address'], s['number'], s['sr_code'],
+            s['age'], s['sex'], s['email'],
+            s['photo'], s['signature'], s['status'] or 'Enrolled',
+            s['photo_front'], s['photo_left'], s['photo_right'], s['photo_up']
+        ))
+        imported += cur.rowcount
+    conn.commit()
+    cur.close(); conn.close()
+    return imported
+
+
+def get_shared_sr_codes(class_code, instructor_id):
+    """
+    Returns the set of sr_codes that belong to class_code AND also appear
+    in at least one other class owned by the same instructor.
+    Used so delete_class doesn't wipe Cloudinary photos for shared students.
+    """
+    conn = get_db()
+    cur  = get_cursor(conn)
+    cur.execute("""
+        SELECT DISTINCT s.sr_code
+        FROM   students s
+        JOIN   classes  c ON c.id = s.class_code
+        WHERE  c.instructor_id = %s
+          AND  s.class_code   != %s
+          AND  s.sr_code IN (
+               SELECT sr_code FROM students
+               WHERE  class_code = %s AND sr_code IS NOT NULL
+          )
+    """, (instructor_id, class_code, class_code))
+    rows = cur.fetchall()
+    cur.close(); conn.close()
+    return {r['sr_code'] for r in rows}
+
+
 def add_student(class_code, name, address, number,
                 sr_code, age, sex, email, photo, signature,
                 photo_front="", photo_left="", photo_right="", photo_up="",

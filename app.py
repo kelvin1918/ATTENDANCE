@@ -257,12 +257,45 @@ def api_edit_class(class_code):
 
 @app.route("/api/delete_class/<class_code>", methods=["DELETE"])
 def api_delete_class(class_code):
+    instructor_id = get_current_instructor_id(request)
     photo_cols = ("photo", "photo_front", "photo_left", "photo_right", "photo_up", "signature")
     students = db.get_students(class_code, include_pending=True)
-    urls = [s[col] for s in students for col in photo_cols if s.get(col)]
+    # Don't delete Cloudinary photos for students who are also in another class
+    shared = db.get_shared_sr_codes(class_code, instructor_id) if instructor_id else set()
+    urls = [
+        s[col] for s in students for col in photo_cols
+        if s.get(col) and s.get('sr_code') not in shared
+    ]
     _delete_cloudinary_assets(urls)
     db.delete_class(class_code)
     return jsonify({"status": "ok"})
+
+
+@app.route("/api/students/search")
+def api_search_students():
+    instructor_id = get_current_instructor_id(request)
+    if not instructor_id:
+        return jsonify({"error": "Unauthorized"}), 401
+    q       = request.args.get("q", "").strip()
+    exclude = request.args.get("exclude_class", "")
+    if not q:
+        return jsonify([])
+    students = db.search_instructor_students(instructor_id, q, exclude)
+    return jsonify([dict(s) for s in students])
+
+
+@app.route("/api/classes/<class_code>/import-students", methods=["POST"])
+def api_import_students(class_code):
+    instructor_id = get_current_instructor_id(request)
+    if not instructor_id:
+        return jsonify({"error": "Unauthorized"}), 401
+    cls = db.get_class(class_code)
+    if not cls or cls["instructor_id"] != instructor_id:
+        return jsonify({"error": "Class not found"}), 404
+    data        = request.json or {}
+    student_ids = data.get("student_ids", [])
+    count = db.import_students_to_class(student_ids, class_code)
+    return jsonify({"imported": count})
 
 
 # ════════════════════════════════════════════════════════════════════════════════

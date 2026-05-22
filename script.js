@@ -1305,6 +1305,12 @@ function renderFolderView(cls, class_code, students) {
                     <i data-lucide="link" class="w-4 h-4"></i>
                     <span>Student Link</span>
                 </button>
+                <button onclick="openImportStudentsModal('${class_code}')"
+                    class="bg-[#FEF2F2] text-[#D32F2F] px-5 py-4 rounded-2xl text-[10px] font-black uppercase hover:bg-red-100 transition flex items-center space-x-2"
+                    title="Add existing students from your other classes without re-registration">
+                    <i data-lucide="user-plus" class="w-4 h-4"></i>
+                    <span>Import Students</span>
+                </button>
                 <button onclick="openPendingApprovals()" id="pendingApprovalsBtn"
                     class="relative bg-amber-50 text-amber-700 px-5 py-4 rounded-2xl text-[10px] font-black uppercase hover:bg-amber-100 transition flex items-center space-x-2"
                     title="Review and approve pending student registrations">
@@ -1678,17 +1684,66 @@ async function saveFolderModal() {
             body: JSON.stringify({ course_code: year, subject: subject, section: section })
         });
     } else {
+        // Check for duplicate: same subject + section already exists for this instructor
+        const duplicate = classFolders.find(f =>
+            f.subject.trim().toLowerCase() === subject.trim().toLowerCase() &&
+            f.section.trim().toLowerCase() === section.trim().toLowerCase()
+        );
+        if (duplicate) {
+            _showDuplicateClassDialog(duplicate);
+            return; // don't close modal — let user decide
+        }
         // Create new class
-        await authFetch('/api/create_class', {
+        const res  = await authFetch('/api/create_class', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ id: class_code, course_code: year, subject: subject, section: section })
         });
+        const data = await res.json();
+        if (!res.ok) { showToast(data.error || 'Failed to create class.', 'error'); return; }
     }
 
     editIdx = -1;
     showPage('classes');
     closeClassModal();
+}
+
+function _showDuplicateClassDialog(existing) {
+    document.getElementById('duplicateClassModal')?.remove();
+    const el = document.createElement('div');
+    el.id = 'duplicateClassModal';
+    el.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;z-index:99999;padding:16px';
+    el.innerHTML = `
+      <div style="background:#fff;border-radius:20px;width:100%;max-width:420px;padding:28px 24px;box-shadow:0 20px 60px rgba(0,0,0,.25)">
+        <div style="text-align:center;margin-bottom:4px">
+          <div style="font-size:2.2rem;margin-bottom:10px">📂</div>
+          <h3 style="font-size:1.05rem;font-weight:800;color:#1a1a1a;margin:0 0 10px">Class Already Exists</h3>
+          <p style="color:#6B7280;font-size:.85rem;line-height:1.5;margin:0">
+            A class for <strong style="color:#1a1a1a">${existing.subject}</strong> &middot;
+            <strong style="color:#1a1a1a">${existing.section}</strong> already exists in your folders.
+            <br>Open the existing class instead of creating a duplicate.
+          </p>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:10px;margin-top:20px">
+          <button onclick="_openExistingClass('${existing.id}')"
+            style="width:100%;padding:12px;background:#D32F2F;color:#fff;border:none;border-radius:12px;font-weight:700;font-size:.9rem;cursor:pointer">
+            Open Existing Class
+          </button>
+          <button onclick="document.getElementById('duplicateClassModal').remove()"
+            style="width:100%;padding:12px;background:#fff;color:#374151;border:2px solid #E5E7EB;border-radius:12px;font-weight:700;font-size:.9rem;cursor:pointer">
+            Cancel
+          </button>
+        </div>
+      </div>`;
+    document.body.appendChild(el);
+    el.addEventListener('click', e => { if (e.target === el) el.remove(); });
+}
+
+function _openExistingClass(class_code) {
+    document.getElementById('duplicateClassModal')?.remove();
+    closeClassModal();
+    editIdx = -1;
+    openFolderView(class_code);
 }
 
 function editFolder(class_code) {
@@ -3184,3 +3239,156 @@ document.addEventListener('DOMContentLoaded', () => {
     // Slight delay to let auth token load first
     setTimeout(startNotifPolling, 1500);
 });
+
+
+// ── IMPORT STUDENTS ───────────────────────────────────────────────────────────
+let _importSelectedIds  = new Set();
+let _importSearchTimer  = null;
+
+function openImportStudentsModal(class_code) {
+    const existing = document.getElementById('importStudentsModal');
+    if (existing) existing.remove();
+    _importSelectedIds.clear();
+
+    const otherClasses = classFolders.filter(f => f.id !== class_code);
+    const copySection  = otherClasses.length > 0 ? `
+        <div class="mb-6">
+            <p class="text-xs font-black uppercase text-gray-400 tracking-widest mb-3">Copy all students from another class</p>
+            <div class="flex gap-2">
+                <select id="importFromClassSelect" class="flex-1 reg-input text-sm">
+                    <option value="">Select a class…</option>
+                    ${otherClasses.map(f => `<option value="${f.id}">${f.subject} — ${f.section}</option>`).join('')}
+                </select>
+                <button onclick="_importFromClass('${class_code}')"
+                    class="bg-[#D32F2F] text-white px-5 py-3 rounded-2xl text-xs font-black uppercase hover:bg-red-700 transition">
+                    Import All
+                </button>
+            </div>
+        </div>
+        <div class="flex items-center gap-3 mb-6">
+            <div class="flex-1 h-px bg-gray-200"></div>
+            <span class="text-[10px] text-gray-400 font-black uppercase tracking-widest">or search individually</span>
+            <div class="flex-1 h-px bg-gray-200"></div>
+        </div>` : '';
+
+    const modal = document.createElement('div');
+    modal.id        = 'importStudentsModal';
+    modal.className = 'fixed inset-0 bg-black/60 backdrop-blur-sm z-[160] flex items-center justify-center p-4';
+    modal.innerHTML = `
+        <div class="bg-white rounded-[2.5rem] w-full max-w-md p-8 shadow-2xl" style="max-height:90vh;overflow-y:auto">
+            <h2 class="text-2xl font-black text-[#D32F2F] mb-6 tracking-tighter">Import Students</h2>
+            ${copySection}
+            <div class="mb-4">
+                <p class="text-xs font-black uppercase text-gray-400 tracking-widest mb-3">Search by name or SR Code</p>
+                <input id="importSearchInput" type="text"
+                       class="reg-input w-full"
+                       placeholder="e.g. Kelvin Africa or 21-00234…"
+                       oninput="_searchImportStudents('${class_code}', this.value)">
+            </div>
+            <div id="importSearchResults" class="space-y-2 mb-4" style="max-height:200px;overflow-y:auto"></div>
+            <p id="importSelectedInfo" class="text-xs text-gray-400 mb-4 hidden">
+                <span id="importSelectedCount">0</span> student(s) selected
+            </p>
+            <div class="flex gap-3 pt-2">
+                <button onclick="document.getElementById('importStudentsModal').remove()"
+                    class="flex-1 py-4 text-gray-400 font-bold">Cancel</button>
+                <button id="importAddBtn" onclick="_addSelectedImportStudents('${class_code}')"
+                    class="flex-1 py-4 bg-[#D32F2F] text-white font-bold rounded-xl shadow-lg opacity-40 cursor-not-allowed"
+                    disabled>Add Selected</button>
+            </div>
+        </div>`;
+    document.body.appendChild(modal);
+    lucide.createIcons();
+    document.getElementById('importSearchInput').focus();
+}
+
+function _searchImportStudents(class_code, query) {
+    clearTimeout(_importSearchTimer);
+    const container = document.getElementById('importSearchResults');
+    if (!container) return;
+    if (!query.trim()) { container.innerHTML = ''; return; }
+    _importSearchTimer = setTimeout(async () => {
+        try {
+            const res      = await authFetch(`/api/students/search?q=${encodeURIComponent(query)}&exclude_class=${encodeURIComponent(class_code)}`);
+            const students = await res.json();
+            if (!students.length) {
+                container.innerHTML = '<p class="text-xs text-gray-400 text-center py-4">No matching students found in your other classes.</p>';
+                return;
+            }
+            container.innerHTML = students.map(s => `
+                <label class="flex items-center gap-3 p-3 rounded-2xl border border-gray-100 hover:border-red-200 cursor-pointer transition">
+                    <input type="checkbox" value="${s.id}"
+                           onchange="_toggleImportStudent(this)"
+                           class="w-4 h-4 accent-[#D32F2F]"
+                           ${_importSelectedIds.has(s.id) ? 'checked' : ''}>
+                    <div>
+                        <p class="font-bold text-sm text-gray-900">${s.name}</p>
+                        <p class="text-xs text-gray-400">${s.sr_code || 'No SR Code'} · from ${s.subject || ''} ${s.section || ''}</p>
+                    </div>
+                </label>`).join('');
+        } catch { container.innerHTML = '<p class="text-xs text-red-400 text-center py-4">Search failed. Try again.</p>'; }
+    }, 300);
+}
+
+function _toggleImportStudent(checkbox) {
+    const id = parseInt(checkbox.value);
+    if (checkbox.checked) _importSelectedIds.add(id);
+    else                   _importSelectedIds.delete(id);
+    const count = _importSelectedIds.size;
+    const info  = document.getElementById('importSelectedInfo');
+    const btn   = document.getElementById('importAddBtn');
+    if (!info || !btn) return;
+    document.getElementById('importSelectedCount').textContent = count;
+    info.classList.toggle('hidden', count === 0);
+    btn.disabled = count === 0;
+    btn.classList.toggle('opacity-40',       count === 0);
+    btn.classList.toggle('cursor-not-allowed', count === 0);
+}
+
+async function _addSelectedImportStudents(class_code) {
+    if (!_importSelectedIds.size) return;
+    const btn = document.getElementById('importAddBtn');
+    if (btn) { btn.textContent = 'Importing…'; btn.disabled = true; }
+    try {
+        const res  = await authFetch(`/api/classes/${class_code}/import-students`, {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({ student_ids: Array.from(_importSelectedIds) })
+        });
+        const data = await res.json();
+        document.getElementById('importStudentsModal')?.remove();
+        _importSelectedIds.clear();
+        openFolderView(class_code);
+        showToast(`${data.imported} student(s) imported successfully.`, 'success');
+    } catch {
+        if (btn) { btn.textContent = 'Add Selected'; btn.disabled = false; }
+        showToast('Import failed. Please try again.', 'error');
+    }
+}
+
+async function _importFromClass(class_code) {
+    const select = document.getElementById('importFromClassSelect');
+    const fromClass = select ? select.value : '';
+    if (!fromClass) { showToast('Please select a class first.', 'error'); return; }
+    const btn = select.nextElementSibling;
+    if (btn) { btn.textContent = 'Importing…'; btn.disabled = true; }
+    try {
+        const res      = await authFetch(`/api/students/${fromClass}`);
+        const students = await res.json();
+        if (!students.length) { showToast('That class has no students.', 'error'); if (btn) { btn.textContent = 'Import All'; btn.disabled = false; } return; }
+        const ids      = students.map(s => s.id);
+        const importRes = await authFetch(`/api/classes/${class_code}/import-students`, {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({ student_ids: ids })
+        });
+        const data = await importRes.json();
+        document.getElementById('importStudentsModal')?.remove();
+        _importSelectedIds.clear();
+        openFolderView(class_code);
+        showToast(`${data.imported} student(s) imported successfully.`, 'success');
+    } catch {
+        if (btn) { btn.textContent = 'Import All'; btn.disabled = false; }
+        showToast('Import failed. Please try again.', 'error');
+    }
+}
