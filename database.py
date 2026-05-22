@@ -210,6 +210,17 @@ def init_db():
         );
     """)
 
+    # ── 7. curriculum — admin-managed subject catalogue ───────────────────────
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS curriculum (
+            id          INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+            subject     VARCHAR(100) NOT NULL,
+            course_code VARCHAR(20)  NOT NULL,
+            year_level  VARCHAR(20)  NOT NULL
+        );
+    """)
+    cur.execute("ALTER TABLE classes ADD COLUMN IF NOT EXISTS year_level VARCHAR(20) DEFAULT '';")
+
     # ── 8. campus_rooms — maps friendly room name to RTSP URL ────────────────
     cur.execute("""
         CREATE TABLE IF NOT EXISTS campus_rooms (
@@ -415,37 +426,74 @@ def get_class(class_id):
 
 
 
-def create_class(class_code, course_code, subject, section, instructor_id):
-    """
-    class_code    = unique ID e.g. "CPT113-CPET3201-INS1"
-    course_code   = e.g. "CPT-113"
-    subject       = e.g. "Computer Programming"
-    section       = e.g. "CPET-3201"
-    instructor_id = FK to instructors table
-    created       = auto-set to today's date
-    """
+def create_class(class_code, course_code, subject, section, instructor_id,
+                 year_level='', day='MON', time='', room=''):
     conn    = get_db()
     cur     = get_cursor(conn)
     created = datetime.now().strftime("%Y-%m-%d")
     cur.execute(
-        """INSERT INTO classes (id, course_code, subject, section, created, instructor_id)
-           VALUES (%s, %s, %s, %s, %s, %s)
+        """INSERT INTO classes (id, course_code, subject, section, created, instructor_id, year_level)
+           VALUES (%s, %s, %s, %s, %s, %s, %s)
            ON CONFLICT (id) DO NOTHING""",
-        (class_code, course_code, subject, section, created, instructor_id)
+        (class_code, course_code, subject, section, created, instructor_id, year_level)
+    )
+    # Auto-create linked schedule
+    cur.execute(
+        """INSERT INTO schedules (class_code, instructor_id, time, subject, room, day)
+           VALUES (%s, %s, %s, %s, %s, %s)
+           ON CONFLICT DO NOTHING""",
+        (class_code, instructor_id, time, subject, room, day)
     )
     conn.commit()
     cur.close(); conn.close()
 
 
-def edit_class(class_code, course_code, subject, section):
+def edit_class(class_code, course_code, subject, section,
+               year_level=None, day=None, time=None, room=None):
     conn = get_db()
     cur  = get_cursor(conn)
     cur.execute(
         """UPDATE classes
-           SET course_code=%s, subject=%s, section=%s
+           SET course_code=%s, subject=%s, section=%s, year_level=COALESCE(%s, year_level)
            WHERE id=%s""",
-        (course_code, subject, section, class_code)
+        (course_code, subject, section, year_level, class_code)
     )
+    if day is not None and time is not None and room is not None:
+        cur.execute(
+            """UPDATE schedules SET day=%s, time=%s, subject=%s, room=%s
+               WHERE class_code=%s""",
+            (day, time, subject, room, class_code)
+        )
+    conn.commit()
+    cur.close(); conn.close()
+
+
+def get_curriculum():
+    conn = get_db()
+    cur  = get_cursor(conn)
+    cur.execute("SELECT * FROM curriculum ORDER BY year_level, subject")
+    rows = cur.fetchall()
+    cur.close(); conn.close()
+    return rows
+
+
+def add_curriculum(subject, course_code, year_level):
+    conn = get_db()
+    cur  = get_cursor(conn)
+    cur.execute(
+        "INSERT INTO curriculum (subject, course_code, year_level) VALUES (%s,%s,%s) RETURNING id",
+        (subject, course_code, year_level)
+    )
+    row = cur.fetchone()
+    conn.commit()
+    cur.close(); conn.close()
+    return row["id"]
+
+
+def delete_curriculum(item_id):
+    conn = get_db()
+    cur  = get_cursor(conn)
+    cur.execute("DELETE FROM curriculum WHERE id=%s", (item_id,))
     conn.commit()
     cur.close(); conn.close()
 
@@ -1052,18 +1100,17 @@ def get_absence_counts(instructor_id=None):
 def get_schedules(class_code=None, instructor_id=None):
     conn = get_db()
     cur  = get_cursor(conn)
+    base = """
+        SELECT s.*, c.section
+        FROM   schedules s
+        LEFT JOIN classes c ON c.id = s.class_code
+    """
     if class_code:
-        cur.execute(
-            "SELECT * FROM schedules WHERE class_code = %s ORDER BY id",
-            (class_code,)
-        )
+        cur.execute(base + " WHERE s.class_code = %s ORDER BY s.id", (class_code,))
     elif instructor_id:
-        cur.execute(
-            "SELECT * FROM schedules WHERE instructor_id = %s ORDER BY id",
-            (instructor_id,)
-        )
+        cur.execute(base + " WHERE s.instructor_id = %s ORDER BY s.id", (instructor_id,))
     else:
-        cur.execute("SELECT * FROM schedules ORDER BY id")
+        cur.execute(base + " ORDER BY s.id")
     rows = cur.fetchall()
     cur.close(); conn.close()
     return rows

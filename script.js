@@ -19,6 +19,7 @@ function authFetch(url, options = {}) {
 
 let schedules       = [];
 let classFolders    = [];
+let curriculum      = [];
 let historyFolders  = [];
 let attendanceLogs  = {};
 let selectedDay     = "MON";
@@ -95,8 +96,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         return;
     }
 
-    // Load schedules from backend on startup
-    await loadSchedules();
+    // Load schedules + curriculum from backend on startup
+    await Promise.all([loadSchedules(), loadCurriculum()]);
     renderDayFilters();
 
     lucide.createIcons();
@@ -1583,6 +1584,37 @@ async function loadSchedules() {
     }
 }
 
+function s_openFolder(class_code) {
+    if (!class_code) return;
+    showPage('classes');
+    openFolderView(class_code);
+}
+
+async function loadCurriculum() {
+    try {
+        const res = await authFetch('/api/curriculum');
+        curriculum = await res.json();
+    } catch {
+        curriculum = [];
+    }
+}
+
+function onYearLevelChange(yearLevel) {
+    const sel = document.getElementById('modalSubjectFromCurriculum');
+    if (!sel) return;
+    const filtered = curriculum.filter(c => c.year_level === yearLevel);
+    sel.innerHTML = '<option value="">Select Subject</option>'
+        + filtered.map(c => `<option value="${c.id}" data-subject="${c.subject}" data-code="${c.course_code}">${c.subject}</option>`).join('');
+    document.getElementById('modalYear').value = '';
+}
+
+function onCurriculumSubjectChange(val) {
+    const sel = document.getElementById('modalSubjectFromCurriculum');
+    if (!sel) return;
+    const opt = sel.querySelector(`option[value="${val}"]`);
+    if (opt) document.getElementById('modalYear').value = opt.dataset.code || '';
+}
+
 function renderDayFilters() {
     const days      = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
     const container = document.getElementById('day-filters');
@@ -1594,15 +1626,11 @@ function renderDayFilters() {
 
     const filtered = schedules.filter(s => s.day === selectedDay);
     document.getElementById('schedule-list').innerHTML = filtered.length ? filtered.map(s => `
-        <div class="bg-white p-5 rounded-3xl border border-gray-50 shadow-sm relative group hover:border-red-50 transition-all">
-            <div class="flex justify-between items-start mb-1">
-                <h4 class="font-bold text-gray-900 text-sm">${s.subject}</h4>
-                <div class="flex space-x-1 opacity-0 group-hover:opacity-100 transition">
-                    <button onclick="editSchedule(${s.id})" class="text-gray-400 hover:text-blue-500"><i data-lucide="edit-3" class="w-3 h-3"></i></button>
-                    <button onclick="confirmAction('deleteSubject', ${s.id})" class="text-gray-400 hover:text-red-500"><i data-lucide="trash-2" class="w-3 h-3"></i></button>
-                </div>
-            </div>
+        <div class="bg-white p-5 rounded-3xl border border-gray-50 shadow-sm hover:border-red-50 transition-all cursor-pointer"
+             onclick="s_openFolder(${JSON.stringify(s.class_code)})">
+            <h4 class="font-bold text-gray-900 text-sm mb-1">${s.subject}</h4>
             <p class="text-[9px] text-gray-400 font-bold uppercase tracking-widest">RM ${s.room} • <span class="text-[#D32F2F]">${s.time}</span></p>
+            <p class="text-[9px] text-gray-400 font-bold uppercase tracking-widest">${s.section || ''}</p>
         </div>`).join('') : '<p class="text-center text-[10px] text-gray-300 py-10 font-bold">Free Schedule</p>';
     lucide.createIcons();
 }
@@ -1655,51 +1683,50 @@ function editSchedule(id) {
 // ── FOLDER MODAL (Create/Edit Class) ─────────────────────────────────────────
 
 async function saveFolderModal() {
-    // Subject comes from the hidden field populated by autoFillClassModal
-    // Falls back to select value if no autofill happened
-    const subjectNameEl = document.getElementById('modalSubjectName');
-    const subject = (subjectNameEl && subjectNameEl.value)
-                    ? subjectNameEl.value
-                    : document.getElementById('modalSubject').options[
-                        document.getElementById('modalSubject').selectedIndex
-                      ]?.dataset?.subject
-                      || document.getElementById('modalSubject').value;
-    const section = document.getElementById('modalSection').value;
-    const year    = document.getElementById('modalYear').value;
+    const subjectSel  = document.getElementById('modalSubjectFromCurriculum');
+    const selectedOpt = subjectSel ? subjectSel.options[subjectSel.selectedIndex] : null;
+    const subject     = selectedOpt?.dataset?.subject || selectedOpt?.text || '';
+    const year_level  = document.getElementById('modalYearLevel').value;
+    const section     = document.getElementById('modalSection').value;
+    const course_code = document.getElementById('modalYear').value;
+    const day         = document.getElementById('modalDay').value;
+    const time_in     = document.getElementById('modalTimeFrom').value;
+    const time_out    = document.getElementById('modalTimeTo').value;
+    const room        = document.getElementById('modalRoom').value;
 
-    // class id includes instructor email prefix to ensure uniqueness across instructors
+    if (!subject || !section || !course_code || !room) {
+        showToast('Please fill in all fields.', 'error');
+        return;
+    }
+
     const session    = JSON.parse(localStorage.getItem('active_session') || '{}');
     const prefix     = (session.email || 'INS').split('@')[0].toUpperCase().substring(0, 6);
-    const class_code = `${prefix}-${subject}-${section}-${year}`.replace(/\s+/g, '-').toUpperCase();
+    const class_code = `${prefix}-${subject}-${section}-${course_code}`.replace(/\s+/g, '-').toUpperCase();
 
     if (editIdx > -1) {
-        // Edit existing class
         const existing = classFolders[editIdx];
-        await fetch(`/api/edit_class/${existing.id}`, {
+        await authFetch(`/api/edit_class/${existing.id}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ course_code: year, subject: subject, section: section })
+            body: JSON.stringify({ course_code, subject, section, year_level, day, time_in, time_out, room })
         });
     } else {
-        // Check for duplicate: same subject + section already exists for this instructor
         const duplicate = classFolders.find(f =>
             f.subject.trim().toLowerCase() === subject.trim().toLowerCase() &&
             f.section.trim().toLowerCase() === section.trim().toLowerCase()
         );
-        if (duplicate) {
-            _showDuplicateClassDialog(duplicate);
-            return; // don't close modal — let user decide
-        }
-        // Create new class
+        if (duplicate) { _showDuplicateClassDialog(duplicate); return; }
+
         const res  = await authFetch('/api/create_class', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ id: class_code, course_code: year, subject: subject, section: section })
+            body: JSON.stringify({ id: class_code, course_code, subject, section, year_level, day, time_in, time_out, room })
         });
         const data = await res.json();
         if (!res.ok) { showToast(data.error || 'Failed to create class.', 'error'); return; }
     }
 
+    await loadSchedules();
     editIdx = -1;
     showPage('classes');
     closeClassModal();
@@ -1748,29 +1775,50 @@ function editFolder(class_code) {
     if (!f) return;
     editIdx = classFolders.indexOf(f);
 
-    // Populate dropdown first — same as openFolderModal()
-    populateSubjectSuggestions();
+    document.getElementById('folderModalTitle').textContent = 'Edit Folder';
 
-    // Try to pre-select the matching schedule by subject name
-    const subjectSelect = document.getElementById('modalSubject');
+    // Pre-fill year level + repopulate subject dropdown
+    const yl = f.year_level || '';
+    document.getElementById('modalYearLevel').value = yl;
+    onYearLevelChange(yl);
+
+    // Pre-select the subject in the curriculum dropdown
+    const subSel = document.getElementById('modalSubjectFromCurriculum');
     let matched = false;
-    for (const opt of subjectSelect.options) {
+    for (const opt of subSel.options) {
         if (opt.dataset.subject && opt.dataset.subject.toLowerCase() === f.subject.toLowerCase()) {
-            subjectSelect.value = opt.value;
-            // Trigger autofill so modalSubjectName gets set
-            autoFillClassModal(opt.value);
+            subSel.value = opt.value;
             matched = true;
             break;
         }
     }
-    // If no schedule match, fall back to showing the raw subject name
-    if (!matched) {
-        subjectSelect.value = '';
-        document.getElementById('modalSubjectName').value = f.subject;
+    // If curriculum entry was deleted, add a temporary option for the existing subject
+    if (!matched && f.subject) {
+        const tmp = document.createElement('option');
+        tmp.value = '__existing__';
+        tmp.dataset.subject = f.subject;
+        tmp.textContent = f.subject;
+        subSel.appendChild(tmp);
+        subSel.value = '__existing__';
     }
 
-    document.getElementById('modalSection').value = f.section;
-    document.getElementById('modalYear').value    = f.course_code;
+    document.getElementById('modalYear').value    = f.course_code || '';
+    document.getElementById('modalSection').value = f.section     || '';
+
+    // Pre-fill schedule from the linked schedule row
+    generateTimeOptions();
+    const sched = schedules.find(s => s.class_code === class_code);
+    if (sched) {
+        document.getElementById('modalDay').value  = sched.day  || 'MON';
+        document.getElementById('modalRoom').value = sched.room || '';
+        const parts = (sched.time || '').split(' - ');
+        Array.from(document.getElementById('modalTimeFrom').options).forEach(o => { o.selected = o.value === (parts[0]||'').trim(); });
+        Array.from(document.getElementById('modalTimeTo').options).forEach(o =>   { o.selected = o.value === (parts[1]||'').trim(); });
+    } else {
+        document.getElementById('modalDay').value  = 'MON';
+        document.getElementById('modalRoom').value = '';
+    }
+
     document.getElementById('classModal').classList.remove('hidden');
 }
 
@@ -2741,9 +2789,14 @@ function closeTaskModal()  { editSchedId = -1; document.getElementById('taskModa
 function openTaskModal()   { editSchedId = -1; document.getElementById('taskModal').classList.remove('hidden'); }
 function openFolderModal() {
     editIdx = -1;
-    populateSubjectSuggestions();   // fill the schedule dropdown before showing
-    document.getElementById('modalSection').value = '';
+    document.getElementById('folderModalTitle').textContent = 'Create Folder';
+    document.getElementById('modalYearLevel').value = '';
+    document.getElementById('modalSubjectFromCurriculum').innerHTML = '<option value="">Select Subject</option>';
     document.getElementById('modalYear').value    = '';
+    document.getElementById('modalSection').value = '';
+    document.getElementById('modalDay').value     = 'MON';
+    document.getElementById('modalRoom').value    = '';
+    generateTimeOptions();
     document.getElementById('classModal').classList.remove('hidden');
 }
 

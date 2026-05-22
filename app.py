@@ -226,14 +226,18 @@ def api_create_class():
             return jsonify({"error": f"{field} is required"}), 400
 
     instructor_id = get_current_instructor_id(request)
+    time_str = f"{data.get('time_in','7:00 AM')} - {data.get('time_out','8:00 AM')}"
     db.create_class(
         class_code    = data["id"],
         course_code   = data["course_code"],
         subject       = data["subject"],
         section       = data["section"],
         instructor_id = instructor_id,
+        year_level    = data.get("year_level", ""),
+        day           = data.get("day", "MON"),
+        time          = time_str,
+        room          = data.get("room", ""),
     )
-    # Notify instructor that the class folder was created
     db.add_notification(
         instructor_id = instructor_id,
         notif_type    = "class_created",
@@ -246,12 +250,41 @@ def api_create_class():
 @app.route("/api/edit_class/<class_code>", methods=["POST"])
 def api_edit_class(class_code):
     data = request.json
+    time_str = f"{data.get('time_in','7:00 AM')} - {data.get('time_out','8:00 AM')}" if data.get('time_in') else None
     db.edit_class(
         class_code,
         course_code = data["course_code"],
         subject     = data["subject"],
         section     = data["section"],
+        year_level  = data.get("year_level"),
+        day         = data.get("day"),
+        time        = time_str,
+        room        = data.get("room"),
     )
+    return jsonify({"status": "ok"})
+
+
+@app.route("/api/curriculum", methods=["GET"])
+def api_get_curriculum():
+    rows = db.get_curriculum()
+    return jsonify([dict(r) for r in rows])
+
+
+@app.route("/api/curriculum", methods=["POST"])
+def api_add_curriculum():
+    data = request.json or {}
+    subject     = (data.get("subject") or "").strip()
+    course_code = (data.get("course_code") or "").strip()
+    year_level  = (data.get("year_level") or "").strip()
+    if not subject or not course_code or not year_level:
+        return jsonify({"error": "subject, course_code and year_level are required"}), 400
+    new_id = db.add_curriculum(subject, course_code, year_level)
+    return jsonify({"id": new_id, "subject": subject, "course_code": course_code, "year_level": year_level})
+
+
+@app.route("/api/curriculum/<int:item_id>", methods=["DELETE"])
+def api_delete_curriculum(item_id):
+    db.delete_curriculum(item_id)
     return jsonify({"status": "ok"})
 
 

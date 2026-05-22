@@ -429,6 +429,9 @@
     <button class="nav-item" id="mob-nav-rooms" onclick="showPage('rooms', this); toggleAdminMobileNav()">
         <i data-lucide="camera"></i> Camera Rooms
     </button>
+    <button class="nav-item" onclick="showPage('curriculum', this); toggleAdminMobileNav()">
+        <i data-lucide="book-open"></i> Curriculum
+    </button>
     <div style="margin-top:12px;border-top:1px solid #F0F0F0;padding-top:12px;">
         <button class="btn-signout" onclick="handleSignOut(); toggleAdminMobileNav()">
             <i data-lucide="log-out"></i> Sign Out
@@ -537,6 +540,10 @@
             <button class="nav-item" onclick="showPage('activity', this)">
                 <i data-lucide="activity"></i>
                 Activity Monitor
+            </button>
+            <button class="nav-item" onclick="showPage('curriculum', this)">
+                <i data-lucide="book-open"></i>
+                Curriculum
             </button>
         </div>
 
@@ -744,6 +751,59 @@
                             </tr>
                         </thead>
                         <tbody id="activity-detail-list"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- ── PAGE: CURRICULUM ─────────────────────────────────── -->
+        <div id="page-curriculum" class="page">
+            <div class="page-header">
+                <h1 class="page-title">Curriculum</h1>
+                <p class="page-sub">Manage subjects per year level — reflected in the instructor's Create Folder modal</p>
+            </div>
+            <div class="data-card" style="margin-bottom:24px;">
+                <div class="card-header"><span class="card-title">Add Subject</span></div>
+                <div class="card-body" style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;">
+                    <div style="flex:2;min-width:160px;">
+                        <label style="font-size:0.72rem;font-weight:700;color:var(--muted);display:block;margin-bottom:4px;">Course Description</label>
+                        <input id="cur-subject" type="text" placeholder="e.g. Manufacturing Technology"
+                               style="width:100%;padding:10px 14px;border:1.5px solid #E5E7EB;border-radius:10px;font-size:0.85rem;outline:none;">
+                    </div>
+                    <div style="flex:1;min-width:120px;">
+                        <label style="font-size:0.72rem;font-weight:700;color:var(--muted);display:block;margin-bottom:4px;">Course Code</label>
+                        <input id="cur-code" type="text" placeholder="e.g. PM-102"
+                               style="width:100%;padding:10px 14px;border:1.5px solid #E5E7EB;border-radius:10px;font-size:0.85rem;outline:none;">
+                    </div>
+                    <div style="flex:1;min-width:120px;">
+                        <label style="font-size:0.72rem;font-weight:700;color:var(--muted);display:block;margin-bottom:4px;">Year Level</label>
+                        <select id="cur-year"
+                                style="width:100%;padding:10px 14px;border:1.5px solid #E5E7EB;border-radius:10px;font-size:0.85rem;outline:none;background:#fff;">
+                            <option value="1st Year">1st Year</option>
+                            <option value="2nd Year">2nd Year</option>
+                            <option value="3rd Year">3rd Year</option>
+                            <option value="4th Year">4th Year</option>
+                        </select>
+                    </div>
+                    <button onclick="adminAddCurriculum()"
+                            style="padding:10px 22px;background:var(--red);color:#fff;border:none;border-radius:10px;font-weight:700;font-size:0.85rem;cursor:pointer;white-space:nowrap;">
+                        + Add
+                    </button>
+                </div>
+            </div>
+            <div class="data-card">
+                <div class="card-header"><span class="card-title">Subject List</span></div>
+                <div class="card-body" style="padding:0;">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Year Level</th>
+                                <th>Course Description</th>
+                                <th>Course Code</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="curriculum-list"></tbody>
                     </table>
                 </div>
             </div>
@@ -1442,6 +1502,64 @@
             modal.addEventListener('click', function(e){ if(e.target===modal) closeRecoveryModal(); });
         });
     })();
+
+    // ── CURRICULUM ────────────────────────────────────────────────────────────
+    let _curriculumData = [];
+
+    async function loadCurriculum() {
+        try {
+            const res = await fetch('/api/curriculum');
+            _curriculumData = await res.json();
+            renderCurriculum();
+        } catch { _curriculumData = []; renderCurriculum(); }
+    }
+
+    function renderCurriculum() {
+        const tbody = document.getElementById('curriculum-list');
+        if (!tbody) return;
+        if (!_curriculumData.length) {
+            tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:#9CA3AF;padding:24px;">No subjects yet. Add one above.</td></tr>';
+            return;
+        }
+        tbody.innerHTML = _curriculumData.map(c => `
+            <tr>
+                <td><span style="font-size:0.75rem;font-weight:700;background:#FEF2F2;color:#D32F2F;padding:3px 10px;border-radius:20px;">${c.year_level}</span></td>
+                <td style="font-weight:600;">${c.subject}</td>
+                <td style="font-family:monospace;color:#6B7280;">${c.course_code}</td>
+                <td><button onclick="adminDeleteCurriculum(${c.id})"
+                        style="background:none;border:none;color:#D32F2F;cursor:pointer;font-size:0.8rem;font-weight:700;">Delete</button></td>
+            </tr>`).join('');
+    }
+
+    async function adminAddCurriculum() {
+        const subject     = document.getElementById('cur-subject').value.trim();
+        const course_code = document.getElementById('cur-code').value.trim();
+        const year_level  = document.getElementById('cur-year').value;
+        if (!subject || !course_code) { alert('Subject and course code are required.'); return; }
+        const res = await fetch('/api/curriculum', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ subject, course_code, year_level })
+        });
+        if (res.ok) {
+            document.getElementById('cur-subject').value = '';
+            document.getElementById('cur-code').value    = '';
+            await loadCurriculum();
+        }
+    }
+
+    async function adminDeleteCurriculum(id) {
+        if (!confirm('Delete this subject from the curriculum?')) return;
+        await fetch(`/api/curriculum/${id}`, { method: 'DELETE' });
+        await loadCurriculum();
+    }
+
+    // Load curriculum when the page becomes active
+    const _origShowPage = showPage;
+    showPage = function(pageId, btn) {
+        _origShowPage(pageId, btn);
+        if (pageId === 'curriculum') loadCurriculum();
+    };
 
 </script>
 

@@ -215,9 +215,6 @@
             <h3 class="font-black text-[10px] uppercase tracking-[0.2em] text-gray-400 mb-4">Daily Schedule</h3>
             <div id="schedule-list" class="space-y-3"></div>
         </div>
-        <button onclick="openTaskModal()" class="mt-8 w-full bg-[#D32F2F] text-white font-bold py-4 rounded-2xl shadow-xl hover:bg-[#B71C1C] transition flex items-center justify-center space-x-2">
-            <i data-lucide="plus-circle" class="w-5 h-5"></i> <span>Add Schedule</span>
-        </button>
     </aside>
 
     <div id="cameraModal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-xl z-[101] flex items-center justify-center p-4">
@@ -306,53 +303,58 @@
     </div>
 
     <div id="classModal" class="hidden fixed inset-0 bg-black/50 backdrop-blur-sm z-[150] flex items-center justify-center p-4">
-        <form onsubmit="event.preventDefault(); saveFolderModal()" class="bg-white rounded-[2.5rem] w-full max-w-sm p-8 shadow-2xl">
-            <h2 id="folderModalTitle" class="text-2xl font-black text-[#D32F2F] mb-6 tracking-tighter">Manage Folder</h2>
-            <div class="space-y-4">
-                <!-- Subject is selected from existing schedules -->
-                <select id="modalSubject" class="reg-input" required onchange="autoFillClassModal(this.value)">
-                    <option value="">Select Suggested Sched</option>
+        <form onsubmit="event.preventDefault(); saveFolderModal()" class="bg-white rounded-[2.5rem] w-full max-w-sm p-8 shadow-2xl" style="max-height:90vh;overflow-y:auto">
+            <h2 id="folderModalTitle" class="text-2xl font-black text-[#D32F2F] mb-1 tracking-tighter">Create Folder</h2>
+            <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-5">Class &amp; Schedule</p>
+            <div class="space-y-3">
+                <!-- Year level first → filters curriculum subjects -->
+                <select id="modalYearLevel" class="reg-input" required onchange="onYearLevelChange(this.value)">
+                    <option value="">Year Level</option>
+                    <option value="1st Year">1st Year</option>
+                    <option value="2nd Year">2nd Year</option>
+                    <option value="3rd Year">3rd Year</option>
+                    <option value="4th Year">4th Year</option>
                 </select>
-                <!-- Auto-filled from schedule but editable -->
-                <input type="text" id="modalSubjectName" class="reg-input hidden" placeholder="Subject Name" readonly>
-                <input type="text" id="modalSection" placeholder="Section" class="reg-input" required>
+                <!-- Subject filtered by year level from curriculum -->
+                <select id="modalSubjectFromCurriculum" class="reg-input" required onchange="onCurriculumSubjectChange(this.value)">
+                    <option value="">Select Subject</option>
+                </select>
+                <!-- Course code auto-filled from curriculum, editable -->
                 <input type="text" id="modalYear" placeholder="Course Code (e.g. PM-102)" class="reg-input" required>
+                <input type="text" id="modalSection" placeholder="Section (e.g. CPET-3201)" class="reg-input" required>
+                <div class="flex items-center gap-2 pt-1">
+                    <div class="flex-1 h-px bg-gray-100"></div>
+                    <span class="text-[10px] font-black text-gray-300 uppercase tracking-widest">Schedule</span>
+                    <div class="flex-1 h-px bg-gray-100"></div>
+                </div>
+                <select id="modalDay" class="reg-input" required>
+                    <option value="MON">Monday</option>
+                    <option value="TUE">Tuesday</option>
+                    <option value="WED">Wednesday</option>
+                    <option value="THU">Thursday</option>
+                    <option value="FRI">Friday</option>
+                    <option value="SAT">Saturday</option>
+                    <option value="SUN">Sunday</option>
+                </select>
+                <div class="grid grid-cols-2 gap-3">
+                    <select id="modalTimeFrom" class="reg-input"></select>
+                    <select id="modalTimeTo"   class="reg-input"></select>
+                </div>
+                <input type="text" id="modalRoom" placeholder="Room (e.g. VMB-402)" class="reg-input" required>
             </div>
-            <div class="flex space-x-3 mt-8">
+            <div class="flex space-x-3 mt-6">
                 <button type="button" onclick="closeClassModal()" class="flex-1 py-4 text-gray-400 font-bold">Cancel</button>
                 <button type="submit" class="flex-1 py-4 bg-[#D32F2F] text-white font-bold rounded-xl shadow-lg">Save</button>
             </div>
         </form>
     </div>
 
-    <div id="taskModal" class="hidden fixed inset-0 bg-black/50 backdrop-blur-sm z-[150] flex items-center justify-center p-4">
-        <form onsubmit="event.preventDefault(); saveSubject()" class="bg-white rounded-[2.5rem] w-full max-w-md p-8 shadow-2xl">
-            <h2 id="taskModalTitle" class="text-2xl font-black text-gray-900 mb-6 tracking-tighter">Schedule Entry</h2>
-            <div class="space-y-4">
-                <input type="text" id="modalSubName" placeholder="Subject Name" class="reg-input" required>
-                <div class="grid grid-cols-2 gap-4">
-                    <select id="modalDaySelect" class="reg-input">
-                        <option value="MON">Monday</option>
-                        <option value="TUE">Tuesday</option>
-                        <option value="WED">Wednesday</option>
-                        <option value="THU">Thursday</option>
-                        <option value="FRI">Friday</option>
-                        <option value="SAT">Saturday</option>
-                        <option value="SUN">Sunday</option>
-                    </select>
-                    <input type="text" id="modalRoom" placeholder="Room" class="reg-input">
-                </div>
-                <div class="grid grid-cols-2 gap-4">
-                    <select id="modalTimeFrom" class="reg-input"></select>
-                    <select id="modalTimeTo" class="reg-input"></select>
-                </div>
-            </div>
-            <div class="flex space-x-3 mt-8">
-                <button type="button" onclick="closeTaskModal()" class="flex-1 py-4 text-gray-400 font-bold">Cancel</button>
-                <button type="submit" class="flex-1 py-4 bg-[#D32F2F] text-white font-bold rounded-xl shadow-lg">Confirm</button>
-            </div>
-        </form>
-    </div>
+    <!-- taskModal removed — schedule is now part of folder creation -->
+    <div id="taskModal" class="hidden"></div>
+    <div id="modalSubjectName" style="display:none"></div>
+    <div id="modalSubject"     style="display:none"></div>
+    <div id="modalSubName"     style="display:none"></div>
+    <div id="modalDaySelect"   style="display:none"></div>
 
     <div id="customConfirm" class="hidden fixed inset-0 bg-black/60 backdrop-blur-md z-[200] flex items-center justify-center p-4">
         <div class="bg-white p-8 rounded-[2rem] w-full max-w-xs text-center shadow-2xl">
