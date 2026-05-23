@@ -1244,7 +1244,48 @@ def api_admin_create_instructor():
         return jsonify({"error": "An account with that email already exists."}), 409
     # Create account pre-approved — no pending queue needed
     db.create_instructor_by_admin(name, email, pwd)
-    return jsonify({"status": "ok"})
+
+    # Send welcome email with credentials
+    login_url = request.host_url.rstrip("/") + "/login"
+    body_plain = (
+        f"Hello {name},\n\n"
+        f"Your instructor account for the BatStateU Attendance System has been created.\n\n"
+        f"  Email:    {email}\n"
+        f"  Password: {pwd}\n\n"
+        f"Login here: {login_url}\n\n"
+        f"You can change your password anytime using the 'Forgot Password' option on the login page.\n\n"
+        f"Keep your credentials private and do not share them with anyone.\n\n"
+        f"--- BatStateU Attendance System Administrator"
+    )
+    body_html = f"""
+    <div style="font-family:sans-serif;max-width:480px;margin:auto;padding:30px;">
+        <h2 style="color:#D32F2F;">Your Instructor Account is Ready</h2>
+        <p>Hello <strong>{name}</strong>,</p>
+        <p>Your account for the <strong>BatStateU Attendance System</strong> has been created by the administrator.</p>
+        <table style="background:#FEF2F2;border-radius:10px;padding:16px 20px;margin:20px 0;width:100%;border-collapse:collapse;">
+            <tr><td style="padding:6px 0;color:#555;width:100px;">Email</td><td style="font-weight:700;">{email}</td></tr>
+            <tr><td style="padding:6px 0;color:#555;">Password</td><td style="font-weight:700;font-family:monospace;">{pwd}</td></tr>
+        </table>
+        <a href="{login_url}" style="display:inline-block;background:#D32F2F;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:700;">
+            Log In Now
+        </a>
+        <p style="margin-top:20px;font-size:0.85rem;color:#888;">
+            You can change your password anytime using <em>Forgot Password</em> on the login page.<br>
+            Keep your credentials private.
+        </p>
+    </div>"""
+    smtp_user = os.environ.get("SYSTEM_EMAIL", "").strip()
+    smtp_pass = os.environ.get("SYSTEM_EMAIL_PASS", "").strip()
+    sent, err = _send_system_email(smtp_user, smtp_pass, email,
+                                    "Your Instructor Account — BatStateU Attendance System",
+                                    body_plain, body_html)
+    if not sent:
+        print(f"[ACCOUNT] Welcome email failed for {email}: {err}")
+        return jsonify({"status": "ok",
+                        "warn": "Account created but welcome email could not be sent. "
+                                "Please share the credentials manually."})
+
+    return jsonify({"status": "ok", "msg": f"Account created and credentials emailed to {email}."})
 
 
 @app.route("/api/instructors/<int:instructor_id>/approve", methods=["POST"])

@@ -1274,9 +1274,14 @@
         document.getElementById('new-ins-email').value = '';
         document.getElementById('new-ins-pass').value  = '';
         msg.style.display = 'block';
-        msg.style.color   = '#16A34A';
-        msg.textContent   = `Account created for ${name} (${email}). Share the credentials with them privately.`;
-        setTimeout(() => { msg.style.display = 'none'; }, 6000);
+        if (data.warn) {
+            msg.style.color = '#D97706';
+            msg.textContent = `Account created for ${name}. ⚠ Email could not be sent — share the credentials (${email} / ${pass}) manually.`;
+        } else {
+            msg.style.color = '#16A34A';
+            msg.textContent = `Account created and credentials emailed to ${email} successfully.`;
+        }
+        setTimeout(() => { msg.style.display = 'none'; }, 8000);
         renderAdmin();
     }
 
