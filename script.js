@@ -1107,12 +1107,18 @@ async function viewAndPrintPDF(class_code, date, session_time) {
                 if (!student) return '';
                 const p   = student.sig_path || '';
                 const col = statusColor(student.status);
+                // "SIGNED" marker — show text badge for present/late, status for absent
+                if (p === 'SIGNED') {
+                    const attended = ['Present', 'Late'].includes(student.status);
+                    return attended
+                        ? `<span style="font-weight:900;color:#16A34A;font-size:10px;letter-spacing:.5px;">SIGNED</span>`
+                        : `<span style="font-weight:bold;color:${col};font-size:10px;">${student.status}</span>`;
+                }
+                // Legacy: still render stored signature images for old records
                 if (p) {
-                    // If it's a Cloudinary URL, use it directly — no local server needed
-                    // If it's a local path, route through /api/signature/<filename>
                     let imgSrc;
                     if (p.startsWith('http://') || p.startsWith('https://')) {
-                        imgSrc = p;   // Cloudinary public URL — use directly
+                        imgSrc = p;
                     } else {
                         const fname = p.split(/[\\/]/).pop();
                         imgSrc = `/api/signature/${encodeURIComponent(fname)}`;
@@ -2108,7 +2114,7 @@ async function submitStudentForm(formEl) {
     if (!formData.get('class_code')) formData.set('class_code', currentOpenedFolder);
     const name=( formData.get('name')||'').trim(), sr=(formData.get('sr_code')||'').trim(),
           phone=(formData.get('number')||'').trim(), email=(formData.get('email')||'').trim(),
-          photo=formData.get('photo'), sig=formData.get('signature');
+          photo=formData.get('photo');
     const errors=[];
     if(!name) errors.push('Full name is required.');
     if(!sr)   errors.push('SR Code is required.');
@@ -2118,8 +2124,6 @@ async function submitStudentForm(formEl) {
     else if(!/^0\d{10}$/.test(digits)) errors.push('Contact number must be 11 digits starting with 0 (e.g. 09994408409).');
     if(!photo||photo.size===0) errors.push('Student photo (ID picture) is required for face recognition.');
     else if(!['image/jpeg','image/jpg','image/png'].includes(photo.type)) errors.push('Photo must be JPG or PNG.');
-    if(!sig||sig.size===0) errors.push('E-Signature image is required.');
-    else if(!['image/jpeg','image/jpg','image/png'].includes(sig.type)) errors.push('Signature must be JPG or PNG.');
     if(errors.length>0){showRegError(errors);return;}
     try {
         const session=JSON.parse(localStorage.getItem('active_session')||'{}');

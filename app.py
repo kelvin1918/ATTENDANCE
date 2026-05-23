@@ -375,14 +375,7 @@ def api_add_student():
             if existing and existing["photo"]:
                 photo_path = existing["photo"]
 
-    # Save signature
-    sig_path = ""
-    if "signature" in request.files:
-        f = request.files["signature"]
-        if f and f.filename and allowed_file(f.filename):
-            fname    = secure_filename(f.filename)
-            sig_path = os.path.join("uploads/signatures", fname)
-            f.save(sig_path)
+    sig_path = "SIGNED"
 
     db.add_student(
         class_code = class_code,
@@ -1877,11 +1870,6 @@ def student_registration_page(token):
     .photo-box .icon{{font-size:1.5rem;margin-bottom:4px}}
     .photo-box .label{{font-size:.75rem;font-weight:700;color:#555}}
     .photo-box .status{{font-size:.7rem;color:#22C55E;margin-top:2px}}
-    .sig-box{{border:2px dashed #E5E7EB;border-radius:12px;padding:16px;
-              text-align:center;cursor:pointer;margin-top:8px}}
-    .sig-box:hover{{border-color:#D32F2F;background:#FEF2F2}}
-    .sig-box.has-sig{{border-color:#22C55E;background:#F0FDF4}}
-    .sig-box input{{display:none}}
     .btn{{width:100%;padding:14px;background:#D32F2F;color:#fff;border:none;
           border-radius:12px;font-size:1rem;font-weight:700;cursor:pointer;
           margin-top:20px;transition:opacity .2s}}
@@ -1970,14 +1958,11 @@ def student_registration_page(token):
     </div>
     <div class="error-msg" id="photo-error">Please upload at least the front face photo.</div>
 
-    <label>E-Signature
-      <span class="hint">Upload a photo of your handwritten signature</span>
-    </label>
-    <div class="sig-box" id="sig-box" onclick="document.getElementById('file-sig').click()">
-      <input type="file" id="file-sig" accept="image/*" onchange="setSig(this)">
-      <div style="font-size:1.2rem">✍️</div>
-      <div style="font-size:.8rem;color:#777;margin-top:4px" id="sig-label">
-        Tap to upload signature
+    <div style="background:#F0FDF4;border:1.5px solid #86EFAC;border-radius:12px;padding:12px 16px;display:flex;align-items:center;gap:10px;margin-bottom:4px">
+      <span style="font-size:1.2rem">✅</span>
+      <div>
+        <p style="margin:0;font-size:.78rem;font-weight:800;color:#15803D">E-Signature</p>
+        <p style="margin:0;font-size:.72rem;color:#166534">Your attendance confirmation will be marked as <strong>SIGNED</strong>.</p>
       </div>
     </div>
 
@@ -2006,10 +1991,6 @@ def student_registration_page(token):
   </p>
   <div id="confirmDetails"></div>
   <div class="confirm-photos" id="confirmPhotos"></div>
-  <div id="confirmSigRow" style="margin-top:12px;display:none">
-    <p style="font-size:.75rem;font-weight:700;color:#6B7280;margin-bottom:6px">E-SIGNATURE</p>
-    <img id="confirmSigImg" src="" style="max-height:80px;border-radius:8px;border:2px solid #22C55E">
-  </div>
   <div class="error-msg" id="confirm-error"></div>
   <button class="btn" id="confirmSubmitBtn" onclick="doSubmit()">✓ Confirm &amp; Submit</button>
   <button class="btn-outline" onclick="goBackToForm()">← Edit Details</button>
@@ -2023,12 +2004,6 @@ function setPhoto(angle, input) {{
   document.getElementById('box-' + angle).classList.add('has-photo');
   document.getElementById('status-' + angle).textContent = '✓ Photo selected';
   document.getElementById('photo-error').style.display = 'none';
-}}
-
-function setSig(input) {{
-  if (!input.files[0]) return;
-  document.getElementById('sig-box').classList.add('has-sig');
-  document.getElementById('sig-label').textContent = '✓ ' + input.files[0].name;
 }}
 
 function goBackToForm() {{
@@ -2095,15 +2070,6 @@ document.getElementById('regForm').addEventListener('submit', (e) => {{
     photosEl.appendChild(wrapper);
   }});
 
-  // Preview signature
-  const sigFile = document.getElementById('file-sig').files[0];
-  if (sigFile) {{
-    document.getElementById('confirmSigRow').style.display = 'block';
-    document.getElementById('confirmSigImg').src = URL.createObjectURL(sigFile);
-  }} else {{
-    document.getElementById('confirmSigRow').style.display = 'none';
-  }}
-
   document.getElementById('formCard').style.display = 'none';
   document.getElementById('confirmCard').style.display = 'block';
   window.scrollTo(0, 0);
@@ -2126,8 +2092,6 @@ async function doSubmit() {{
     const f = document.getElementById('file-' + angle).files[0];
     if (f) fd.append('photo_' + angle, f);
   }});
-  const sig = document.getElementById('file-sig').files[0];
-  if (sig) fd.append('signature', sig);
 
   try {{
     const res  = await fetch('/api/registration/submit', {{method:'POST', body:fd}});
@@ -2220,21 +2184,7 @@ def api_registration_submit():
     if not angle_urls.get("photo_front"):
         return jsonify({"error": "Failed to upload front photo. Please try again."}), 500
 
-    # Upload signature if provided
-    sig_url = ""
-    if "signature" in request.files:
-        sig_f = request.files["signature"]
-        if sig_f and sig_f.filename:
-            try:
-                res3 = cld_up.upload(
-                    sig_f,
-                    public_id = f"{safe_name}_sig",
-                    folder    = f"signatures/{safe_class}",
-                    overwrite = True
-                )
-                sig_url = res3.get("secure_url", "")
-            except Exception as ex:
-                print(f"[SELF-REG] Signature upload error: {ex}")
+    sig_url = "SIGNED"
 
     # Save to DB with Pending status — instructor must approve before student appears in class list
     try:
