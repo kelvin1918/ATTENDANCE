@@ -1055,10 +1055,12 @@ def get_absence_counts(instructor_id=None):
     """
     conn = get_db()
     cur  = get_cursor(conn)
-    if instructor_id:
-        cur.execute(
-            """SELECT
-                   a.subject                                        AS name,
+    base_select = """
+               SELECT
+                   a.class_code,
+                   c.subject                                        AS name,
+                   c.course_code,
+                   c.section,
                    COUNT(*) FILTER (WHERE a.status = 'Absent')     AS total_absent,
                    COUNT(*)                                         AS total_records,
                    COUNT(DISTINCT (a.date || '_' || COALESCE(a.session_time, '')))
@@ -1074,33 +1076,21 @@ def get_absence_counts(instructor_id=None):
                    MAX(a.date)                                      AS last_session_date,
                    MAX(COALESCE(a.session_time, '00:00:00'))        AS last_session_time
                FROM attendance a
-               JOIN classes c ON c.id = a.class_code
+               JOIN classes c ON c.id = a.class_code"""
+
+    if instructor_id:
+        cur.execute(
+            base_select + """
                WHERE c.instructor_id = %s AND a.session_time != 'LIVE'
-               GROUP BY a.subject
+               GROUP BY a.class_code, c.subject, c.course_code, c.section
                ORDER BY last_session_date DESC, last_session_time DESC""",
             (instructor_id,)
         )
     else:
         cur.execute(
-            """SELECT
-                   a.subject                                        AS name,
-                   COUNT(*) FILTER (WHERE a.status = 'Absent')     AS total_absent,
-                   COUNT(*)                                         AS total_records,
-                   COUNT(DISTINCT (a.date || '_' || COALESCE(a.session_time, '')))
-                                                                    AS total_sessions,
-                   ROUND(
-                       COUNT(*) FILTER (WHERE a.status = 'Absent')::numeric
-                       / NULLIF(COUNT(DISTINCT (a.date || '_' || COALESCE(a.session_time, ''))), 0)
-                   , 2)                                             AS avg_absent,
-                   ROUND(
-                       COUNT(*) FILTER (WHERE a.status = 'Absent')::numeric
-                       / NULLIF(COUNT(*), 0) * 100
-                   , 1)                                             AS pct_absent,
-                   MAX(a.date)                                      AS last_session_date,
-                   MAX(COALESCE(a.session_time, '00:00:00'))        AS last_session_time
-               FROM attendance a
+            base_select + """
                WHERE a.session_time != 'LIVE'
-               GROUP BY a.subject
+               GROUP BY a.class_code, c.subject, c.course_code, c.section
                ORDER BY last_session_date DESC, last_session_time DESC"""
         )
     rows = cur.fetchall()
@@ -1108,6 +1098,8 @@ def get_absence_counts(instructor_id=None):
     return [
         {
             "name":              r["name"],
+            "course_code":       r["course_code"] or "",
+            "section":           r["section"]     or "",
             "total_absent":      r["total_absent"],
             "total_records":     r["total_records"],
             "total_sessions":    r["total_sessions"],

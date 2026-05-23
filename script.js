@@ -584,7 +584,10 @@ function initCharts(data = []) {
         const d   = recent[i];
         const pct = d.pct_absent;
         const color = getColor(pct);
-        if (label) label.textContent = d.name;
+        const subLabel = [d.course_code, d.section].filter(Boolean).join(' · ');
+        if (label) {
+            label.innerHTML = `<span style="font-weight:800;">${d.name}</span>${subLabel ? `<br><span style="font-size:0.7em;color:#9CA3AF;letter-spacing:0.05em;">${subLabel}</span>` : ''}`;
+        }
 
         let _chartHovered = false;
         const centerPlugin = {
@@ -621,7 +624,7 @@ function initCharts(data = []) {
         window[`_absentChart${i}`] = new Chart(ctx, {
             type: 'doughnut',
             data: {
-                labels: [d.name, 'Present'],
+                labels: [[d.name, subLabel].filter(Boolean).join(' · '), 'Present'],
                 datasets: [{
                     data: [pct, Math.max(0, 100 - pct)],
                     backgroundColor: [color, getPresentColor(pct)],
@@ -643,7 +646,7 @@ function initCharts(data = []) {
                         padding: 12,
                         cornerRadius: 10,
                         callbacks: {
-                            title: () => d.name,
+                            title: () => subLabel ? `${d.name}  ·  ${subLabel}` : d.name,
                             label: item => item.dataIndex === 0 ? [
                                 `  Absence Rate : ${pct}%`,
                                 `  Average / Session: ${d.avg_absent} students`,
