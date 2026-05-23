@@ -3345,7 +3345,7 @@ function openImportStudentsModal(class_code) {
             <div class="flex gap-2">
                 <select id="importFromClassSelect" class="flex-1 reg-input text-sm">
                     <option value="">Select a class…</option>
-                    ${otherClasses.map(f => `<option value="${f.id}">${f.subject} — ${f.section}</option>`).join('')}
+                    ${otherClasses.map(f => `<option value="${f.id}">${f.course_code ? f.course_code + ' · ' : ''}${f.subject} — ${f.section}</option>`).join('')}
                 </select>
                 <button onclick="_importFromClass('${class_code}')"
                     class="bg-[#D32F2F] text-white px-5 py-3 rounded-2xl text-xs font-black uppercase hover:bg-red-700 transition">

@@ -188,7 +188,14 @@ db.seed_admin_if_missing()
 
 @app.route("/")
 def portal():
-    return send_file("portal.html")
+    return send_file("login.html")
+
+
+@app.route("/portal")
+def portal_page():
+    # kept for backward-compat but redirects to login
+    from flask import redirect
+    return redirect("/")
 
 
 @app.route("/home")
@@ -1319,12 +1326,18 @@ def login_page():
     return send_file("login.html")
 
 
-@app.route("/admin")
+@app.route("/sys/sntl-panel")
 def admin_page():
     resp = make_response(send_file("admin.html"))
     resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
     resp.headers["Pragma"] = "no-cache"
     return resp
+
+
+@app.route("/admin")
+def admin_redirect():
+    from flask import abort
+    abort(404)
 
 # ════════════════════════════════════════════════════════════════════════════════
 # RUN
