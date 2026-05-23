@@ -146,8 +146,8 @@ def init_db():
     cur.execute("""
         CREATE TABLE IF NOT EXISTS classes (
             id            VARCHAR(50)  PRIMARY KEY,
-            course_code   VARCHAR(20)  NOT NULL,
-            subject       VARCHAR(50),
+            course_code   VARCHAR(50)  NOT NULL,
+            subject       VARCHAR(200),
             section       VARCHAR(50),
             created       DATE DEFAULT CURRENT_DATE,
             instructor_id INTEGER REFERENCES instructors(id) ON DELETE CASCADE
@@ -186,9 +186,9 @@ def init_db():
             id           INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
             class_code   VARCHAR(50)  NOT NULL REFERENCES classes(id) ON DELETE CASCADE,
             sr_code      VARCHAR(50),
-            name         VARCHAR(50)  NOT NULL,
+            name         VARCHAR(200) NOT NULL,
             section      VARCHAR(50),
-            subject      VARCHAR(50),
+            subject      VARCHAR(200),
             status       VARCHAR(20)  NOT NULL,
             timestamp    TIMESTAMP(0) DEFAULT NOW(),
             date         DATE         NOT NULL,
@@ -204,7 +204,7 @@ def init_db():
             class_code    VARCHAR(50)  REFERENCES classes(id) ON DELETE CASCADE,
             instructor_id INTEGER      REFERENCES instructors(id) ON DELETE CASCADE,
             time          VARCHAR(50),
-            subject       VARCHAR(50),
+            subject       VARCHAR(200),
             room          VARCHAR(50),
             day           VARCHAR(10)
         );
@@ -221,6 +221,13 @@ def init_db():
     """)
     cur.execute("ALTER TABLE classes ADD COLUMN IF NOT EXISTS year_level VARCHAR(20) DEFAULT '';")
     cur.execute("ALTER TABLE curriculum ADD COLUMN IF NOT EXISTS program VARCHAR(150) NOT NULL DEFAULT '';")
+
+    # ── Widen columns that can exceed their original VARCHAR limits ────────────
+    cur.execute("ALTER TABLE classes     ALTER COLUMN subject     TYPE VARCHAR(200);")
+    cur.execute("ALTER TABLE classes     ALTER COLUMN course_code TYPE VARCHAR(50);")
+    cur.execute("ALTER TABLE schedules   ALTER COLUMN subject     TYPE VARCHAR(200);")
+    cur.execute("ALTER TABLE attendance  ALTER COLUMN subject     TYPE VARCHAR(200);")
+    cur.execute("ALTER TABLE attendance  ALTER COLUMN name        TYPE VARCHAR(200);")
 
     # ── 8. campus_rooms — maps friendly room name to RTSP URL ────────────────
     cur.execute("""
