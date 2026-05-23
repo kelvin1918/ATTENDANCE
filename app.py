@@ -1958,11 +1958,14 @@ def student_registration_page(token):
     </div>
     <div class="error-msg" id="photo-error">Please upload at least the front face photo.</div>
 
-    <div style="background:#F0FDF4;border:1.5px solid #86EFAC;border-radius:12px;padding:12px 16px;display:flex;align-items:center;gap:10px;margin-bottom:4px">
+    <div style="background:#F0FDF4;border:1.5px solid #86EFAC;border-radius:12px;padding:12px 16px;display:flex;align-items:center;gap:12px;margin-bottom:4px">
       <span style="font-size:1.2rem">✅</span>
-      <div>
-        <p style="margin:0;font-size:.78rem;font-weight:800;color:#15803D">E-Signature</p>
-        <p style="margin:0;font-size:.72rem;color:#166534">Your attendance confirmation will be marked as <strong>SIGNED</strong>.</p>
+      <div style="flex:1">
+        <p style="margin:0 0 4px;font-size:.78rem;font-weight:800;color:#15803D">E-Signature</p>
+        <p style="margin:0;font-size:.72rem;color:#166534">Your attendance confirmation will be marked as:</p>
+        <div style="margin-top:8px;display:flex;justify-content:center">
+          <span style="display:inline-block;color:#DC2626;border:2.5px solid #DC2626;border-radius:5px;padding:3px 14px;font-size:.85rem;font-weight:900;letter-spacing:4px;transform:rotate(-8deg);opacity:.85;font-family:'Arial Black',Arial,sans-serif;text-transform:uppercase;box-shadow:1px 1px 0 #DC2626;">SIGNED</span>
+        </div>
       </div>
     </div>
 

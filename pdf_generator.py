@@ -125,9 +125,31 @@ def _fetch_image_bytes(url):
 _fetch_image_bytes._cache = {}
 
 
-def _sig_cell(sig_path, status, sig_col, norm9c_style):
-    """Return a ReportLab flowable for the SIGNATURE column cell.
-    Tries Cloudinary URL, then local path, then text fallback."""
+def _sig_cell(sig_path, status, norm9c_style):
+    """Return a ReportLab flowable for the SIGNATURE column cell."""
+    # "SIGNED" marker — render as a red stamp for attended, blank for absent
+    if sig_path == "SIGNED":
+        attended = status in ("Present", "Late")
+        if not attended:
+            return Paragraph("", norm9c_style)
+        stamp_p = Paragraph(
+            '<b><font color="#DC2626" size="7" face="Helvetica-Bold">SIGNED</font></b>',
+            ParagraphStyle("stamp", parent=norm9c_style, alignment=TA_CENTER,
+                           spaceAfter=0, spaceBefore=0)
+        )
+        stamp_tbl = Table([[stamp_p]], colWidths=[40])
+        stamp_tbl.setStyle(TableStyle([
+            ("BOX",            (0, 0), (-1, -1), 1.5, colors.HexColor("#DC2626")),
+            ("ALIGN",          (0, 0), (-1, -1), "CENTER"),
+            ("VALIGN",         (0, 0), (-1, -1), "MIDDLE"),
+            ("TOPPADDING",     (0, 0), (-1, -1), 2),
+            ("BOTTOMPADDING",  (0, 0), (-1, -1), 2),
+            ("LEFTPADDING",    (0, 0), (-1, -1), 3),
+            ("RIGHTPADDING",   (0, 0), (-1, -1), 3),
+        ]))
+        return stamp_tbl
+
+    # Legacy: render stored signature image for old records
     if sig_path:
         img_src = None
         if sig_path.startswith("http://") or sig_path.startswith("https://"):
@@ -150,10 +172,7 @@ def _sig_cell(sig_path, status, sig_col, norm9c_style):
             except Exception as e:
                 print(f"[PDF] Image render error: {e}")
 
-    return Paragraph(
-        f'<font color="{sig_col}" size="8">{status}</font>',
-        norm9c_style
-    )
+    return Paragraph("", norm9c_style)
 
 
 # ── MAIN ENTRY POINT ─────────────────────────────────────────────────────────
@@ -302,10 +321,9 @@ def generate_attendance_pdf(class_id, subject, section, room, date,
             st      = left_r["status"]
             tag     = " (Late)" if st == "Late" else ""
             col     = BLACK if st == "Present" else ORANGE
-            sig_col = "#1B5E20" if st == "Present" else "#E65100"
             l_nm    = Paragraph(f"{i+1}. {left_r['name']}{tag}",
                                 ps(f"ln{i}", fontSize=9, fontName=TNR, textColor=col))
-            l_sg    = _sig_cell(left_r.get("sig_path", ""), st, sig_col, norm9c)
+            l_sg    = _sig_cell(left_r.get("sig_path", ""), st, norm9c)
         else:
             l_nm = Paragraph(f"{i+1}.", ps(f"le{i}", fontSize=9, fontName=TNR))
             l_sg = Paragraph("", norm9)
@@ -314,10 +332,9 @@ def generate_attendance_pdf(class_id, subject, section, room, date,
             st      = right_r["status"]
             tag     = " (Late)" if st == "Late" else ""
             col     = BLACK if st == "Present" else ORANGE
-            sig_col = "#1B5E20" if st == "Present" else "#E65100"
             r_nm    = Paragraph(f"{i+1+ROWS_PER_COL}. {right_r['name']}{tag}",
                                 ps(f"rn{i}", fontSize=9, fontName=TNR, textColor=col))
-            r_sg    = _sig_cell(right_r.get("sig_path", ""), st, sig_col, norm9c)
+            r_sg    = _sig_cell(right_r.get("sig_path", ""), st, norm9c)
         else:
             r_nm = Paragraph(f"{i+1+ROWS_PER_COL}.", ps(f"re{i}", fontSize=9, fontName=TNR))
             r_sg = Paragraph("", norm9)
