@@ -1938,21 +1938,21 @@ def student_registration_page(token):
         <input type="file" id="file-left" accept="image/*" capture="user"
                onchange="setPhoto('left',this)">
         <div class="icon">👈</div>
-        <div class="label">Left Side</div>
+        <div class="label">Left View</div>
         <div class="status" id="status-left"></div>
       </div>
       <div class="photo-box" id="box-right" onclick="document.getElementById('file-right').click()">
         <input type="file" id="file-right" accept="image/*" capture="user"
                onchange="setPhoto('right',this)">
         <div class="icon">👉</div>
-        <div class="label">Right Side</div>
+        <div class="label">Right View</div>
         <div class="status" id="status-right"></div>
       </div>
       <div class="photo-box" id="box-up" onclick="document.getElementById('file-up').click()">
         <input type="file" id="file-up" accept="image/*" capture="user"
                onchange="setPhoto('up',this)">
         <div class="icon">👆</div>
-        <div class="label">Looking Up</div>
+        <div class="label">Top View</div>
         <div class="status" id="status-up"></div>
       </div>
     </div>

@@ -882,7 +882,7 @@ label.field-label{display:block;font-size:12px;font-weight:600;
           <!-- Left -->
           <div>
             <label style="font-size:11px;font-weight:600;color:#555;display:block;margin-bottom:4px;">
-              👈 Left Side <span style="color:#D32F2F;">*</span>
+              👈 Left View <span style="color:#D32F2F;">*</span>
             </label>
             <div class="file-upload-area" id="photo-left-area" style="padding:10px;"
                  onclick="document.getElementById('reg-photo-left').click()">
@@ -895,7 +895,7 @@ label.field-label{display:block;font-size:12px;font-weight:600;
           <!-- Right -->
           <div>
             <label style="font-size:11px;font-weight:600;color:#555;display:block;margin-bottom:4px;">
-              👉 Right Side <span style="color:#D32F2F;">*</span>
+              👉 Right View <span style="color:#D32F2F;">*</span>
             </label>
             <div class="file-upload-area" id="photo-right-area" style="padding:10px;"
                  onclick="document.getElementById('reg-photo-right').click()">
@@ -908,7 +908,7 @@ label.field-label{display:block;font-size:12px;font-weight:600;
           <!-- Up -->
           <div>
             <label style="font-size:11px;font-weight:600;color:#555;display:block;margin-bottom:4px;">
-              ☝️ Looking Up <span style="color:#D32F2F;">*</span>
+              ☝️ Top View <span style="color:#D32F2F;">*</span>
             </label>
             <div class="file-upload-area" id="photo-up-area" style="padding:10px;"
                  onclick="document.getElementById('reg-photo-up').click()">
@@ -1039,7 +1039,7 @@ label.field-label{display:block;font-size:12px;font-weight:600;
           <!-- Left -->
           <div>
             <div style="font-size:11px;font-weight:600;color:#374151;margin-bottom:4px">
-              👈 Left Side <span id="edit-status-left" style="font-size:10px;font-weight:500"></span>
+              👈 Left View <span id="edit-status-left" style="font-size:10px;font-weight:500"></span>
             </div>
             <div class="file-upload-area" id="edit-area-left" style="padding:12px 8px"
                  onclick="document.getElementById('edit-file-left').click()">
@@ -1053,7 +1053,7 @@ label.field-label{display:block;font-size:12px;font-weight:600;
           <!-- Right -->
           <div>
             <div style="font-size:11px;font-weight:600;color:#374151;margin-bottom:4px">
-              👉 Right Side <span id="edit-status-right" style="font-size:10px;font-weight:500"></span>
+              👉 Right View <span id="edit-status-right" style="font-size:10px;font-weight:500"></span>
             </div>
             <div class="file-upload-area" id="edit-area-right" style="padding:12px 8px"
                  onclick="document.getElementById('edit-file-right').click()">
@@ -1067,7 +1067,7 @@ label.field-label{display:block;font-size:12px;font-weight:600;
           <!-- Up -->
           <div>
             <div style="font-size:11px;font-weight:600;color:#374151;margin-bottom:4px">
-              👆 Looking Up <span id="edit-status-up" style="font-size:10px;font-weight:500"></span>
+              👆 Top View <span id="edit-status-up" style="font-size:10px;font-weight:500"></span>
             </div>
             <div class="file-upload-area" id="edit-area-up" style="padding:12px 8px"
                  onclick="document.getElementById('edit-file-up').click()">
@@ -2232,7 +2232,7 @@ document.getElementById('btn-submit-reg').addEventListener('click', async () => 
 
   // Validate all 4 angles are uploaded
   const angles = ['front', 'left', 'right', 'up'];
-  const angleLabels = { front: 'Front Face', left: 'Left Side', right: 'Right Side', up: 'Looking Up' };
+  const angleLabels = { front: 'Front Face', left: 'Left View', right: 'Right View', up: 'Top View' };
   for (const angle of angles) {
     const f = document.getElementById(`reg-photo-${angle}`).files[0];
     if (!f) {

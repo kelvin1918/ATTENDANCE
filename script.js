@@ -1111,7 +1111,7 @@ async function viewAndPrintPDF(class_code, date, session_time) {
                 if (p === 'SIGNED') {
                     const attended = ['Present', 'Late'].includes(student.status);
                     return attended
-                        ? `<span style="font-weight:900;color:#16A34A;font-size:10px;letter-spacing:.5px;">SIGNED</span>`
+                        ? `<span style="display:inline-block;font-weight:900;color:#DC2626;font-size:8px;letter-spacing:2px;border:2px solid #DC2626;border-radius:3px;padding:1px 5px;transform:rotate(-12deg);opacity:.82;font-family:'Arial Black',Arial,sans-serif;text-transform:uppercase;">SIGNED</span>`
                         : `<span style="font-weight:bold;color:${col};font-size:10px;">${student.status}</span>`;
                 }
                 // Legacy: still render stored signature images for old records
