@@ -383,21 +383,17 @@ async function renderDashboard() {
         </div>
 
         <div class="bg-white p-8 rounded-[3rem] border border-gray-100 shadow-sm mb-10">
-             <div class="flex items-center justify-between mb-1">
-                 <h3 class="text-lg font-black text-gray-800 flex items-center"><i data-lucide="pie-chart" class="w-5 h-5 mr-2 text-[#D32F2F]"></i> Absence Rate by Class</h3>
-                 <div class="flex items-center gap-2">
-                     <button id="chartPrev" onclick="shiftChartPage(-1)"
-                         class="w-8 h-8 rounded-full border border-gray-200 flex items-center justify-center text-gray-400 hover:text-[#D32F2F] hover:border-[#D32F2F] transition disabled:opacity-30 disabled:cursor-not-allowed">
-                         <i data-lucide="chevron-left" class="w-4 h-4"></i>
-                     </button>
-                     <span id="chartPageLabel" class="text-[11px] font-black text-gray-400 uppercase tracking-widest min-w-[60px] text-center"></span>
-                     <button id="chartNext" onclick="shiftChartPage(1)"
-                         class="w-8 h-8 rounded-full border border-gray-200 flex items-center justify-center text-gray-400 hover:text-[#D32F2F] hover:border-[#D32F2F] transition disabled:opacity-30 disabled:cursor-not-allowed">
-                         <i data-lucide="chevron-right" class="w-4 h-4"></i>
-                     </button>
+             <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+                 <div>
+                     <h3 class="text-lg font-black text-gray-800 flex items-center gap-2">
+                         <i data-lucide="pie-chart" class="w-5 h-5 text-[#D32F2F]"></i> Absence Rate by Class
+                     </h3>
+                     <p id="chartSubtitle" class="text-[10px] text-gray-400 font-bold uppercase tracking-widest mt-0.5">average absence per session</p>
                  </div>
+                 <input id="chartSearch" type="text" placeholder="Search subject, section..."
+                     oninput="filterCharts()"
+                     class="bg-gray-50 border-none rounded-2xl py-2.5 px-4 text-sm font-bold outline-none ring-1 ring-gray-100 focus:ring-red-200 transition w-full sm:w-56">
              </div>
-             <p id="chartSubtitle" class="text-[10px] text-gray-400 font-bold uppercase tracking-widest mb-6">average absence per session</p>
              <div id="chartGrid" class="grid grid-cols-1 md:grid-cols-3 gap-6">
                  <div class="flex flex-col items-center">
                      <div class="h-[220px] w-full"><canvas id="absentChart0"></canvas></div>
@@ -411,6 +407,17 @@ async function renderDashboard() {
                      <div class="h-[220px] w-full"><canvas id="absentChart2"></canvas></div>
                      <p id="chartLabel2" class="text-[10px] font-black text-gray-400 uppercase tracking-widest mt-3 text-center w-full px-2"></p>
                  </div>
+             </div>
+             <div class="flex items-center justify-between mt-6" id="chartNav">
+                 <button id="chartPrev" onclick="shiftChartPage(-1)"
+                     style="font-size:1.1rem;padding:4px 14px;border-radius:999px;border:1.5px solid #E5E7EB;background:none;cursor:pointer;color:#9CA3AF;font-weight:900;transition:color .15s,border-color .15s;"
+                     onmouseover="this.style.color='#D32F2F';this.style.borderColor='#D32F2F'"
+                     onmouseout="this.style.color='#9CA3AF';this.style.borderColor='#E5E7EB'">&#8249;</button>
+                 <span id="chartPageLabel" class="text-[11px] font-black text-gray-400 uppercase tracking-widest"></span>
+                 <button id="chartNext" onclick="shiftChartPage(1)"
+                     style="font-size:1.1rem;padding:4px 14px;border-radius:999px;border:1.5px solid #E5E7EB;background:none;cursor:pointer;color:#9CA3AF;font-weight:900;transition:color .15s,border-color .15s;"
+                     onmouseover="this.style.color='#D32F2F';this.style.borderColor='#D32F2F'"
+                     onmouseout="this.style.color='#9CA3AF';this.style.borderColor='#E5E7EB'">&#8250;</button>
              </div>
         </div>
 
@@ -426,13 +433,15 @@ async function renderDashboard() {
     lucide.createIcons();
 
     // Load absence chart
-    window._absenceData = [];
-    window._chartPage   = 0;
+    window._absenceData    = [];
+    window._chartFiltered  = [];
+    window._chartPage      = 0;
     try {
         const res = await authFetch('/api/absences');
-        window._absenceData = await res.json();
+        window._absenceData   = await res.json();
+        window._chartFiltered = window._absenceData;
     } catch { /* leave empty */ }
-    initCharts(window._absenceData, 0);
+    initCharts(window._chartFiltered, 0);
 
     // Load recent activity
     try {
@@ -563,11 +572,24 @@ function renderRecentActivityList(records, totalCount = null) {
     lucide.createIcons();
 }
 
+function filterCharts() {
+    const q = (document.getElementById('chartSearch')?.value || '').trim().toLowerCase();
+    const all = window._absenceData || [];
+    window._chartFiltered = q
+        ? all.filter(d =>
+            (d.name        || '').toLowerCase().includes(q) ||
+            (d.course_code || '').toLowerCase().includes(q) ||
+            (d.section     || '').toLowerCase().includes(q))
+        : all;
+    window._chartPage = 0;
+    initCharts(window._chartFiltered, 0);
+}
+
 function shiftChartPage(dir) {
-    const total = (window._absenceData || []).length;
-    const pages = Math.ceil(total / 3) || 1;
+    const data  = window._chartFiltered || window._absenceData || [];
+    const pages = Math.ceil(data.length / 3) || 1;
     window._chartPage = Math.max(0, Math.min(pages - 1, (window._chartPage || 0) + dir));
-    initCharts(window._absenceData, window._chartPage);
+    initCharts(data, window._chartPage);
 }
 
 // Chart — renders up to 3 individual donut charts per page
@@ -589,14 +611,25 @@ function initCharts(data = [], page = 0) {
     // Update navigation controls
     const prevBtn   = document.getElementById('chartPrev');
     const nextBtn   = document.getElementById('chartNext');
+    const navRow    = document.getElementById('chartNav');
     const pageLabel = document.getElementById('chartPageLabel');
     const subtitle  = document.getElementById('chartSubtitle');
-    if (prevBtn)   prevBtn.disabled   = page === 0;
-    if (nextBtn)   nextBtn.disabled   = page >= pages - 1;
-    if (pageLabel) pageLabel.textContent = total > 3 ? `${page + 1} / ${pages}` : '';
+    const multiPage = pages > 1;
+    if (navRow)    navRow.style.display = multiPage ? 'flex' : 'none';
+    if (prevBtn) {
+        prevBtn.disabled = page === 0;
+        prevBtn.style.opacity = page === 0 ? '0.3' : '1';
+        prevBtn.style.cursor  = page === 0 ? 'default' : 'pointer';
+    }
+    if (nextBtn) {
+        nextBtn.disabled = page >= pages - 1;
+        nextBtn.style.opacity = page >= pages - 1 ? '0.3' : '1';
+        nextBtn.style.cursor  = page >= pages - 1 ? 'default' : 'pointer';
+    }
+    if (pageLabel) pageLabel.textContent = multiPage ? `${page + 1} / ${pages}` : '';
     if (subtitle)  subtitle.textContent  = total
         ? `Showing ${start + 1}–${Math.min(start + 3, total)} of ${total} class${total > 1 ? 'es' : ''} · average absence per session`
-        : 'average absence per session';
+        : 'No classes match your search';
 
     for (let i = 0; i < 3; i++) {
         const ctx   = document.getElementById(`absentChart${i}`);
