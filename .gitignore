@@ -27,3 +27,9 @@ test.py
 migrate_faces.py
 migration_report.txt
 local_cache.json
+
+# Old/template installer script (replaced by setup.iss)
+installer.iss
+
+# Sample/test face image in root
+face.png
