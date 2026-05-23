@@ -383,20 +383,33 @@ async function renderDashboard() {
         </div>
 
         <div class="bg-white p-8 rounded-[3rem] border border-gray-100 shadow-sm mb-10">
-             <h3 class="text-lg font-black text-gray-800 mb-1 flex items-center"><i data-lucide="pie-chart" class="w-5 h-5 mr-2 text-[#D32F2F]"></i> Absence Rate by Class</h3>
-             <p class="text-[10px] text-gray-400 font-bold uppercase tracking-widest mb-6">3 most recently active classes · average absence per session</p>
+             <div class="flex items-center justify-between mb-1">
+                 <h3 class="text-lg font-black text-gray-800 flex items-center"><i data-lucide="pie-chart" class="w-5 h-5 mr-2 text-[#D32F2F]"></i> Absence Rate by Class</h3>
+                 <div class="flex items-center gap-2">
+                     <button id="chartPrev" onclick="shiftChartPage(-1)"
+                         class="w-8 h-8 rounded-full border border-gray-200 flex items-center justify-center text-gray-400 hover:text-[#D32F2F] hover:border-[#D32F2F] transition disabled:opacity-30 disabled:cursor-not-allowed">
+                         <i data-lucide="chevron-left" class="w-4 h-4"></i>
+                     </button>
+                     <span id="chartPageLabel" class="text-[11px] font-black text-gray-400 uppercase tracking-widest min-w-[60px] text-center"></span>
+                     <button id="chartNext" onclick="shiftChartPage(1)"
+                         class="w-8 h-8 rounded-full border border-gray-200 flex items-center justify-center text-gray-400 hover:text-[#D32F2F] hover:border-[#D32F2F] transition disabled:opacity-30 disabled:cursor-not-allowed">
+                         <i data-lucide="chevron-right" class="w-4 h-4"></i>
+                     </button>
+                 </div>
+             </div>
+             <p id="chartSubtitle" class="text-[10px] text-gray-400 font-bold uppercase tracking-widest mb-6">average absence per session</p>
              <div id="chartGrid" class="grid grid-cols-1 md:grid-cols-3 gap-6">
                  <div class="flex flex-col items-center">
                      <div class="h-[220px] w-full"><canvas id="absentChart0"></canvas></div>
-                     <p id="chartLabel0" class="text-[10px] font-black text-gray-400 uppercase tracking-widest mt-3 text-center truncate w-full px-2"></p>
+                     <p id="chartLabel0" class="text-[10px] font-black text-gray-400 uppercase tracking-widest mt-3 text-center w-full px-2"></p>
                  </div>
                  <div class="flex flex-col items-center">
                      <div class="h-[220px] w-full"><canvas id="absentChart1"></canvas></div>
-                     <p id="chartLabel1" class="text-[10px] font-black text-gray-400 uppercase tracking-widest mt-3 text-center truncate w-full px-2"></p>
+                     <p id="chartLabel1" class="text-[10px] font-black text-gray-400 uppercase tracking-widest mt-3 text-center w-full px-2"></p>
                  </div>
                  <div class="flex flex-col items-center">
                      <div class="h-[220px] w-full"><canvas id="absentChart2"></canvas></div>
-                     <p id="chartLabel2" class="text-[10px] font-black text-gray-400 uppercase tracking-widest mt-3 text-center truncate w-full px-2"></p>
+                     <p id="chartLabel2" class="text-[10px] font-black text-gray-400 uppercase tracking-widest mt-3 text-center w-full px-2"></p>
                  </div>
              </div>
         </div>
@@ -413,13 +426,13 @@ async function renderDashboard() {
     lucide.createIcons();
 
     // Load absence chart
+    window._absenceData = [];
+    window._chartPage   = 0;
     try {
-        const res  = await authFetch('/api/absences');
-        const data = await res.json();
-        initCharts(data);
-    } catch {
-        initCharts([]);
-    }
+        const res = await authFetch('/api/absences');
+        window._absenceData = await res.json();
+    } catch { /* leave empty */ }
+    initCharts(window._absenceData, 0);
 
     // Load recent activity
     try {
@@ -550,8 +563,15 @@ function renderRecentActivityList(records, totalCount = null) {
     lucide.createIcons();
 }
 
-// Chart — renders up to 3 individual donut charts (most recently active classes)
-function initCharts(data = []) {
+function shiftChartPage(dir) {
+    const total = (window._absenceData || []).length;
+    const pages = Math.ceil(total / 3) || 1;
+    window._chartPage = Math.max(0, Math.min(pages - 1, (window._chartPage || 0) + dir));
+    initCharts(window._absenceData, window._chartPage);
+}
+
+// Chart — renders up to 3 individual donut charts per page
+function initCharts(data = [], page = 0) {
     // Destroy any existing chart instances
     for (let i = 0; i < 3; i++) {
         const key = `_absentChart${i}`;
@@ -561,8 +581,22 @@ function initCharts(data = []) {
     const getColor = pct => pct >= 50 ? '#D32F2F' : pct >= 25 ? '#F97316' : '#F59E0B';
     const getPresentColor = pct => pct >= 50 ? '#FECACA' : pct >= 25 ? '#FED7AA' : '#FEF3C7';
 
-    // Take only the 3 most recent (DB already orders by last_session_date DESC)
-    const recent = data.slice(0, 3);
+    const total  = data.length;
+    const pages  = Math.ceil(total / 3) || 1;
+    const start  = page * 3;
+    const recent = data.slice(start, start + 3);
+
+    // Update navigation controls
+    const prevBtn   = document.getElementById('chartPrev');
+    const nextBtn   = document.getElementById('chartNext');
+    const pageLabel = document.getElementById('chartPageLabel');
+    const subtitle  = document.getElementById('chartSubtitle');
+    if (prevBtn)   prevBtn.disabled   = page === 0;
+    if (nextBtn)   nextBtn.disabled   = page >= pages - 1;
+    if (pageLabel) pageLabel.textContent = total > 3 ? `${page + 1} / ${pages}` : '';
+    if (subtitle)  subtitle.textContent  = total
+        ? `Showing ${start + 1}–${Math.min(start + 3, total)} of ${total} class${total > 1 ? 'es' : ''} · average absence per session`
+        : 'average absence per session';
 
     for (let i = 0; i < 3; i++) {
         const ctx   = document.getElementById(`absentChart${i}`);
