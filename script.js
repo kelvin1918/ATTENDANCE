@@ -2771,6 +2771,7 @@ async function confirmAction(action, id) {
     document.getElementById('confirmBtn').onclick = async () => {
         if (action === 'deleteFolder') {
             await fetch(`/api/delete_class/${id}`, { method: 'DELETE' });
+            await loadSchedules(); renderDayFilters();
             showPage('classes');
         } else if (action === 'logout') {
             // Invalidate server-side session token first
