@@ -507,10 +507,11 @@ def delete_curriculum(item_id):
 
 
 def delete_class(class_code):
-    """Deletes class + cascades to students, attendance, schedules."""
+    """Deletes class + all linked schedules, students, and attendance."""
     conn = get_db()
     cur  = get_cursor(conn)
-    cur.execute("DELETE FROM classes WHERE id = %s", (class_code,))
+    cur.execute("DELETE FROM schedules WHERE class_code = %s", (class_code,))
+    cur.execute("DELETE FROM classes   WHERE id = %s",         (class_code,))
     conn.commit()
     cur.close(); conn.close()
 
