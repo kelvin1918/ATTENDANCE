@@ -1506,7 +1506,7 @@ def get_instructor_activity_summary():
             i.email,
             i.status,
             COUNT(DISTINCT c.id)                                   AS total_classes,
-            COUNT(DISTINCT (a.class_code, a.date, a.session_time)) AS total_sessions,
+            COUNT(DISTINCT CASE WHEN a.class_code IS NOT NULL THEN (a.class_code, a.date, a.session_time) END) AS total_sessions,
             COUNT(DISTINCT s.id)                                   AS total_students,
             MAX(a.date)                                            AS last_active
         FROM instructors i
@@ -1545,6 +1545,7 @@ def get_instructor_recent_sessions(instructor_id, limit=10):
             c.subject,
             c.section,
             TO_CHAR(a.date, 'Mon DD, YYYY')                        AS date_fmt,
+            TO_CHAR(a.date, 'YYYY-MM-DD')                          AS date_iso,
             a.session_time,
             COUNT(*)                                                AS total,
             SUM(CASE WHEN a.status='Present' THEN 1 ELSE 0 END)   AS present,

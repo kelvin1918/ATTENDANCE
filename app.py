@@ -1765,6 +1765,21 @@ def api_admin_instructor_sessions(instructor_id):
     return jsonify(sessions)
 
 
+@app.route("/api/admin/session-attendance")
+def api_admin_session_attendance():
+    """Return individual attendance records for a specific session. Admin-only."""
+    token = _get_admin_token(request)
+    if not db.verify_admin_session_token(token):
+        return jsonify({"error": "Unauthorized."}), 401
+    class_code   = request.args.get("class_code")
+    date         = request.args.get("date")
+    session_time = request.args.get("session_time")
+    if not class_code or not date or not session_time:
+        return jsonify({"error": "Missing params."}), 400
+    rows = db.get_attendance_session(class_code, date, session_time)
+    return jsonify([dict(r) for r in rows])
+
+
 if __name__ == "__main__":
     app.run(debug=True, threaded=True, port=5000)
 
