@@ -1409,9 +1409,11 @@ def _open_browser(port, delay=1.5):
 
 if __name__ == "__main__":
     port = _find_free_port()
+    host = os.environ.get("FLASK_HOST", "0.0.0.0")
     print(f"\n{'='*54}")
     print(f"  BatStateU Attendance  —  Local Station")
-    print(f"  Running at: http://127.0.0.1:{port}")
+    print(f"  Running at: http://{host}:{port}")
     print(f"{'='*54}\n")
-    _open_browser(port)
-    app.run(host="127.0.0.1", port=port, debug=False, threaded=True)
+    if host == "0.0.0.0":
+        _open_browser(port)
+    app.run(host=host, port=port, debug=False, threaded=True)

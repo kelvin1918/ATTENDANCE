@@ -203,6 +203,7 @@ class FaceRecognizer:
 
         self._running         = False
         self._rec_thread      = None
+        self._capture_thread  = None
 
         self._instructor_email = INSTRUCTOR_EMAIL
         self._class_code       = CLASS_CODE
@@ -285,15 +286,53 @@ class FaceRecognizer:
         if self._app is None:
             print("[CAM] InsightFace not loaded — cannot start recognition")
             return
-        self.cap = cv2.VideoCapture(camera_source)
+
+        # Force TCP transport for RTSP streams — more stable than UDP,
+        # reduces packet loss and freeze on direct UTP/LAN connections.
+        if isinstance(camera_source, str) and camera_source.lower().startswith("rtsp"):
+            os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = (
+                "rtsp_transport;tcp|buffer_size;0|max_delay;0|fflags;nobuffer"
+            )
+            self.cap = cv2.VideoCapture(camera_source, cv2.CAP_FFMPEG)
+            print("[CAM] RTSP source detected — using TCP transport")
+        else:
+            self.cap = cv2.VideoCapture(camera_source)
+
         self.cap.set(cv2.CAP_PROP_FRAME_WIDTH,  FRAME_WIDTH)
         self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, FRAME_HEIGHT)
         self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
-        self._running    = True
+        self._running = True
+
+        # Dedicated capture thread — reads frames continuously, always keeps
+        # only the latest. Prevents FFMPEG buffer accumulation on RTSP streams
+        # which is the main cause of freeze and catch-up lag.
+        self._capture_thread = threading.Thread(
+            target=self._capture_loop, daemon=True
+        )
+        self._capture_thread.start()
+
         self._rec_thread = threading.Thread(
             target=self._recognition_loop, daemon=True
         )
         self._rec_thread.start()
+
+    def _capture_loop(self):
+        """
+        Thread 0 — dedicated camera reader.
+        Reads frames as fast as the camera produces them and keeps only
+        the latest. Both generate_frames() and _recognition_loop() read
+        from _latest_frame — they are never blocked waiting on the camera.
+        """
+        while self._running:
+            if not hasattr(self, "cap") or not self.cap.isOpened():
+                time.sleep(0.05)
+                continue
+            ret, frame = self.cap.read()
+            if ret and frame is not None:
+                with self._lock:
+                    self._latest_frame = frame
+            else:
+                time.sleep(0.01)
 
     def stop(self):
         self._running = False
@@ -335,28 +374,32 @@ class FaceRecognizer:
             self._face_scores    = []
 
     def generate_frames(self):
-        """Flask MJPEG generator — runs in request thread, never blocks on recognition."""
+        """
+        Flask MJPEG generator — reads from _latest_frame maintained by
+        _capture_loop. Never blocks on the camera directly, so the browser
+        stream stays smooth even if the RTSP source has variable timing.
+        """
         while self._running:
-            ret, frame = self.cap.read()
-            if not ret:
-                time.sleep(0.03)
-                continue
-
             with self._lock:
-                self._latest_frame = frame.copy()
+                frame     = self._latest_frame
                 boxes     = list(self._face_boxes)
                 names     = list(self._face_names)
                 scores    = list(self._face_scores)
                 confirmed = set(self._present_set)
                 pending   = dict(self._pending_counts)
 
-            annotated = self._draw_boxes(frame, boxes, names, scores, confirmed, pending)
+            if frame is None:
+                time.sleep(0.03)
+                continue
+
+            annotated = self._draw_boxes(frame.copy(), boxes, names, scores, confirmed, pending)
             _, buf = cv2.imencode(".jpg", annotated, [cv2.IMWRITE_JPEG_QUALITY, 80])
             yield (
                 b"--frame\r\n"
                 b"Content-Type: image/jpeg\r\n\r\n"
                 + buf.tobytes() + b"\r\n"
             )
+            time.sleep(1 / 30)  # cap browser stream at 30fps
 
     # ── internals ───────────────────────────────────────────────────────────
 
