@@ -66,9 +66,9 @@ H_REF  = USABLE * 0.29
 H_EFF  = USABLE * 0.32
 H_REV  = USABLE * 0.25
 
-I_DATE = USABLE * 0.25
-I_TIME = USABLE * 0.30
-I_ROOM = USABLE * 0.45
+I_DATE = USABLE * 0.35
+I_TIME = USABLE * 0.15
+I_ROOM = USABLE * 0.50
 
 R_NAME = USABLE * 0.35
 R_SIG  = USABLE * 0.15
@@ -212,11 +212,11 @@ def generate_attendance_pdf(class_id, subject, section, room, date,
     hdr_data = [
         [
             logo_cell,
-            Paragraph("Reference\nNo.:  <b>BatStateU-REC-ATT-11</b>",
+            Paragraph("Reference No.:  BatStateU-REC-ATT-11",
                       ps("rn", fontSize=9, fontName=TNR, leading=13)),
-            Paragraph("Effectivity Date:  <b>May 18, 2022</b>",
+            Paragraph("Effectivity Date:  May 18, 2022",
                       ps("ed", fontSize=9, fontName=TNR)),
-            Paragraph("Revision No.:  <b>01</b>",
+            Paragraph("Revision No.:  01",
                       ps("rv", fontSize=9, fontName=TNR)),
         ],
         [Paragraph("STUDENT CLASS ATTENDANCE", bold12c), "", "", ""],
@@ -246,14 +246,14 @@ def generate_attendance_pdf(class_id, subject, section, room, date,
     disp_date = _fmt_date(date)
 
     info_data = [
-        [Paragraph(f"Course Code and Title:  <b>{subject}</b>  ({section})",
+        [Paragraph(f"Course Code and Title:  {subject}  ({section})",
                    ps("cc", fontSize=10, fontName=TNR)), "", ""],
-        [Paragraph(f"Assigned Faculty:  <b>{faculty_name}</b>",
+        [Paragraph(f"Name of Faculty:  {faculty_name}",
                    ps("af", fontSize=10, fontName=TNR)), "", ""],
         [
-            Paragraph(f"Date: <b>{disp_date}</b>",  ps("dt", fontSize=10, fontName=TNR)),
-            Paragraph(f"Time: <b>{time_str}</b>",   ps("tm", fontSize=10, fontName=TNR)),
-            Paragraph(f"Room/Venue: <b>{room}</b>", ps("rm", fontSize=10, fontName=TNR)),
+            Paragraph(f"Date: {disp_date}",     ps("dt", fontSize=10, fontName=TNR)),
+            Paragraph(f"Time: {time_str}",      ps("tm", fontSize=10, fontName=TNR)),
+            Paragraph(f"Room/Venue: {room}",    ps("rm", fontSize=10, fontName=TNR)),
         ],
         ["", "", ""],   # gray divider row
     ]

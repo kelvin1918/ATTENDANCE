@@ -1061,9 +1061,10 @@ async function viewAndPrintPDF(class_code, date, session_time) {
                 .toLocaleDateString('en-US', { month:'numeric', day:'numeric', year:'numeric' })
             : date;
 
-        // ── Faculty name ─────────────────────────────────────────────────────
+        // ── Faculty name — prefer stored display name, fall back to email parse ──
         const session = JSON.parse(localStorage.getItem('active_session') || '{}');
-        const faculty = (session.email || '').split('@')[0]
+        const faculty = session.name ||
+                        (session.email || '').split('@')[0]
                           .replace(/[._]/g,' ').replace(/\b\w/g, l => l.toUpperCase());
 
         /// ── fixing part absent showing  ─────────────────────────────────
@@ -1168,13 +1169,13 @@ async function viewAndPrintPDF(class_code, date, session_time) {
                                  style="height:48px;width:auto;display:block;margin:0 auto;">
                         </td>
                         <td style="border:1px solid black;width:29%;padding:5px 8px;">
-                            Reference No.: <b>BatStateU-REC-ATT-11</b>
+                            Reference No.: BatStateU-REC-ATT-11
                         </td>
                         <td style="border:1px solid black;width:32%;padding:5px 8px;">
-                            Effectivity Date: <b>May 18, 2022</b>
+                            Effectivity Date: May 18, 2022
                         </td>
                         <td style="border:1px solid black;width:25%;padding:5px 8px;">
-                            Revision No.: <b>01</b>
+                            Revision No.: 01
                         </td>
                     </tr>
                     <tr>
@@ -1191,25 +1192,25 @@ async function viewAndPrintPDF(class_code, date, session_time) {
                 <table style="width:100%;border-collapse:collapse;font-size:11px;table-layout:fixed;">
                     <tr>
                         <td style="border:1px solid black;border-top:none;padding:6px 10px;">
-                            Course Code and Title:&nbsp;&nbsp;<b>${cls.subject || ''}</b>&nbsp;(${cls.section || ''})
+                            Course Code and Title:&nbsp;&nbsp;${cls.subject || ''}&nbsp;(${cls.section || ''})
                         </td>
                     </tr>
                     <tr>
                         <td style="border:1px solid black;border-top:none;padding:6px 10px;">
-                            Assigned Faculty:&nbsp;&nbsp;<b>${faculty}</b>
+                            Name of Faculty:&nbsp;&nbsp;${faculty}
                         </td>
                     </tr>
                 </table>
                 <table style="width:100%;border-collapse:collapse;font-size:11px;table-layout:fixed;">
                     <tr>
-                        <td style="border:1px solid black;border-top:none;width:25%;padding:6px 10px;">
-                            Date:&nbsp;<b>${dispDate}</b>
+                        <td style="border:1px solid black;border-top:none;width:35%;padding:6px 10px;">
+                            Date:&nbsp;${dispDate}
                         </td>
-                        <td style="border:1px solid black;border-top:none;width:30%;padding:6px 10px;">
-                            Time:&nbsp;<b>${timeVal}</b>
+                        <td style="border:1px solid black;border-top:none;width:15%;padding:6px 10px;">
+                            Time:&nbsp;${timeVal}
                         </td>
-                        <td style="border:1px solid black;border-top:none;width:45%;padding:6px 10px;">
-                            Room/Venue:&nbsp;<b>${roomVal}</b>
+                        <td style="border:1px solid black;border-top:none;width:50%;padding:6px 10px;">
+                            Room/Venue:&nbsp;${roomVal}
                         </td>
                     </tr>
                 </table>
