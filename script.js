@@ -1243,7 +1243,19 @@ async function viewAndPrintPDF(class_code, date, session_time) {
                 </table>
             </div>`;
 
-        document.getElementById('printArea').innerHTML = html;
+        const frame = document.getElementById('printFrame');
+        const fdoc  = frame.contentDocument || frame.contentWindow.document;
+        fdoc.open();
+        fdoc.write(`<!DOCTYPE html><html><head>
+            <meta charset="UTF-8">
+            <style>
+                * { box-sizing:border-box; margin:0; padding:0; }
+                body { background:#f3f4f6; font-family:'Times New Roman',Times,serif;
+                       padding:24px; overflow-y:auto; }
+                table { border-collapse:collapse; width:100%; }
+            </style>
+        </head><body>${html}</body></html>`);
+        fdoc.close();
 
         // ── Print button — clean isolated window, auto-triggers print dialog ──
         window.printSheet = () => {

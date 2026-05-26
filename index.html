@@ -377,16 +377,8 @@
                     <button onclick="document.getElementById('docViewer').classList.add('hidden')" class="p-2 bg-gray-100 rounded-full hover:bg-gray-200 transition"><i data-lucide="x"></i></button>
                 </div>
             </div>
-            <div id="printArea" class="flex-1 bg-gray-50 p-12 overflow-y-auto">
-                <div class="max-w-2xl mx-auto bg-white shadow-sm border p-12 min-h-[800px]">
-                    <h1 class="text-center font-bold text-xl mb-10 underline">ATTENDANCE LOG REPORT</h1>
-                    <table class="w-full text-left text-xs">
-                        <thead class="border-b-2 border-black">
-                            <tr><th class="py-2">STUDENT NAME</th><th class="py-2">TIME IN</th><th class="py-2">STATUS</th></tr>
-                        </thead>
-                        <tbody id="dummyTable"></tbody>
-                    </table>
-                </div>
+            <div id="printArea" class="flex-1 overflow-hidden bg-gray-50">
+                <iframe id="printFrame" style="width:100%;height:100%;border:none;display:block;"></iframe>
             </div>
         </div>
     </div>
