@@ -55,7 +55,7 @@ THRESHOLD       = 0.35
 RECOGNITION_FPS = 2    # 2 fps is enough with RetinaFace; less CPU heat
 
 # Confirmation buffer — must appear N consecutive recognition frames
-CONFIRM_FRAMES  = 3
+CONFIRM_FRAMES  = 1
 
 # Camera
 CAMERA_SOURCE   = 0

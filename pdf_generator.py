@@ -127,27 +127,16 @@ _fetch_image_bytes._cache = {}
 
 def _sig_cell(sig_path, status, norm9c_style):
     """Return a ReportLab flowable for the SIGNATURE column cell."""
-    # "SIGNED" marker — render as a red stamp for attended, blank for absent
+    # "SIGNED" marker — render as plain text for attended, blank for absent
     if sig_path == "SIGNED":
         attended = status in ("Present", "Late")
         if not attended:
             return Paragraph("", norm9c_style)
-        stamp_p = Paragraph(
-            '<b><font color="#DC2626" size="7" face="Helvetica-Bold">SIGNED</font></b>',
-            ParagraphStyle("stamp", parent=norm9c_style, alignment=TA_CENTER,
+        return Paragraph(
+            "SIGNED",
+            ParagraphStyle("signed_txt", parent=norm9c_style, alignment=TA_CENTER,
                            spaceAfter=0, spaceBefore=0)
         )
-        stamp_tbl = Table([[stamp_p]], colWidths=[40])
-        stamp_tbl.setStyle(TableStyle([
-            ("BOX",            (0, 0), (-1, -1), 1.5, colors.HexColor("#DC2626")),
-            ("ALIGN",          (0, 0), (-1, -1), "CENTER"),
-            ("VALIGN",         (0, 0), (-1, -1), "MIDDLE"),
-            ("TOPPADDING",     (0, 0), (-1, -1), 2),
-            ("BOTTOMPADDING",  (0, 0), (-1, -1), 2),
-            ("LEFTPADDING",    (0, 0), (-1, -1), 3),
-            ("RIGHTPADDING",   (0, 0), (-1, -1), 3),
-        ]))
-        return stamp_tbl
 
     # Legacy: render stored signature image for old records
     if sig_path:

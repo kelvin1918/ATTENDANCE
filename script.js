@@ -1107,12 +1107,10 @@ async function viewAndPrintPDF(class_code, date, session_time) {
                 if (!student) return '';
                 const p   = student.sig_path || '';
                 const col = statusColor(student.status);
-                // "SIGNED" marker — show text badge for present/late, status for absent
+                // "SIGNED" marker — plain text for present/late, blank for absent
                 if (p === 'SIGNED') {
                     const attended = ['Present', 'Late'].includes(student.status);
-                    return attended
-                        ? `<span style="display:inline-block;font-weight:900;color:#DC2626;font-size:8px;letter-spacing:2px;border:2.5px solid #DC2626;border-radius:3px;padding:2px 6px;transform:rotate(-12deg);opacity:.82;font-family:'Arial Black',Arial,sans-serif;text-transform:uppercase;box-shadow:1px 1px 0 #DC2626;">SIGNED</span>`
-                        : '';
+                    return attended ? 'SIGNED' : '';
                 }
                 // Legacy: still render stored signature images for old records
                 if (p) {

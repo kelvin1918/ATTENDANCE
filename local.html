@@ -2312,21 +2312,30 @@ document.getElementById('btn-save-attendance').addEventListener('click', async (
     scanLog = await r.json();
   } catch {}
 
+  // Normalize name: strip underscores, periods, commas; collapse spaces; lowercase
+  // Then sort words so "LAST, FIRST MI" and "FIRST MI LAST" both produce same token key
+  function normKey(n) {
+    return (n || '').replace(/_/g,' ').replace(/[.,]/g,' ').replace(/\s+/g,' ').trim().toLowerCase().split(' ').filter(Boolean).sort().join(' ');
+  }
+
   // Build a lookup: normalised name → "Present" | "Late"
-  const detectedMap = {};
+  const detectedMap     = {};   // exact normalized key
+  const detectedMapTok  = {};   // sorted-word token key (handles Last,First vs First Last)
   for (const [name, val] of Object.entries(scanLog)) {
-    const key = name.replace(/_/g, ' ').toLowerCase();
-    // Support both old format (plain timestamp) and new format ({ts, status})
-    detectedMap[key] = (val && typeof val === 'object') ? (val.status || 'Present') : 'Present';
+    const status = (val && typeof val === 'object') ? (val.status || 'Present') : 'Present';
+    const exact  = name.replace(/_/g, ' ').replace(/[.]/g, '').replace(/\s+/g,' ').trim().toLowerCase();
+    detectedMap[exact]              = status;
+    detectedMapTok[normKey(name)]   = status;
   }
 
   // Build records: enrolled students → Present, Late, or Absent
   const enrolled = STATE.students.filter(s => s.status === 'Enrolled');
-  const records  = enrolled.map(s => ({
-    name:    s.name,
-    sr_code: s.sr_code || '',
-    status:  detectedMap[(s.name || '').toLowerCase()] || 'Absent',
-  }));
+  const records  = enrolled.map(s => {
+    const exact = (s.name || '').replace(/[.]/g,'').replace(/\s+/g,' ').trim().toLowerCase();
+    const tok   = normKey(s.name);
+    const status = detectedMap[exact] || detectedMapTok[tok] || 'Absent';
+    return { name: s.name, sr_code: s.sr_code || '', status };
+  });
 
   const presentCnt = records.filter(r => r.status === 'Present').length;
   const lateCnt    = records.filter(r => r.status === 'Late').length;

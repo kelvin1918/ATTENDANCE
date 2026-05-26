@@ -835,7 +835,7 @@ def api_download_pdf(class_code, date):
 
     # ── Generate PDF ─────────────────────────────────────────────────────────
     try:
-        filepath = generate_attendance_pdf(
+        buf, filename = generate_attendance_pdf(
             class_id     = class_code,
             subject      = cls["subject"],
             section      = cls["section"],
@@ -852,9 +852,9 @@ def api_download_pdf(class_code, date):
         return jsonify({"error": f"PDF generation failed: {pdf_err}"}), 500
 
     return send_file(
-        filepath,
+        buf,
         as_attachment = True,
-        download_name = os.path.basename(filepath),
+        download_name = filename,
         mimetype      = "application/pdf"
     )
 
