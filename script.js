@@ -1472,6 +1472,11 @@ function renderFolderView(cls, class_code, students) {
                                 title="Email student">
                                 <i data-lucide="mail" class="w-4 h-4"></i>
                             </button>
+                            <button onclick="removeStudentFromClass(${s.id}, '${encodeURIComponent(s.name)}')"
+                                class="p-2 bg-white text-gray-500 hover:text-red-600 rounded-lg border border-gray-100 shadow-sm transition flex items-center justify-center"
+                                title="Remove student from class">
+                                <i data-lucide="user-minus" class="w-4 h-4"></i>
+                            </button>
                         </div>
                     </div>`).join('')}
             </div>
@@ -1510,6 +1515,29 @@ async function updateStudentStatus(studentId, newStatus) {
         console.error('Failed to update status:', e);
         showToast('Failed to update student status.', 'error');
     }
+}
+
+async function removeStudentFromClass(studentId, encodedName) {
+    const studentName = decodeURIComponent(encodedName);
+    const modal = document.getElementById('customConfirm');
+    modal.classList.remove('hidden');
+    document.getElementById('confirmDesc').innerText = `Remove "${studentName}" from this class? The student can still be imported to other classes.`;
+    document.getElementById('confirmBtn').textContent = 'Remove';
+    document.getElementById('confirmBtn').onclick = async () => {
+        closeConfirm();
+        try {
+            await authFetch(`/api/delete_student/${studentId}`, { method: 'DELETE' });
+            if (window._cachedStudents) {
+                window._cachedStudents = window._cachedStudents.filter(s => s.id !== studentId);
+            }
+            const cls = classFolders.find(f => f.id === currentOpenedFolder) || {};
+            renderFolderView(cls, currentOpenedFolder, window._cachedStudents || []);
+            showToast(`${studentName} removed from class.`, 'success');
+        } catch(e) {
+            console.error('Failed to remove student:', e);
+            showToast('Failed to remove student.', 'error');
+        }
+    };
 }
 
 async function sendAttendanceEmail(studentId, encodedName, encodedEmail, encodedClassCode) {
