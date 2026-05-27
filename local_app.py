@@ -612,6 +612,31 @@ def _sync_faces_bg(instructor_id):
             _sync_progress["synced"]  = synced
             _sync_progress["skipped"] = skipped
 
+    # ── Clean up face files for students removed from their class ────────────
+    try:
+        removed = db.get_removed_students(instructor_id)
+        for s in removed:
+            name       = (s.get("name", "") or "").strip()
+            class_code = (s.get("class_code", "") or "").strip()
+            if not name or not class_code:
+                continue
+            safe_name = _safe_code(name.replace(" ", "_"))
+            faces_dir = _class_faces_dir(class_code)
+            if not os.path.isdir(faces_dir):
+                continue
+            for fname in os.listdir(faces_dir):
+                base = os.path.splitext(fname)[0]
+                # Match exact name or name_angle (e.g. Juan_Santos_front)
+                if base == safe_name or base.startswith(safe_name + "_"):
+                    fpath = os.path.join(faces_dir, fname)
+                    try:
+                        os.remove(fpath)
+                        print(f"[SYNC] Removed face file for removed student: {fpath}")
+                    except Exception as e:
+                        print(f"[SYNC] Could not remove {fpath}: {e}")
+    except Exception as e:
+        print(f"[SYNC] Removed-student cleanup error: {e}")
+
     with _sync_lock:
         _sync_progress["done"]    = True
         _sync_progress["synced"]  = synced

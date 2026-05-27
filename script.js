@@ -1521,12 +1521,12 @@ async function removeStudentFromClass(studentId, encodedName) {
     const studentName = decodeURIComponent(encodedName);
     const modal = document.getElementById('customConfirm');
     modal.classList.remove('hidden');
-    document.getElementById('confirmDesc').innerText = `Remove "${studentName}" from this class? The student can still be imported to other classes.`;
+    document.getElementById('confirmDesc').innerText = `Remove "${studentName}" from this class? Their record and photos are kept so they can be imported to another class.`;
     document.getElementById('confirmBtn').textContent = 'Remove';
     document.getElementById('confirmBtn').onclick = async () => {
         closeConfirm();
         try {
-            await authFetch(`/api/delete_student/${studentId}`, { method: 'DELETE' });
+            await authFetch(`/api/remove_student_from_class/${studentId}`, { method: 'DELETE' });
             if (window._cachedStudents) {
                 window._cachedStudents = window._cachedStudents.filter(s => s.id !== studentId);
             }

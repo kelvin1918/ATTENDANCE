@@ -179,6 +179,7 @@ def init_db():
     cur.execute("ALTER TABLE students ADD COLUMN IF NOT EXISTS photo_left  TEXT DEFAULT '';")
     cur.execute("ALTER TABLE students ADD COLUMN IF NOT EXISTS photo_right TEXT DEFAULT '';")
     cur.execute("ALTER TABLE students ADD COLUMN IF NOT EXISTS photo_up    TEXT DEFAULT '';")
+    cur.execute("ALTER TABLE students ADD COLUMN IF NOT EXISTS removed_from_class BOOLEAN DEFAULT FALSE;")
 
     # ── 5. attendance — references classes ────────────────────────────────────
     cur.execute("""
@@ -534,13 +535,15 @@ def get_students(class_code, include_pending=False):
     cur  = get_cursor(conn)
     if include_pending:
         cur.execute(
-            "SELECT * FROM students WHERE class_code = %s ORDER BY name",
+            "SELECT * FROM students WHERE class_code = %s "
+            "AND removed_from_class IS NOT TRUE ORDER BY name",
             (class_code,)
         )
     else:
         cur.execute(
             "SELECT * FROM students WHERE class_code = %s "
-            "AND (approval_status IS NULL OR approval_status != 'Pending') ORDER BY name",
+            "AND (approval_status IS NULL OR approval_status != 'Pending') "
+            "AND removed_from_class IS NOT TRUE ORDER BY name",
             (class_code,)
         )
     rows = cur.fetchall()
@@ -567,6 +570,7 @@ def get_students_with_photos(instructor_id):
            WHERE c.instructor_id = %s
              AND s.status != 'Dropped'
              AND (s.approval_status IS NULL OR s.approval_status != 'Pending')
+             AND s.removed_from_class IS NOT TRUE
            ORDER BY s.class_code, s.name""",
         (instructor_id,)
     )
@@ -633,6 +637,7 @@ def search_instructor_students(instructor_id, query, exclude_class_code):
           AND  (s.sr_code IS NULL OR s.sr_code NOT IN (
                    SELECT sr_code FROM students
                    WHERE  class_code = %s AND sr_code IS NOT NULL
+                     AND  removed_from_class IS NOT TRUE
                ))
           AND  (s.name ILIKE %s OR s.sr_code ILIKE %s)
         ORDER  BY COALESCE(s.sr_code, s.id::text), s.name
@@ -662,10 +667,11 @@ def import_students_to_class(student_ids, target_class_code):
     source = cur.fetchall()
     imported = 0
     for s in source:
-        # Skip if same sr_code already exists in target (NULL-safe check)
+        # Skip if same sr_code already exists (and is active) in target
         if s['sr_code']:
             cur.execute(
-                "SELECT 1 FROM students WHERE class_code=%s AND sr_code=%s LIMIT 1",
+                "SELECT 1 FROM students WHERE class_code=%s AND sr_code=%s "
+                "AND removed_from_class IS NOT TRUE LIMIT 1",
                 (target_class_code, s['sr_code'])
             )
             if cur.fetchone():
@@ -852,6 +858,46 @@ def delete_student(student_db_id):
     conn.commit()
     cur.close(); conn.close()
     return dict(student)
+
+
+def remove_student_from_class(student_id):
+    """
+    Soft-remove: marks removed_from_class = TRUE so the student disappears
+    from the class roster but their record and Cloudinary photos are kept,
+    allowing re-import to another class.
+    Returns the student dict (name + class_code needed for disk cleanup).
+    Returns None if the student was not found.
+    """
+    conn = get_db()
+    cur  = get_cursor(conn)
+    cur.execute(
+        "UPDATE students SET removed_from_class = TRUE WHERE id = %s RETURNING *",
+        (student_id,)
+    )
+    row = cur.fetchone()
+    conn.commit()
+    cur.close(); conn.close()
+    return dict(row) if row else None
+
+
+def get_removed_students(instructor_id):
+    """
+    Return name + class_code for every student marked removed_from_class = TRUE
+    across all classes owned by instructor_id.
+    Used by the local sync to clean up orphaned face files on disk.
+    """
+    conn = get_db()
+    cur  = get_cursor(conn)
+    cur.execute("""
+        SELECT s.name, s.class_code
+        FROM   students s
+        JOIN   classes  c ON c.id = s.class_code
+        WHERE  c.instructor_id      = %s
+          AND  s.removed_from_class IS TRUE
+    """, (instructor_id,))
+    rows = cur.fetchall()
+    cur.close(); conn.close()
+    return [dict(r) for r in rows]
 
 
 # ── ATTENDANCE ────────────────────────────────────────────────────────────────

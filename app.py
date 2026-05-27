@@ -471,6 +471,22 @@ def api_delete_student(student_id):
     return jsonify({"status": "ok"})
 
 
+@app.route("/api/remove_student_from_class/<int:student_id>", methods=["DELETE"])
+def api_remove_student_from_class(student_id):
+    """
+    Soft-remove a student from their class:
+      - Sets removed_from_class = TRUE in DB (hidden from roster, importable elsewhere)
+      - Cloudinary photos are NOT deleted (needed for re-import)
+      - Local disk face files are cleaned up by the local station on next sync
+    """
+    if not get_current_instructor_id(request):
+        return jsonify({"error": "Unauthorized"}), 401
+    student = db.remove_student_from_class(student_id)
+    if not student:
+        return jsonify({"error": "Student not found"}), 404
+    return jsonify({"status": "ok"})
+
+
 # ════════════════════════════════════════════════════════════════════════════════
 # API — CAMERA / ATTENDANCE
 # ════════════════════════════════════════════════════════════════════════════════

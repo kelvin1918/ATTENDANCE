@@ -683,15 +683,11 @@ label.field-label{display:block;font-size:12px;font-weight:600;
       <span class="cam-class-code" id="cam-class-code">GED-144</span>
       <span class="cam-class-sep">·</span>
       <span class="cam-class-name" id="cam-class-name">Subject Name</span>
+      <span class="cam-class-sep" id="cam-class-section-sep" style="display:none">·</span>
+      <span class="cam-class-section" id="cam-class-section" style="font-size:12px;font-weight:600;color:var(--muted);letter-spacing:.4px"></span>
     </div>
     <div class="cam-actions">
       <span class="cam-clock mono" id="cam-clock">00:00:00</span>
-      <button class="btn btn-sm btn-ghost" id="btn-open-register">
-        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-          <path d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
-        Register Student
-      </button>
       <button class="btn btn-green btn-sm" id="btn-save-attendance">
         <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
           <path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round"/>
@@ -793,7 +789,7 @@ label.field-label{display:block;font-size:12px;font-weight:600;
         <path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/>
       </svg>
       <select class="cam-source-select" id="cam-source-select">
-        <option value="0">Webcam (Built-in)</option>
+        <option value="0">Webcam (Built-in) — BETA</option>
         <option value="rtsp">IP Camera (RTSP)</option>
       </select>
       <input id="cam-rtsp-input" class="input hidden"
@@ -1528,6 +1524,11 @@ async function openCameraScreen(classCode) {
   // Show friendly short code (e.g. CPET-3201) instead of full long class_code
   document.getElementById('cam-class-code').textContent = cls.course_code || cls.class_code;
   document.getElementById('cam-class-name').textContent = cls.subject || '';
+  const section = cls.section || '';
+  const sectionEl    = document.getElementById('cam-class-section');
+  const sectionSepEl = document.getElementById('cam-class-section-sep');
+  sectionEl.textContent = section;
+  sectionSepEl.style.display = section ? '' : 'none';
 
   // Load students for this class
   try {
@@ -1915,17 +1916,6 @@ function renderStudentsList(present = []) {
           ${s.name}
         </span>
         <div style="display:flex;align-items:center;gap:3px;flex-shrink:0">
-          <span title="${hasFace?'Face image on disk':'No face image — camera cannot detect'}"
-                class="${hasFace?'badge-face-ok':'badge-face-no'}" style="padding:1px 5px;font-size:9px">
-            ${hasFace?'F✓':'F✗'}
-          </span>
-          <span title="${hasSig?'Signature on file':'No signature — attendance sheet shows text only'}"
-                class="${hasSig?'badge-sig-ok':'badge-sig-no'}" style="padding:1px 5px;font-size:9px">
-            ${hasSig?'S✓':'S✗'}
-          </span>
-          <button onclick="openEditStudent(${s.id})"
-            title="Edit student"
-            class="stu-action-btn">✎</button>
           <button onclick="deleteStudent(${s.id},'${sName}')"
             title="Delete student (removes from disk + Cloudinary)"
             class="stu-action-btn stu-del-btn">✕</button>
