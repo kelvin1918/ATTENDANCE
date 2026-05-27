@@ -595,6 +595,24 @@ def get_student_by_srcode(sr_code):
     return row
 
 
+def get_student_by_srcode_for_instructor(sr_code, instructor_id):
+    """Return the first student record matching sr_code in any class owned by instructor_id."""
+    conn = get_db()
+    cur  = get_cursor(conn)
+    cur.execute("""
+        SELECT s.id, s.name, s.sr_code, s.class_code, s.photo,
+               c.subject, c.section, c.course_code
+        FROM   students s
+        JOIN   classes  c ON c.id = s.class_code
+        WHERE  s.sr_code       = %s
+          AND  c.instructor_id = %s
+        LIMIT 1
+    """, (sr_code, instructor_id))
+    row = cur.fetchone()
+    cur.close(); conn.close()
+    return row
+
+
 def search_instructor_students(instructor_id, query, exclude_class_code):
     """
     Find Approved students across all classes owned by instructor whose name

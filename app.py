@@ -365,9 +365,29 @@ def api_add_student():
     form       = request.form
     class_code = form.get("class_code", "").strip()
     name       = form.get("name", "").strip()
+    sr_code    = form.get("sr_code", "").strip()
 
     if not class_code or not name:
         return jsonify({"error": "class_code and name required"}), 400
+
+    # Check SR code uniqueness across the instructor's entire account
+    if sr_code:
+        instructor_id = get_current_instructor_id(request)
+        if instructor_id:
+            existing = db.get_student_by_srcode_for_instructor(sr_code, instructor_id)
+            if existing and existing["class_code"] != class_code:
+                return jsonify({
+                    "status":  "exists",
+                    "student": {
+                        "id":          existing["id"],
+                        "name":        existing["name"],
+                        "sr_code":     existing["sr_code"],
+                        "class_code":  existing["class_code"],
+                        "subject":     existing["subject"],
+                        "section":     existing["section"],
+                        "course_code": existing["course_code"],
+                    }
+                }), 200
 
     # Save profile photo → uploads/students/ and faces/
     photo_path = ""

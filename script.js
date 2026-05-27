@@ -2178,6 +2178,16 @@ async function submitStudentForm(formEl) {
         const res=await fetch('/api/add_student',{method:'POST',body:formData,headers:{'X-Instructor-Email':session.email||''}});
         const data=await res.json();
         if(!res.ok){showRegError([data.error||'Failed to save student.']);return;}
+        if(data.status==='exists'){
+            const s=data.student;
+            showRegError([
+                `SR Code <b>${s.sr_code}</b> already exists in your account.<br>`+
+                `<span style="font-weight:400">This student (<b>${s.name}</b>) is currently enrolled in `+
+                `<b>${s.course_code} &bull; ${s.subject} &bull; ${s.section}</b>. `+
+                `Use the <b>Import</b> feature on this class to add them here instead of re-registering.</span>`
+            ]);
+            return;
+        }
         closeRegModal(); openFolderView(currentOpenedFolder);
     } catch(e){showRegError(['Server error: '+e.message]);}
 }
