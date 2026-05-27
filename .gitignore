@@ -28,7 +28,8 @@ Dockerfile
 launcher.py
 
 # buffalo_l subfolders (keep root, ignore contents)
-buffalo_l/*/
+buffalo_l/
+*.onnx
 
 
 
