@@ -254,6 +254,12 @@
         .stat-icon.blue  { background: #EFF6FF;          color: #3B82F6; }
         .stat-icon svg   { width: 18px; height: 18px; }
 
+        /* ── DASHBOARD 2-COLUMN GRID ─────────────────────────── */
+        .dash-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px; }
+        .dash-grid .data-card { margin-bottom: 0; }
+        .dash-scroll { max-height: 230px; overflow-y: auto; }
+        @media (max-width: 768px) { .dash-grid { grid-template-columns: 1fr !important; } }
+
         /* ── DATA CARDS ──────────────────────────────────────── */
         .data-card {
             background: white; border-radius: 16px;
@@ -580,44 +586,95 @@
                 <p class="page-sub">System Overview</p>
             </div>
 
-            <div class="stats-grid">
+            <!-- 4 STAT CARDS -->
+            <div class="stats-grid" style="grid-template-columns:repeat(4,1fr);">
                 <div class="stat-card blue">
-                    <div class="stat-label">Total Accounts</div>
-                    <div class="stat-value" id="stat-total">0</div>
+                    <div class="stat-label">Total Instructors</div>
+                    <div class="stat-value" id="stat-total">—</div>
                     <div class="stat-icon blue"><i data-lucide="users"></i></div>
                 </div>
                 <div class="stat-card">
                     <div class="stat-label">Pending Approval</div>
-                    <div class="stat-value" id="stat-pending">0</div>
+                    <div class="stat-value" id="stat-pending">—</div>
                     <div class="stat-icon" style="background:#FFFBEB;color:#D97706;"><i data-lucide="clock"></i></div>
                 </div>
                 <div class="stat-card green">
-                    <div class="stat-label">Approved</div>
-                    <div class="stat-value" id="stat-approved">0</div>
-                    <div class="stat-icon green"><i data-lucide="check-circle"></i></div>
+                    <div class="stat-label">Camera Rooms</div>
+                    <div class="stat-value" id="stat-rooms">—</div>
+                    <div class="stat-icon green"><i data-lucide="camera"></i></div>
+                </div>
+                <div class="stat-card red">
+                    <div class="stat-label">Total Sessions</div>
+                    <div class="stat-value" id="stat-sessions">—</div>
+                    <div class="stat-icon red"><i data-lucide="file-text"></i></div>
                 </div>
             </div>
 
-            <!-- Recent activity summary -->
-            <div class="data-card">
-                <div class="card-header">
-                    <span class="card-title">Pending Requests</span>
-                    <button class="btn-primary" onclick="showPage('instructors', document.querySelector('.nav-item[onclick*=instructors]'))">
-                        <i data-lucide="arrow-right"></i> View All
-                    </button>
+            <!-- ROW 1: Instructors | Camera Rooms -->
+            <div class="dash-grid">
+                <div class="data-card">
+                    <div class="card-header">
+                        <span class="card-title" style="display:flex;align-items:center;gap:8px;">
+                            <i data-lucide="users" style="width:15px;height:15px;color:var(--red);"></i>
+                            Instructors
+                        </span>
+                        <button class="btn-primary" onclick="showPage('instructors', document.querySelector('.nav-item[onclick*=\'instructors\']'))">
+                            <i data-lucide="arrow-right"></i> View All
+                        </button>
+                    </div>
+                    <div style="display:flex;border-bottom:1px solid var(--border);">
+                        <div style="flex:1;padding:12px 20px;text-align:center;border-right:1px solid var(--border);">
+                            <div style="font-size:1.6rem;font-weight:900;color:var(--text);" id="dash-approved-count">—</div>
+                            <div style="font-size:0.62rem;font-weight:800;color:var(--green);text-transform:uppercase;letter-spacing:0.08em;">Approved</div>
+                        </div>
+                        <div style="flex:1;padding:12px 20px;text-align:center;">
+                            <div style="font-size:1.6rem;font-weight:900;color:var(--text);" id="dash-pending-count">—</div>
+                            <div style="font-size:0.62rem;font-weight:800;color:#D97706;text-transform:uppercase;letter-spacing:0.08em;">Pending</div>
+                        </div>
+                    </div>
+                    <div id="dash-pending-list" class="dash-scroll" style="padding:0;"></div>
                 </div>
-                <div class="card-body" style="padding:0;">
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>Name</th>
-                                <th>Email</th>
-                                <th>Status</th>
-                                <th style="text-align:right;">Action</th>
-                            </tr>
-                        </thead>
-                        <tbody id="pending-list"></tbody>
-                    </table>
+
+                <div class="data-card">
+                    <div class="card-header">
+                        <span class="card-title" style="display:flex;align-items:center;gap:8px;">
+                            <i data-lucide="camera" style="width:15px;height:15px;color:var(--red);"></i>
+                            Camera Rooms
+                        </span>
+                        <button class="btn-primary" onclick="showPage('rooms', document.querySelector('.nav-item[onclick*=\'rooms\']'))">
+                            <i data-lucide="settings"></i> Manage
+                        </button>
+                    </div>
+                    <div id="dash-rooms-list" class="dash-scroll" style="padding:0;"></div>
+                </div>
+            </div>
+
+            <!-- ROW 2: Activity | Curriculum -->
+            <div class="dash-grid" style="margin-bottom:0;">
+                <div class="data-card">
+                    <div class="card-header">
+                        <span class="card-title" style="display:flex;align-items:center;gap:8px;">
+                            <i data-lucide="activity" style="width:15px;height:15px;color:var(--red);"></i>
+                            Recent Activity
+                        </span>
+                        <button class="btn-primary" onclick="showPage('activity', document.querySelector('.nav-item[onclick*=\'activity\']'))">
+                            <i data-lucide="arrow-right"></i> View All
+                        </button>
+                    </div>
+                    <div id="dash-activity-list" class="dash-scroll" style="padding:0;"></div>
+                </div>
+
+                <div class="data-card">
+                    <div class="card-header">
+                        <span class="card-title" style="display:flex;align-items:center;gap:8px;">
+                            <i data-lucide="book-open" style="width:15px;height:15px;color:var(--red);"></i>
+                            Curriculum
+                        </span>
+                        <button class="btn-primary" onclick="showPage('curriculum', document.querySelector('.nav-item[onclick*=\'curriculum\']'))">
+                            <i data-lucide="arrow-right"></i> View All
+                        </button>
+                    </div>
+                    <div id="dash-curriculum-list" class="dash-scroll" style="padding:0;"></div>
                 </div>
             </div>
         </div>
@@ -1149,64 +1206,171 @@
 
     // ── RENDER ADMIN (loads all data for dashboard overview) ─────────────────
     async function renderAdmin() {
+        // 1. Instructors
         try {
-            const res   = await fetch('/api/instructors');
-            const users = await res.json();
-            allUsers    = users;
+            const res    = await fetch('/api/instructors');
+            const users  = await res.json();
+            allUsers     = users;
 
-            const total   = users.length;
-            const pending = users.filter(u => u.status === 'pending').length;
+            const total    = users.length;
+            const pending  = users.filter(u => u.status === 'pending').length;
             const approved = users.filter(u => u.status === 'approved').length;
 
             document.getElementById('stat-total').textContent   = total;
             document.getElementById('stat-pending').textContent = pending;
-            document.getElementById('stat-approved').textContent = approved;
 
-            // Pending badge on sidebar + mobile nav
-            const badge = document.getElementById('pending-badge');
+            // Sidebar pending badge
+            const badge    = document.getElementById('pending-badge');
             const badgeMob = document.getElementById('pending-badge-mob');
             if (pending > 0) {
-                badge.textContent = pending;
-                badge.style.display = '';
+                badge.textContent = pending; badge.style.display = '';
                 if (badgeMob) { badgeMob.textContent = pending; badgeMob.style.display = ''; }
             } else {
                 badge.style.display = 'none';
                 if (badgeMob) badgeMob.style.display = 'none';
             }
 
-            // Pending list on dashboard page (shows only pending)
-            renderPendingList(users.filter(u => u.status === 'pending'));
-
+            // Dashboard instructor panel
+            const approvedEl = document.getElementById('dash-approved-count');
+            const pendingEl  = document.getElementById('dash-pending-count');
+            if (approvedEl) approvedEl.textContent = approved;
+            if (pendingEl)  pendingEl.textContent  = pending;
+            _renderDashPendingList(users.filter(u => u.status === 'pending'));
         } catch { showToast("Could not load instructor data."); }
 
+        // 2. Activity — also populates stat-sessions
+        try {
+            const res = await _admFetch('/api/admin/activity');
+            if (res.ok) {
+                const data = await res.json();
+                const totalSessions = data.reduce((s, d) => s + (d.total_sessions || 0), 0);
+                const sessEl = document.getElementById('stat-sessions');
+                if (sessEl) sessEl.textContent = totalSessions;
+                const top5 = [...data]
+                    .sort((a, b) => (b.last_active || '').localeCompare(a.last_active || ''))
+                    .slice(0, 5);
+                _renderDashActivity(top5);
+            }
+        } catch {}
+
+        // 3. Curriculum
+        try {
+            const res  = await fetch('/api/curriculum');
+            const data = await res.json();
+            _renderDashCurriculum(data);
+        } catch {}
+
+        // 4. Rooms (also updates rooms page table and stat-rooms)
         renderRooms();
     }
 
-    function renderPendingList(pending) {
-        const tbody = document.getElementById('pending-list');
-        if (!tbody) return;
+    // ── DASHBOARD PANEL HELPERS ───────────────────────────────────────────────
+    function _renderDashPendingList(pending) {
+        const el = document.getElementById('dash-pending-list');
+        if (!el) return;
         if (!pending.length) {
-            tbody.innerHTML = `<tr><td colspan="4">
-                <div class="empty-state">
-                    <i data-lucide="check-circle" style="width:32px;height:32px;display:block;margin:0 auto 8px;color:#D1D5DB;"></i>
-                    <p>No pending requests — all caught up!</p>
-                </div></td></tr>`;
+            el.innerHTML = `
+                <div style="padding:20px 24px;text-align:center;color:#9CA3AF;font-size:0.8rem;">
+                    <i data-lucide="check-circle" style="display:block;margin:0 auto 6px;width:24px;height:24px;color:#D1D5DB;"></i>
+                    No pending requests — all caught up!
+                </div>`;
             lucide.createIcons();
             return;
         }
-        tbody.innerHTML = pending.map(u => {
-            const displayName = deriveName(u);
-            return `<tr>
-                <td><strong>${displayName}</strong></td>
-                <td style="color:#6B7280;">${u.email}</td>
-                <td><span class="pill pill-pending">Pending</span></td>
-                <td style="text-align:right;">
-                    <button class="btn-sm btn-approve" onclick="handleAction(${u.id},'approved')" style="margin-right:6px;">Approve</button>
+        el.innerHTML = pending.map(u => `
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 20px;border-bottom:1px solid var(--border);">
+                <div style="min-width:0;">
+                    <div style="font-weight:600;font-size:0.82rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${deriveName(u)}</div>
+                    <div style="font-size:0.7rem;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${u.email}</div>
+                </div>
+                <div style="display:flex;gap:6px;flex-shrink:0;margin-left:8px;">
+                    <button class="btn-sm btn-approve" onclick="handleAction(${u.id},'approved')">Approve</button>
                     <button class="btn-sm btn-remove"  onclick="handleAction(${u.id},'delete')">Remove</button>
-                </td>
-            </tr>`;
-        }).join('');
+                </div>
+            </div>`).join('');
+    }
+
+    function _renderDashRooms(rooms) {
+        const el      = document.getElementById('dash-rooms-list');
+        const statEl  = document.getElementById('stat-rooms');
+        if (statEl) statEl.textContent = rooms.length;
+        if (!el) return;
+        if (!rooms.length) {
+            el.innerHTML = `
+                <div style="padding:20px 24px;text-align:center;color:#9CA3AF;font-size:0.8rem;">
+                    <i data-lucide="camera-off" style="display:block;margin:0 auto 6px;width:24px;height:24px;color:#D1D5DB;"></i>
+                    No camera rooms configured yet
+                </div>`;
+            lucide.createIcons();
+            return;
+        }
+        el.innerHTML = rooms.map((r, i) => `
+            <div style="display:flex;align-items:center;gap:12px;padding:10px 20px;border-bottom:${i < rooms.length - 1 ? '1px solid var(--border)' : 'none'};">
+                <div style="width:32px;height:32px;background:var(--red-light);color:var(--red);border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                    <i data-lucide="camera" style="width:14px;height:14px;"></i>
+                </div>
+                <div style="min-width:0;">
+                    <div style="font-weight:700;font-size:0.82rem;">${r.room_name}</div>
+                    <div style="font-size:0.68rem;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:200px;">${r.rtsp_url || '—'}</div>
+                </div>
+            </div>`).join('');
         lucide.createIcons();
+    }
+
+    function _renderDashActivity(data) {
+        const el = document.getElementById('dash-activity-list');
+        if (!el) return;
+        if (!data.length) {
+            el.innerHTML = `
+                <div style="padding:20px 24px;text-align:center;color:#9CA3AF;font-size:0.8rem;">
+                    No activity recorded yet
+                </div>`;
+            return;
+        }
+        el.innerHTML = data.map((d, i) => {
+            const lastActive = d.last_active
+                ? new Date(d.last_active).toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric'})
+                : 'No sessions yet';
+            return `
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 20px;border-bottom:${i < data.length - 1 ? '1px solid var(--border)' : 'none'};">
+                <div style="min-width:0;">
+                    <div style="font-weight:600;font-size:0.82rem;">${d.name}</div>
+                    <div style="font-size:0.7rem;color:var(--muted);">Last active: ${lastActive}</div>
+                </div>
+                <div style="text-align:right;flex-shrink:0;margin-left:8px;">
+                    <div style="font-weight:900;font-size:1.1rem;color:var(--text);">${d.total_sessions}</div>
+                    <div style="font-size:0.6rem;color:var(--muted);text-transform:uppercase;letter-spacing:0.06em;">sessions</div>
+                </div>
+            </div>`;
+        }).join('');
+    }
+
+    function _renderDashCurriculum(data) {
+        const el = document.getElementById('dash-curriculum-list');
+        if (!el) return;
+        if (!data.length) {
+            el.innerHTML = `
+                <div style="padding:20px 24px;text-align:center;color:#9CA3AF;font-size:0.8rem;">
+                    <i data-lucide="book-open" style="display:block;margin:0 auto 6px;width:24px;height:24px;color:#D1D5DB;"></i>
+                    No curriculum entries yet
+                </div>`;
+            lucide.createIcons();
+            return;
+        }
+        const groups = {};
+        data.forEach(c => {
+            const prog = c.program || 'General';
+            if (!groups[prog]) groups[prog] = [];
+            groups[prog].push(c);
+        });
+        const programs = Object.keys(groups);
+        el.innerHTML = programs.map((prog, i) => `
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 20px;border-bottom:${i < programs.length - 1 ? '1px solid var(--border)' : 'none'};">
+                <div style="font-weight:600;font-size:0.83rem;">${prog}</div>
+                <span style="background:var(--red-light);color:var(--red);padding:2px 10px;border-radius:99px;font-size:0.7rem;font-weight:700;white-space:nowrap;">
+                    ${groups[prog].length} subject${groups[prog].length !== 1 ? 's' : ''}
+                </span>
+            </div>`).join('');
     }
 
     // ── INSTRUCTOR PAGE ───────────────────────────────────────────────────────
@@ -1324,10 +1488,14 @@
     // ── ROOM MANAGEMENT ───────────────────────────────────────────────────────
     async function renderRooms() {
         const tbody = document.getElementById('room-list');
-        if (!tbody) return;
         try {
             const res   = await fetch('/api/rooms');
             const rooms = await res.json();
+
+            // Always update dashboard rooms panel
+            _renderDashRooms(rooms);
+
+            if (!tbody) return;
             if (!rooms.length) {
                 tbody.innerHTML = `<tr><td colspan="3">
                     <div class="empty-state">
@@ -1346,7 +1514,7 @@
                     </td>
                 </tr>`).join('');
         } catch {
-            tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;padding:24px;color:#D1D5DB;">Could not load rooms.</td></tr>';
+            if (tbody) tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;padding:24px;color:#D1D5DB;">Could not load rooms.</td></tr>';
         }
     }
 
