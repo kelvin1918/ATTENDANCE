@@ -1878,7 +1878,7 @@ def student_registration_page(token):
     .photo-box:hover{{border-color:#D32F2F;background:#FEF2F2}}
     .photo-box.has-photo{{border-color:#22C55E;background:#F0FDF4}}
     .photo-box input{{display:none}}
-    .photo-box .icon{{font-size:1.5rem;margin-bottom:4px}}
+    .photo-box .icon{{margin-bottom:6px;display:flex;align-items:center;justify-content:center}}
     .photo-box .label{{font-size:.75rem;font-weight:700;color:#555}}
     .photo-box .status{{font-size:.7rem;color:#22C55E;margin-top:2px}}
     .btn{{width:100%;padding:14px;background:#D32F2F;color:#fff;border:none;
@@ -1887,7 +1887,7 @@ def student_registration_page(token):
     .btn:hover{{opacity:.9}}
     .btn:disabled{{opacity:.5;cursor:not-allowed}}
     .success{{display:none;text-align:center;padding:32px 16px}}
-    .success .check{{font-size:3rem;margin-bottom:12px}}
+    .success .check{{margin-bottom:12px}}
     .success h2{{color:#22C55E;margin-bottom:8px}}
     .success p{{color:#555;font-size:.9rem}}
     .error-msg{{color:#D32F2F;font-size:.8rem;margin-top:4px;display:none}}
@@ -1919,7 +1919,20 @@ def student_registration_page(token):
 
   <form id="regForm">
     <label>Full Name <span class="required">*</span></label>
-    <input type="text" id="name" placeholder="e.g. Juan Dela Cruz" required>
+    <div style="display:grid;grid-template-columns:1fr 1fr 80px;gap:8px;margin-top:0">
+      <div>
+        <input type="text" id="last_name" placeholder="Last Name" required>
+        <div style="font-size:.7rem;color:#9CA3AF;margin-top:3px;text-transform:uppercase;font-weight:700;letter-spacing:.4px">Last Name</div>
+      </div>
+      <div>
+        <input type="text" id="first_name" placeholder="First Name" required>
+        <div style="font-size:.7rem;color:#9CA3AF;margin-top:3px;text-transform:uppercase;font-weight:700;letter-spacing:.4px">First Name</div>
+      </div>
+      <div>
+        <input type="text" id="mi" placeholder="M.I." maxlength="5">
+        <div style="font-size:.7rem;color:#9CA3AF;margin-top:3px;text-transform:uppercase;font-weight:700;letter-spacing:.4px">M.I.</div>
+      </div>
+    </div>
 
     <label>SR Code <span class="required">*</span></label>
     <input type="text" id="sr_code" placeholder="e.g. 23-12345" required>
@@ -1941,28 +1954,28 @@ def student_registration_page(token):
       <div class="photo-box" id="box-front" onclick="document.getElementById('file-front').click()">
         <input type="file" id="file-front" accept="image/*" capture="user"
                onchange="setPhoto('front',this)">
-        <div class="icon">🖼️</div>
+        <div class="icon"><svg width="28" height="28" fill="none" stroke="#9CA3AF" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/><circle cx="12" cy="13" r="3"/></svg></div>
         <div class="label">Front Face</div>
         <div class="status" id="status-front"></div>
       </div>
       <div class="photo-box" id="box-left" onclick="document.getElementById('file-left').click()">
         <input type="file" id="file-left" accept="image/*" capture="user"
                onchange="setPhoto('left',this)">
-        <div class="icon">👈</div>
+        <div class="icon"><svg width="28" height="28" fill="none" stroke="#9CA3AF" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M11 17l-5-5m0 0l5-5m-5 5h12"/></svg></div>
         <div class="label">Left View</div>
         <div class="status" id="status-left"></div>
       </div>
       <div class="photo-box" id="box-right" onclick="document.getElementById('file-right').click()">
         <input type="file" id="file-right" accept="image/*" capture="user"
                onchange="setPhoto('right',this)">
-        <div class="icon">👉</div>
+        <div class="icon"><svg width="28" height="28" fill="none" stroke="#9CA3AF" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6"/></svg></div>
         <div class="label">Right View</div>
         <div class="status" id="status-right"></div>
       </div>
       <div class="photo-box" id="box-up" onclick="document.getElementById('file-up').click()">
         <input type="file" id="file-up" accept="image/*" capture="user"
                onchange="setPhoto('up',this)">
-        <div class="icon">👆</div>
+        <div class="icon"><svg width="28" height="28" fill="none" stroke="#9CA3AF" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M7 11l5-5m0 0l5 5m-5-5v12"/></svg></div>
         <div class="label">Top View</div>
         <div class="status" id="status-up"></div>
       </div>
@@ -1970,7 +1983,7 @@ def student_registration_page(token):
     <div class="error-msg" id="photo-error">Please upload at least the front face photo.</div>
 
     <div style="background:#F0FDF4;border:1.5px solid #86EFAC;border-radius:12px;padding:12px 16px;display:flex;align-items:center;gap:12px;margin-bottom:4px">
-      <span style="font-size:1.2rem">✅</span>
+      <svg width="22" height="22" fill="none" stroke="#22C55E" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
       <div style="flex:1">
         <p style="margin:0 0 4px;font-size:.78rem;font-weight:800;color:#15803D">E-Signature</p>
         <p style="margin:0;font-size:.72rem;color:#166534">Your attendance confirmation will be marked as:</p>
@@ -1985,7 +1998,7 @@ def student_registration_page(token):
   </form>
 
   <div class="success" id="successMsg">
-    <div class="check">✅</div>
+    <div class="check"><svg width="52" height="52" fill="none" stroke="#22C55E" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg></div>
     <h2>Submitted for Approval!</h2>
     <p>Your registration has been submitted successfully.<br>
        Your instructor will review and approve your registration.<br>
@@ -2029,14 +2042,17 @@ function goBackToForm() {{
 document.getElementById('regForm').addEventListener('submit', (e) => {{
   e.preventDefault();
 
-  const name    = document.getElementById('name').value.trim();
+  const lastName  = document.getElementById('last_name').value.trim();
+  const firstName = document.getElementById('first_name').value.trim();
+  const mi        = document.getElementById('mi').value.trim();
+  const name      = mi ? `${{lastName}}, ${{firstName}} ${{mi}}` : `${{lastName}}, ${{firstName}}`;
   const sr_code = document.getElementById('sr_code').value.trim();
   const email   = document.getElementById('email').value.trim();
   const sex     = document.getElementById('sex').value;
   const front   = document.getElementById('file-front').files[0];
 
-  if (!name || !sr_code || !email) {{
-    document.getElementById('form-error').textContent = 'Please fill in all required fields.';
+  if (!lastName || !firstName || !sr_code || !email) {{
+    document.getElementById('form-error').textContent = 'Please fill in Last Name, First Name, SR Code, and Email.';
     document.getElementById('form-error').style.display = 'block';
     return;
   }}
@@ -2090,7 +2106,7 @@ document.getElementById('regForm').addEventListener('submit', (e) => {{
   const sigBadge = document.createElement('div');
   sigBadge.id = 'confirm-sig-badge';
   sigBadge.style.cssText = 'margin-top:12px;display:flex;align-items:center;gap:10px;background:#F0FDF4;border:1.5px solid #86EFAC;border-radius:10px;padding:10px 14px';
-  sigBadge.innerHTML = `<span style="font-size:1rem">✅</span><span style="font-size:.8rem;font-weight:700;color:#15803D">E-Signature: </span><span style="display:inline-block;color:#DC2626;border:2px solid #DC2626;border-radius:4px;padding:2px 10px;font-size:.75rem;font-weight:900;letter-spacing:3px;transform:rotate(-5deg);font-family:'Arial Black',Arial,sans-serif;text-transform:uppercase;box-shadow:1px 1px 0 #DC2626">SIGNED</span>`;
+  sigBadge.innerHTML = `<svg width="20" height="20" fill="none" stroke="#22C55E" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg><span style="font-size:.8rem;font-weight:700;color:#15803D">E-Signature: </span><span style="display:inline-block;color:#DC2626;border:2px solid #DC2626;border-radius:4px;padding:2px 10px;font-size:.75rem;font-weight:900;letter-spacing:3px;transform:rotate(-5deg);font-family:'Arial Black',Arial,sans-serif;text-transform:uppercase;box-shadow:1px 1px 0 #DC2626">SIGNED</span>`;
   photosEl.parentNode.insertBefore(sigBadge, photosEl.nextSibling);
 
   document.getElementById('formCard').style.display = 'none';
@@ -2106,7 +2122,10 @@ async function doSubmit() {{
 
   const fd = new FormData();
   fd.append('token',   TOKEN);
-  fd.append('name',    document.getElementById('name').value.trim());
+  const _last  = document.getElementById('last_name').value.trim();
+  const _first = document.getElementById('first_name').value.trim();
+  const _mi    = document.getElementById('mi').value.trim();
+  fd.append('name',    _mi ? `${{_last}}, ${{_first}} ${{_mi}}` : `${{_last}}, ${{_first}}`);
   fd.append('sr_code', document.getElementById('sr_code').value.trim());
   fd.append('email',   document.getElementById('email').value.trim());
   fd.append('sex',     document.getElementById('sex').value);
