@@ -739,7 +739,13 @@ label.field-label{display:block;font-size:12px;font-weight:600;
     <div class="cam-side">
       <div class="cam-side-tabs">
         <div class="cam-side-tab active" data-tab="present">Present</div>
-        <div class="cam-side-tab" data-tab="students">All Students</div>
+        <div class="cam-side-tab" data-tab="students">
+          All Students
+          <span id="stu-tab-count"
+                style="margin-left:5px;background:#F3F4F6;color:#6B7280;
+                       font-size:10px;font-weight:700;padding:1px 6px;
+                       border-radius:99px;vertical-align:middle"></span>
+        </div>
       </div>
 
       <!-- Present tab -->
@@ -1816,15 +1822,22 @@ function renderPresentList(present, scanLog) {
   }
   list.innerHTML = present.map(name => {
     const raw  = scanLog[name];
-    const unix = raw && typeof raw === 'object' ? raw.ts : raw;
+    const unix = raw && typeof raw === 'object' ? raw.ts  : raw;
+    const dur  = raw && typeof raw === 'object' ? (raw.duration_sec || 0) : 0;
     const ts   = unix ? new Date(unix*1000)
       .toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit'}) : '';
+    const durStr = dur >= 60
+      ? `${Math.floor(dur/60)}m ${Math.round(dur%60)}s`
+      : dur > 0 ? `${Math.round(dur)}s` : '';
     const init = name.charAt(0).toUpperCase();
     const disp = name.replace(/_/g,' ');
     return `
       <div class="present-item">
         <div class="present-avatar">${init}</div>
-        <span class="present-name">${disp}</span>
+        <div style="flex:1;min-width:0">
+          <span class="present-name">${disp}</span>
+          ${durStr ? `<span style="display:block;font-size:10px;color:#9CA3AF">${durStr} detected</span>` : ''}
+        </div>
         ${ts ? `<span class="present-time">${ts}</span>` : ''}
       </div>`;
   }).join('');
@@ -1882,12 +1895,16 @@ function renderStudentsList(present = []) {
     return 0;
   });
 
+  // Drive the tab count badge (total, ignoring search)
+  const total = (STATE.students || []).filter(
+    s => s.status === 'Enrolled' || s.status === 'Unenrolled'
+  ).length;
+  const tabCountEl = document.getElementById('stu-tab-count');
+  if (tabCountEl) tabCountEl.textContent = total;
+
   // Show filter result count
   const countEl = document.getElementById('stu-filter-count');
   if (countEl) {
-    const total = (STATE.students || []).filter(
-      s => s.status === 'Enrolled' || s.status === 'Unenrolled'
-    ).length;
     if (searchQ) {
       countEl.textContent = `${enrolled.length} of ${total} students`;
       countEl.style.display = 'block';
@@ -2267,10 +2284,6 @@ function parseName(name) {
   return { last: name.trim(), first: '', mi: '' };
 }
 
-document.getElementById('btn-open-register').addEventListener('click', () => {
-  openModal('modal-register');
-});
-
 document.getElementById('btn-submit-reg').addEventListener('click', async () => {
   const lastName  = document.getElementById('reg-last-name').value.trim();
   const firstName = document.getElementById('reg-first-name').value.trim();
@@ -2354,36 +2367,55 @@ document.getElementById('btn-submit-reg').addEventListener('click', async () => 
    SAVE ATTENDANCE — shows summary modal first
    ═══════════════════════════════════════════════════════════════════════ */
 document.getElementById('btn-save-attendance').addEventListener('click', async () => {
-  // Fetch final scan log — now returns {name: {ts, status}} 
+  if (!STATE.currentClass) { toast('No class selected.', 'error'); return; }
+
+  // Fetch final scan log — returns {name: {ts, status}} or {} if camera not started
   let scanLog = {};
   try {
-    const r = await fetch('/api/local/scan_log');
-    scanLog = await r.json();
+    const r = await fetch('/api/local/scan_log', {
+      headers: {'X-Instructor-Email': STATE.email}
+    });
+    if (r.ok) scanLog = await r.json();
   } catch {}
 
   // Normalize name: strip underscores, periods, commas; collapse spaces; lowercase
-  // Then sort words so "LAST, FIRST MI" and "FIRST MI LAST" both produce same token key
+  // Sort words so "LAST, FIRST MI" and "FIRST MI LAST" produce the same token key
   function normKey(n) {
-    return (n || '').replace(/_/g,' ').replace(/[.,]/g,' ').replace(/\s+/g,' ').trim().toLowerCase().split(' ').filter(Boolean).sort().join(' ');
+    return (n || '').replace(/_/g,' ').replace(/[.,]/g,' ').replace(/\s+/g,' ')
+      .trim().toLowerCase().split(' ').filter(Boolean).sort().join(' ');
   }
 
-  // Build a lookup: normalised name → "Present" | "Late"
-  const detectedMap     = {};   // exact normalized key
-  const detectedMapTok  = {};   // sorted-word token key (handles Last,First vs First Last)
-  for (const [name, val] of Object.entries(scanLog)) {
+  // Build lookup: normalised name → "Present" | "Late"
+  const detectedMap      = {};
+  const detectedMapTok   = {};
+  const detectedDuration = {};
+  const detectedDurTok   = {};
+  for (const [name, val] of Object.entries(scanLog || {})) {
     const status = (val && typeof val === 'object') ? (val.status || 'Present') : 'Present';
-    const exact  = name.replace(/_/g, ' ').replace(/[.]/g, '').replace(/\s+/g,' ').trim().toLowerCase();
-    detectedMap[exact]              = status;
-    detectedMapTok[normKey(name)]   = status;
+    const dur    = (val && typeof val === 'object') ? (val.duration_sec || 0)   : 0;
+    const exact  = name.replace(/_/g,' ').replace(/[.]/g,'').replace(/\s+/g,' ').trim().toLowerCase();
+    detectedMap[exact]            = status;
+    detectedMapTok[normKey(name)] = status;
+    detectedDuration[exact]       = dur;
+    detectedDurTok[normKey(name)] = dur;
   }
 
   // Build records: enrolled students → Present, Late, or Absent
-  const enrolled = STATE.students.filter(s => s.status === 'Enrolled');
-  const records  = enrolled.map(s => {
-    const exact = (s.name || '').replace(/[.]/g,'').replace(/\s+/g,' ').trim().toLowerCase();
-    const tok   = normKey(s.name);
-    const status = detectedMap[exact] || detectedMapTok[tok] || 'Absent';
-    return { name: s.name, sr_code: s.sr_code || '', status };
+  const enrolled = (STATE.students || []).filter(
+    s => s.status === 'Enrolled' || s.status === 'Unenrolled'
+  );
+
+  if (enrolled.length === 0) {
+    toast('No enrolled students in this class.', 'error');
+    return;
+  }
+
+  const records = enrolled.map(s => {
+    const exact        = (s.name || '').replace(/[.]/g,'').replace(/\s+/g,' ').trim().toLowerCase();
+    const tok          = normKey(s.name);
+    const status       = detectedMap[exact]      || detectedMapTok[tok]   || 'Absent';
+    const duration_sec = detectedDuration[exact] || detectedDurTok[tok]   || 0;
+    return { name: s.name, sr_code: s.sr_code || '', status, duration_sec };
   });
 
   const presentCnt = records.filter(r => r.status === 'Present').length;
@@ -2394,44 +2426,57 @@ document.getElementById('btn-save-attendance').addEventListener('click', async (
   document.getElementById('sum-present').textContent = presentCnt;
   document.getElementById('sum-late').textContent    = lateCnt;
   document.getElementById('sum-absent').textContent  = absentCnt;
-  document.getElementById('sum-detail').innerHTML    = records.map(r => {
-    const color = r.status === 'Present' ? '#22C55E'
-                : r.status === 'Late'    ? '#F59E0B'
-                : '#E5E7EB';
-    const textColor = r.status === 'Present' ? 'var(--green)'
-                    : r.status === 'Late'    ? '#D97706'
-                    : 'var(--muted)';
-    return `
-    <div style="display:flex;align-items:center;gap:8px;padding:5px 0;
-         border-bottom:1px solid #F3F4F6;font-size:13px">
-      <div style="width:8px;height:8px;border-radius:50%;flex-shrink:0;
-           background:${color}"></div>
-      <span style="flex:1">${r.name}</span>
-      <span style="font-weight:600;color:${textColor};font-size:12px">${r.status}</span>
+  document.getElementById('sum-detail').innerHTML = records.map(r => {
+    const dot  = r.status === 'Present' ? '#22C55E'
+               : r.status === 'Late'    ? '#F59E0B' : '#E5E7EB';
+    const text = r.status === 'Present' ? 'var(--green)'
+               : r.status === 'Late'    ? '#D97706'  : 'var(--muted)';
+    const d    = r.duration_sec || 0;
+    const durStr = d >= 60
+      ? `${Math.floor(d/60)}m ${Math.round(d%60)}s`
+      : d > 0 ? `${Math.round(d)}s` : '';
+    const durTag = (r.status !== 'Absent' && durStr)
+      ? `<span style="font-size:10px;color:#9CA3AF;margin-left:4px">${durStr}</span>` : '';
+    return `<div style="display:flex;align-items:center;gap:8px;padding:5px 0;
+                 border-bottom:1px solid #F3F4F6;font-size:13px">
+      <div style="width:8px;height:8px;border-radius:50%;flex-shrink:0;background:${dot}"></div>
+      <span style="flex:1">${r.name}${durTag}</span>
+      <span style="font-weight:600;color:${text};font-size:12px">${r.status}</span>
     </div>`;
   }).join('');
 
-  // Store records for confirm button
   window._pendingSave = { records, presentCnt, lateCnt, absentCnt };
+
+  // Always reset confirm button before opening — it may still be disabled from a prior save
+  const confirmBtn = document.getElementById('btn-confirm-save');
+  confirmBtn.disabled = false;
+  confirmBtn.innerHTML = `<svg width="14" height="14" fill="none" stroke="currentColor"
+    stroke-width="2.5" viewBox="0 0 24 24">
+    <path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round"/>
+  </svg> Confirm & Save`;
+
   openModal('modal-summary');
 });
 
 document.getElementById('btn-confirm-save').addEventListener('click', async () => {
   const { records } = window._pendingSave || {};
-  if (!records) return;
+  if (!records || records.length === 0) { toast('Nothing to save.', 'error'); return; }
+  if (!STATE.currentClass) { toast('No class selected.', 'error'); return; }
 
   const cls         = STATE.currentClass;
-  const sessionTime = new Date().toLocaleTimeString('en-PH',{hour12:false});
-  const sched       = STATE.allSchedules.find(s => s.class_code === cls.class_code);
+  const sessionTime = new Date().toLocaleTimeString('en-PH', {hour12: false});
+  const sched       = (STATE.allSchedules || []).find(s => s.class_code === cls.class_code);
 
   const btn = document.getElementById('btn-confirm-save');
-  btn.disabled = true; btn.textContent = 'Saving…';
+  btn.disabled = true;
+  btn.textContent = 'Saving…';
 
+  let saved = false;
   try {
     const res = await fetch('/api/local/save_attendance', {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
+        'Content-Type':       'application/json',
         'X-Instructor-Email': STATE.email
       },
       body: JSON.stringify({
@@ -2443,23 +2488,26 @@ document.getElementById('btn-confirm-save').addEventListener('click', async () =
       })
     });
     const data = await res.json();
-    if (!res.ok) { toast(data.error || 'Save failed.', 'error'); return; }
+    if (!res.ok) {
+      toast(data.error || 'Save failed. Please try again.', 'error');
+    } else {
+      saved = true;
+      closeModal('modal-summary');
+      await stopCamera();
+      stopPresentPoll();
+      toast(`Saved ✓  ${data.present} Present · ${data.late} Late · ${data.absent} Absent`, 'success', 4000);
+      setTimeout(() => showScreen('screen-classes'), 1800);
+    }
+  } catch (err) {
+    toast('Network error — could not save attendance. Try again.', 'error');
+  }
 
-    closeModal('modal-summary');
-    await stopCamera();
-    stopPresentPoll();
-    toast(
-      `Saved ✓  ${data.present} Present · ${data.absent} Absent`,
-      'success', 4000
-    );
-    // Return to class list
-    setTimeout(() => showScreen('screen-classes'), 1800);
-  } catch {
-    toast('Network error. Try again.', 'error');
-  } finally {
+  if (!saved) {
     btn.disabled = false;
-    btn.innerHTML = `<svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
-      <path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round"/></svg> Confirm & Save`;
+    btn.innerHTML = `<svg width="14" height="14" fill="none" stroke="currentColor"
+      stroke-width="2.5" viewBox="0 0 24 24">
+      <path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg> Confirm & Save`;
   }
 });
 

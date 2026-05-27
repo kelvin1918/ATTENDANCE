@@ -197,6 +197,7 @@ def init_db():
         );
     """)
     cur.execute("ALTER TABLE attendance ADD COLUMN IF NOT EXISTS session_time VARCHAR(8);")
+    cur.execute("ALTER TABLE attendance ADD COLUMN IF NOT EXISTS presence_duration_sec REAL DEFAULT 0;")
 
     # ── 6. schedules — references classes + instructors ───────────────────────
     cur.execute("""
@@ -934,11 +935,13 @@ def save_attendance(class_code, section, subject, records,
     for r in records:
         scan_time      = r.get("timestamp", "")
         full_timestamp = f"{date} {scan_time}" if scan_time else None
+        duration_sec   = r.get("duration_sec", 0) or 0
 
         cur.execute(
             """INSERT INTO attendance
-               (class_code, sr_code, name, section, subject, status, timestamp, date, session_time)
-               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+               (class_code, sr_code, name, section, subject, status,
+                timestamp, date, session_time, presence_duration_sec)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
             (
                 class_code,
                 r.get("sr_code", ""),
@@ -948,7 +951,8 @@ def save_attendance(class_code, section, subject, records,
                 r["status"],
                 full_timestamp,
                 date,
-                session_time[:5]   # store HH:MM as the session key
+                session_time[:5],
+                duration_sec,
             )
         )
 

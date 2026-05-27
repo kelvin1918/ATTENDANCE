@@ -52,10 +52,10 @@ DET_SIZE        = (640, 640)
 THRESHOLD       = 0.35
 
 # Recognition FPS — how many times per second the recognizer runs
-RECOGNITION_FPS = 2    # 2 fps is enough with RetinaFace; less CPU heat
+RECOGNITION_FPS = 3    # 3 fps gives faster 2-frame confirmation (~0.67s minimum)
 
 # Confirmation buffer — must appear N consecutive recognition frames
-CONFIRM_FRAMES  = 1
+CONFIRM_FRAMES  = 2    # 2 = fast enough, still blocks single-frame false positives
 
 # Camera
 CAMERA_SOURCE   = 0
@@ -196,10 +196,12 @@ class FaceRecognizer:
         self._face_boxes      = []    # [(x1,y1,x2,y2), ...]
         self._face_names      = []    # matched names
         self._face_scores     = []    # cosine similarity scores
-        self._present_set     = set()
-        self._scan_log        = {}    # {name: first_seen_unix}
-        self._scan_status     = {}    # {name: "Present" | "Late"}
-        self._pending_counts  = {}    # {name: consecutive_count}
+        self._present_set          = set()
+        self._scan_log             = {}   # {name: first_seen_unix}
+        self._scan_status          = {}   # {name: "Present" | "Late"}
+        self._pending_counts       = {}   # {name: consecutive_frame_count}
+        self._presence_start       = {}   # {name: unix_time} — current detection period start
+        self._presence_accumulated = {}   # {name: float seconds} — total confirmed presence
 
         self._running         = False
         self._rec_thread      = None
@@ -344,19 +346,29 @@ class FaceRecognizer:
             return list(self._present_set)
 
     def get_scan_log(self):
-        """Returns {name: {"ts": unix_timestamp, "status": "Present"|"Late"}}"""
+        """Returns {name: {"ts": unix, "status": str, "duration_sec": float}}"""
         with self._lock:
-            return {
-                name: {"ts": ts, "status": self._scan_status.get(name, "Present")}
-                for name, ts in self._scan_log.items()
-            }
+            now    = time.time()
+            result = {}
+            for name, ts in self._scan_log.items():
+                total = self._presence_accumulated.get(name, 0.0)
+                if name in self._presence_start:
+                    total += now - self._presence_start[name]
+                result[name] = {
+                    "ts":           ts,
+                    "status":       self._scan_status.get(name, "Present"),
+                    "duration_sec": round(total, 1),
+                }
+            return result
 
     def reset_attendance(self):
         with self._lock:
-            self._present_set    = set()
-            self._scan_log       = {}
-            self._scan_status    = {}
-            self._pending_counts = {}
+            self._present_set          = set()
+            self._scan_log             = {}
+            self._scan_status          = {}
+            self._pending_counts       = {}
+            self._presence_start       = {}
+            self._presence_accumulated = {}
 
     def stop_and_reset(self):
         self._running = False
@@ -364,14 +376,16 @@ class FaceRecognizer:
             try: self.cap.release()
             except: pass
         with self._lock:
-            self._present_set    = set()
-            self._scan_log       = {}
-            self._scan_status    = {}
-            self._pending_counts = {}
-            self._latest_frame   = None
-            self._face_boxes     = []
-            self._face_names     = []
-            self._face_scores    = []
+            self._present_set          = set()
+            self._scan_log             = {}
+            self._scan_status          = {}
+            self._pending_counts       = {}
+            self._presence_start       = {}
+            self._presence_accumulated = {}
+            self._latest_frame         = None
+            self._face_boxes           = []
+            self._face_names           = []
+            self._face_scores          = []
 
     def generate_frames(self):
         """
@@ -404,9 +418,13 @@ class FaceRecognizer:
     # ── internals ───────────────────────────────────────────────────────────
 
     def _recognition_loop(self):
-        """Thread 2 — RetinaFace detection + ArcFace recognition + confirmation buffer."""
-        interval    = 1.0 / RECOGNITION_FPS
-        _last_names = {}   # slot_index → last seen name
+        """Thread 2 — RetinaFace detection + ArcFace recognition.
+
+        Uses name-based confirmation (not slot-index) so a face moving
+        between frames doesn't reset the counter.  Tracks accumulated
+        presence duration: pauses when face leaves frame, resumes on return.
+        """
+        interval = 1.0 / RECOGNITION_FPS
 
         while self._running:
             t0 = time.time()
@@ -419,55 +437,73 @@ class FaceRecognizer:
                 continue
 
             try:
-                # RetinaFace detects ALL faces in one pass — no sliding window
                 faces = self._app.get(frame)
             except Exception as e:
                 print(f"[REC] Error: {e}")
                 time.sleep(interval)
                 continue
 
-            boxes  = []
-            names  = []
-            scores = []
+            now            = time.time()
+            boxes          = []
+            names          = []
+            scores         = []
+            detected_names = set()   # known names seen this frame
+            name_scores    = {}      # name → best similarity score
 
-            for i, face in enumerate(faces):
+            for face in faces:
                 x1, y1, x2, y2 = [int(v) for v in face.bbox]
                 boxes.append((x1, y1, x2, y2))
-
                 name, score = self._match(face.normed_embedding)
                 names.append(name)
                 scores.append(score)
-
-                if name == "Unknown":
-                    _last_names[i] = "Unknown"
-                    continue
-
-                # Confirmation buffer
-                if _last_names.get(i) != name:
-                    _last_names[i]             = name
-                    self._pending_counts[name] = 1
-                else:
-                    self._pending_counts[name] = \
-                        self._pending_counts.get(name, 0) + 1
-
-                count = self._pending_counts.get(name, 0)
-                if count >= CONFIRM_FRAMES:
-                    with self._lock:
-                        if name not in self._present_set:
-                            self._present_set.add(name)
-                            ts     = time.time()
-                            elapsed = (_dt.now() - self._session_start).total_seconds() / 60
-                            status  = "Late" if elapsed > self._late_minutes else "Present"
-                            self._scan_log[name]    = ts
-                            self._scan_status[name] = status
-                            ts_str = _dt.fromtimestamp(ts).strftime("%H:%M:%S")
-                            print(f"[DETECT] ✓ Confirmed: {name} → {status} "
-                                  f"({elapsed:.1f} min, score={score:.3f})")
-                            self._cloud_sync(name, ts_str)
-                else:
-                    print(f"[DETECT] Pending: {name} ({count}/{CONFIRM_FRAMES}, score={score:.3f})")
+                if name != "Unknown":
+                    detected_names.add(name)
+                    name_scores[name] = score
 
             with self._lock:
+                # ── Presence duration tracking ───────────────────────────────
+                # Close period for any face that left the frame
+                for name in list(self._presence_start.keys()):
+                    if name not in detected_names:
+                        elapsed = now - self._presence_start.pop(name)
+                        self._presence_accumulated[name] = (
+                            self._presence_accumulated.get(name, 0.0) + elapsed
+                        )
+                # Open period for any face newly entering the frame
+                for name in detected_names:
+                    if name not in self._presence_start:
+                        self._presence_start[name] = now
+
+                # ── Confirmation buffer (name-based) ─────────────────────────
+                for name in detected_names:
+                    if name in self._present_set:
+                        continue
+                    self._pending_counts[name] = (
+                        self._pending_counts.get(name, 0) + 1
+                    )
+                    count = self._pending_counts[name]
+                    if count >= CONFIRM_FRAMES:
+                        self._present_set.add(name)
+                        ts      = now
+                        elapsed = (_dt.now() - self._session_start).total_seconds() / 60
+                        status  = "Late" if elapsed > self._late_minutes else "Present"
+                        self._scan_log[name]    = ts
+                        self._scan_status[name] = status
+                        ts_str  = _dt.fromtimestamp(ts).strftime("%H:%M:%S")
+                        print(f"[DETECT] ✓ Confirmed: {name} → {status} "
+                              f"({elapsed:.1f} min, "
+                              f"score={name_scores.get(name, 0):.3f})")
+                        self._cloud_sync(name, ts_str)
+                    else:
+                        print(f"[DETECT] Pending: {name} "
+                              f"({count}/{CONFIRM_FRAMES}, "
+                              f"score={name_scores.get(name, 0):.3f})")
+
+                # Reset pending count for absent unconfirmed names
+                for name in list(self._pending_counts.keys()):
+                    if name not in detected_names and name not in self._present_set:
+                        self._pending_counts[name] = 0
+
                 self._face_boxes  = boxes
                 self._face_names  = names
                 self._face_scores = scores
