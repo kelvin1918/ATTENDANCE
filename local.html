@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Attendance — Local Station</title>
+<link rel="icon" type="image/png" href="/face.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
@@ -1393,8 +1394,8 @@ async function loadClasses() {
 
   // Rebuild source dropdown with admin-configured rooms
   const sel = document.getElementById('cam-source-select');
-  // Keep built-in options, remove any previously injected room options
-  sel.querySelectorAll('option[data-room]').forEach(o => o.remove());
+  // Keep built-in options, remove any previously injected room groups and options
+  sel.querySelectorAll('optgroup, option[data-room]').forEach(o => o.remove());
   if (STATE.rooms.length) {
     const grp = document.createElement('optgroup');
     grp.label = 'IP Camera Rooms';
@@ -1932,11 +1933,6 @@ function renderStudentsList(present = []) {
               text-overflow:ellipsis;white-space:nowrap;min-width:0">
           ${s.name}
         </span>
-        <div style="display:flex;align-items:center;gap:3px;flex-shrink:0">
-          <button onclick="deleteStudent(${s.id},'${sName}')"
-            title="Delete student (removes from disk + Cloudinary)"
-            class="stu-action-btn stu-del-btn">✕</button>
-        </div>
       </div>`;
   }).join('');
 }
