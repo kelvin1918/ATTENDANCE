@@ -634,8 +634,7 @@
                 <div class="card-header"><span class="card-title">Create Instructor Account</span></div>
                 <div class="card-body">
                     <p style="font-size:0.78rem;color:var(--muted);margin-bottom:16px;">
-                        Fill in the details below, then give the email and password to the instructor privately.
-                        They can change their password later using "Forgot Password."
+                        Fill in the name and email. A secure temporary password will be auto-generated and sent directly to the instructor's email — the admin will not see it.
                     </p>
                     <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;">
                         <div style="flex:2;min-width:150px;">
@@ -647,11 +646,6 @@
                             <label style="font-size:0.72rem;font-weight:700;color:var(--muted);display:block;margin-bottom:4px;">Email Address</label>
                             <input id="new-ins-email" type="email" placeholder="e.g. jdelacruz@school.edu"
                                    style="width:100%;padding:10px 14px;border:1.5px solid #E5E7EB;border-radius:10px;font-size:0.85rem;outline:none;">
-                        </div>
-                        <div style="flex:1;min-width:130px;">
-                            <label style="font-size:0.72rem;font-weight:700;color:var(--muted);display:block;margin-bottom:4px;">Temporary Password</label>
-                            <input id="new-ins-pass" type="text" placeholder="e.g. Temp@2025"
-                                   style="width:100%;padding:10px 14px;border:1.5px solid #E5E7EB;border-radius:10px;font-size:0.85rem;outline:none;font-family:monospace;">
                         </div>
                         <button onclick="adminCreateInstructor()"
                                 style="padding:10px 22px;background:var(--red);color:#fff;border:none;border-radius:10px;font-weight:700;font-size:0.85rem;cursor:pointer;white-space:nowrap;">
@@ -1271,20 +1265,19 @@
     async function adminCreateInstructor() {
         const name  = document.getElementById('new-ins-name').value.trim();
         const email = document.getElementById('new-ins-email').value.trim();
-        const pass  = document.getElementById('new-ins-pass').value.trim();
         const msg   = document.getElementById('create-instructor-msg');
 
-        if (!name || !email || !pass) {
+        if (!name || !email) {
             msg.style.display = 'block';
             msg.style.color   = '#D32F2F';
-            msg.textContent   = 'Please fill in all three fields.';
+            msg.textContent   = 'Please fill in both name and email.';
             return;
         }
 
         const res  = await _admFetch('/api/admin/create-instructor', {
             method:  'POST',
             headers: { 'Content-Type': 'application/json' },
-            body:    JSON.stringify({ name, email, password: pass })
+            body:    JSON.stringify({ name, email })
         });
         const data = await res.json();
 
@@ -1298,14 +1291,13 @@
         // Success — clear form and show confirmation
         document.getElementById('new-ins-name').value  = '';
         document.getElementById('new-ins-email').value = '';
-        document.getElementById('new-ins-pass').value  = '';
         msg.style.display = 'block';
         if (data.warn) {
             msg.style.color = '#D97706';
-            msg.textContent = `Account created for ${name}. ⚠ Email could not be sent — share the credentials (${email} / ${pass}) manually.`;
+            msg.textContent = `Account created for ${name}. ⚠ Email could not be sent — the instructor did not receive their password. Check your email configuration.`;
         } else {
             msg.style.color = '#16A34A';
-            msg.textContent = `Account created and credentials emailed to ${email} successfully.`;
+            msg.textContent = `Account created. A temporary password was sent to ${email}.`;
         }
         setTimeout(() => { msg.style.display = 'none'; }, 8000);
         renderAdmin();

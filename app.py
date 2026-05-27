@@ -20,6 +20,7 @@ import shutil
 import smtplib
 import secrets
 import random
+import string
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from datetime import datetime
@@ -1237,11 +1238,21 @@ def api_admin_create_instructor():
     data  = request.json or {}
     name  = data.get("name",  "").strip()
     email = data.get("email", "").strip()
-    pwd   = data.get("password", "").strip()
-    if not name or not email or not pwd:
-        return jsonify({"error": "Name, email, and password are required."}), 400
+    if not name or not email:
+        return jsonify({"error": "Name and email are required."}), 400
     if db.get_instructor_by_email(email):
         return jsonify({"error": "An account with that email already exists."}), 409
+
+    # Auto-generate a secure temporary password — never exposed to the admin
+    alphabet = string.ascii_letters + string.digits
+    pwd = (
+        secrets.choice(string.ascii_uppercase) +
+        secrets.choice(string.ascii_lowercase) +
+        secrets.choice(string.digits) +
+        "".join(secrets.choice(alphabet) for _ in range(9))
+    )
+    pwd = "".join(secrets.SystemRandom().sample(pwd, len(pwd)))
+
     # Create account pre-approved — no pending queue needed
     db.create_instructor_by_admin(name, email, pwd)
 

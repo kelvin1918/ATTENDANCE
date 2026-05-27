@@ -90,9 +90,62 @@
         /* OTP timer */
         #otp-timer { font-size: 0.78rem; color: #888; margin-top: 10px; }
         #otp-timer span { color: var(--red); font-weight: bold; }
+
+        /* ── FULL-SCREEN LOADING OVERLAY ── */
+        #login-loading-overlay {
+            position: fixed; inset: 0;
+            background: rgba(247,248,250,0.88);
+            display: flex; flex-direction: column;
+            justify-content: center; align-items: center;
+            z-index: 9000; backdrop-filter: blur(6px);
+        }
+        #login-loading-overlay.hidden { display: none !important; }
+        .llo-spinner {
+            width: 42px; height: 42px;
+            border: 4px solid rgba(211,47,47,0.15);
+            border-left-color: var(--red);
+            border-radius: 50%;
+            animation: lloSpin 0.9s linear infinite;
+        }
+        .llo-label {
+            margin-top: 14px; font-size: 0.72rem; font-weight: 700;
+            color: #9CA3AF; letter-spacing: 0.1em; text-transform: uppercase;
+        }
+        @keyframes lloSpin { to { transform: rotate(360deg); } }
+
+        /* ── NETWORK SLOW BANNER ── */
+        #net-banner {
+            position: fixed; bottom: 20px; left: 50%;
+            transform: translateX(-50%) translateY(80px);
+            background: #1F2937; color: #F9FAFB;
+            padding: 10px 20px; border-radius: 10px;
+            font-size: 0.78rem; font-weight: 600;
+            display: flex; align-items: center; gap: 8px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+            transition: transform 0.4s cubic-bezier(0.34,1.56,0.64,1);
+            z-index: 8999; white-space: nowrap;
+        }
+        #net-banner.show { transform: translateX(-50%) translateY(0); }
+        .net-dot {
+            width: 8px; height: 8px; border-radius: 50%;
+            background: #F59E0B; animation: pulse 1s ease-in-out infinite;
+        }
+        @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
     </style>
 </head>
 <body>
+
+    <!-- Full-screen loading overlay (shown after successful login) -->
+    <div id="login-loading-overlay" class="hidden">
+        <div class="llo-spinner"></div>
+        <p class="llo-label">Loading dashboard...</p>
+    </div>
+
+    <!-- Network slow banner (shown when a request takes too long) -->
+    <div id="net-banner">
+        <div class="net-dot"></div>
+        <span id="net-banner-msg">Connecting to server…</span>
+    </div>
 
     <div id="custom-alert">
         <span id="alert-icon"></span>
@@ -164,6 +217,21 @@
     </div>
 
     <script>
+        // ── NETWORK SLOW BANNER ──────────────────────────────────────────────
+        let _netTimer = null;
+        function _netStart(msg) {
+            clearTimeout(_netTimer);
+            _netTimer = setTimeout(() => {
+                const b = document.getElementById('net-banner');
+                document.getElementById('net-banner-msg').textContent = msg || 'Connecting to server…';
+                b.classList.add('show');
+            }, 4000); // show banner if request takes > 4s
+        }
+        function _netStop() {
+            clearTimeout(_netTimer);
+            document.getElementById('net-banner').classList.remove('show');
+        }
+
         // ── VIEW SWITCHER ────────────────────────────────────────────────────
         function toggleMainView(viewName) {
             ['login','reg','forgot-email','otp','new-pass'].forEach(v => {
@@ -251,6 +319,7 @@
             const btn = document.getElementById('btn-send-otp');
             btn.disabled    = true;
             btn.textContent = 'Sending...';
+            _netStart('Sending OTP… this may take a moment.');
 
             try {
                 const ctrl   = new AbortController();
@@ -265,6 +334,7 @@
                     });
                 } finally {
                     clearTimeout(timer);
+                    _netStop();
                 }
                 const data = await res.json();
 
@@ -295,10 +365,11 @@
                     showAlert('OTP sent! Check your email inbox (and spam folder).', 'success', 5000);
                 }
             } catch (fetchErr) {
+                _netStop();
                 if (fetchErr.name === 'AbortError') {
-                    showAlert('Request timed out. Render may be blocking SMTP. Check server logs.', 'error', 7000);
+                    showAlert('Request timed out. The server may be slow — please try again.', 'error', 7000);
                 } else {
-                    showAlert('Server error. Please try again.', 'error');
+                    showAlert('Could not reach the server. Check your internet connection.', 'error');
                 }
             }
 
@@ -410,34 +481,38 @@
             const p   = document.getElementById('ins-pass').value;
             const btn = document.getElementById('btn-signin');
             btn.disabled = true; btn.textContent = 'Signing in...';
+            _netStart('Signing in… this may take a moment.');
 
             try {
                 const res  = await fetch('/api/login', {
                     method:      'POST',
-                    credentials: 'include',   // send/receive cookies
+                    credentials: 'include',
                     headers:     { 'Content-Type': 'application/json' },
                     body:        JSON.stringify({ email: e, password: p })
                 });
+                _netStop();
                 const data = await res.json();
 
                 if (res.status === 403) {
                     showAlert('Your account is not yet active. Contact the administrator.', 'error');
+                    btn.disabled = false; btn.textContent = 'Sign In';
                 } else if (!res.ok) {
                     showAlert(data.error || 'Invalid email or password.', 'error');
+                    btn.disabled = false; btn.textContent = 'Sign In';
                 } else {
-                    // Save minimal session info for display only (not for auth)
                     localStorage.setItem('active_session', JSON.stringify({
                         email: data.email,
                         name:  data.name || ''
                     }));
-                    showAlert('Login successful! Redirecting...', 'success');
+                    // Show full-screen loading overlay (matches admin panel experience)
+                    document.getElementById('login-loading-overlay').classList.remove('hidden');
                     setTimeout(() => { window.location.href = '/home'; }, 900);
                 }
             } catch {
-                showAlert('Server error.', 'error');
+                _netStop();
+                showAlert('Could not reach the server. Check your internet connection.', 'error');
+                btn.disabled = false; btn.textContent = 'Sign In';
             }
-
-            btn.disabled = false; btn.textContent = 'Sign In';
         }
 
     </script>
