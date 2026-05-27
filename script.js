@@ -3011,6 +3011,7 @@ function toggleMiniSidebar() {
 
     sidebar.classList.toggle('w-64');
     sidebar.classList.toggle('w-20');
+    sidebar.classList.toggle('nav-collapsed');
     labels.forEach(label => label.classList.toggle('hidden'));
 
     if (chevron) {

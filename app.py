@@ -121,13 +121,22 @@ for folder in ["uploads/students", "uploads/signatures", "faces", "pdf"]:
 
 # ── FACE RECOGNITION ──────────────────────────────────────────────────────────
 
-if CAMERA_ENABLED:
-    known_enc, known_names = load_known_faces("faces")
-    recognizer = FaceRecognizer(known_enc, known_names)
-else:
-    known_enc, known_names = [], []
-    recognizer = None
-_camera_started = False
+known_enc, known_names = [], []
+recognizer             = None
+_camera_started        = False
+_current_class_code    = None   # tracks which class faces are currently loaded
+
+
+def _safe_code(code: str) -> str:
+    """Sanitise a class code for use as a folder name."""
+    return "".join(c if c.isalnum() or c in "-_" else "_" for c in code)
+
+
+def _class_faces_dir(class_code: str) -> str:
+    """Return the per-class faces subfolder, creating it if needed."""
+    path = os.path.join("faces", _safe_code(class_code))
+    os.makedirs(path, exist_ok=True)
+    return path
 
 
 def start_camera(source=0):
@@ -137,13 +146,17 @@ def start_camera(source=0):
         _camera_started = True
 
 
-def reload_recognizer():
-    global known_enc, known_names, recognizer, _camera_started
+def reload_recognizer(class_code=None):
+    """Reload face embeddings for class_code only (or flat faces/ if no class given)."""
+    global known_enc, known_names, recognizer, _camera_started, _current_class_code
     if not CAMERA_ENABLED:
         return
-    known_enc, known_names = load_known_faces("faces")
-    recognizer             = FaceRecognizer(known_enc, known_names)
-    _camera_started        = False
+    faces_dir = _class_faces_dir(class_code) if class_code else "faces"
+    known_enc, known_names, _ = load_known_faces(faces_dir)
+    if class_code:
+        _current_class_code = class_code
+    recognizer      = FaceRecognizer(known_enc, known_names)
+    _camera_started = False
 
 
 # ── HELPERS ───────────────────────────────────────────────────────────────────
@@ -398,11 +411,11 @@ def api_add_student():
             safe_name  = secure_filename(name + ext)
             photo_path = os.path.join("uploads/students", safe_name)
             f.save(photo_path)
-            # Copy to faces/ only if not already there (same student, multiple classes)
-            face_path = os.path.join("faces", safe_name)
+            # Copy into the class-scoped faces folder so recognizer stays isolated
+            face_path = os.path.join(_class_faces_dir(class_code), safe_name)
             if not os.path.exists(face_path):
                 shutil.copy(photo_path, face_path)
-                reload_recognizer()
+                reload_recognizer(class_code)
         elif not (f.filename if f else None):
             # No new photo — reuse existing if student already enrolled elsewhere
             existing = db.get_student_by_srcode(form.get("sr_code", ""))
@@ -482,6 +495,13 @@ def api_start_camera():
         instructor = get_current_instructor_id(request)
         instr_obj  = db.get_instructor_by_id(instructor) if instructor else None
         instr_email= instr_obj["email"] if instr_obj else ""
+
+        # Load faces scoped to this class before (re)building the recognizer
+        global known_enc, known_names, _current_class_code
+        if class_code and class_code != _current_class_code:
+            known_enc, known_names, _ = load_known_faces(_class_faces_dir(class_code))
+            _current_class_code = class_code
+            print(f"[CAMERA] Loaded {len(known_names)} face(s) for class {class_code}")
 
         if not _camera_started:
             # Fresh start

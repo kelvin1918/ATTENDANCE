@@ -28,7 +28,7 @@ NOT included (Render handles these)
   ✗  Email / SMTP
 """
 
-import os, json, shutil, socket, webbrowser, threading, time
+import os, json, shutil, socket, webbrowser, threading, time, urllib.request as _urllib_req
 from datetime import datetime, date
 
 # ── LOAD .env FIRST — before any module that reads os.environ ─────────────────
@@ -144,6 +144,71 @@ def _safe_code(class_code: str) -> str:
     return "".join(c if c.isalnum() or c in "-_" else "_" for c in class_code)
 
 
+def _download_url(url: str, dest: str) -> bool:
+    """Download url to dest. Returns True if newly downloaded, False if skipped or failed."""
+    if not url or not url.startswith("http"):
+        return False
+    if os.path.isfile(dest):
+        return False  # already on disk — skip
+    try:
+        req = _urllib_req.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+        with _urllib_req.urlopen(req, timeout=15) as resp:
+            with open(dest, "wb") as out:
+                out.write(resp.read())
+        return True
+    except Exception as e:
+        print(f"[FACES] ✗ download error {dest}: {e}")
+        return False
+
+
+def _ensure_class_faces(class_code: str) -> int:
+    """
+    For every student enrolled in class_code, download any angle face images
+    that are missing from faces/<class_code>/. This repairs the gap created
+    when a student is imported to a new class via the cloud app — the DB record
+    exists with Cloudinary URLs but the local file hasn't been synced yet.
+    Returns number of files newly downloaded.
+    """
+    faces_dir  = _class_faces_dir(class_code)
+    students   = db.get_students(class_code)
+    downloaded = 0
+
+    for s in students:
+        name      = s.get("name", "")
+        safe_name = _safe_code(name.replace(" ", "_"))
+
+        angle_map = {
+            "front": s.get("photo_front", "") or "",
+            "left":  s.get("photo_left",  "") or "",
+            "right": s.get("photo_right", "") or "",
+            "up":    s.get("photo_up",    "") or "",
+        }
+        has_angles = any(v.startswith("http") for v in angle_map.values())
+
+        if has_angles:
+            for label, url in angle_map.items():
+                if not url:
+                    continue
+                ext  = os.path.splitext(url.split("?")[0])[1] or ".jpg"
+                dest = os.path.join(faces_dir, f"{safe_name}_{label}{ext}")
+                if _download_url(url, dest):
+                    downloaded += 1
+                    print(f"[FACES] ✓ {name} ({label}) → {class_code}")
+        else:
+            # Legacy single-angle photo
+            photo_url = s.get("photo", "") or ""
+            if photo_url.startswith("http"):
+                ext  = os.path.splitext(photo_url.split("?")[0])[1] or ".jpg"
+                dest = os.path.join(faces_dir, f"{safe_name}_front{ext}")
+                if _download_url(photo_url, dest):
+                    downloaded += 1
+                    print(f"[FACES] ✓ {name} (front) → {class_code}")
+
+    if downloaded:
+        print(f"[FACES] Auto-downloaded {downloaded} missing face file(s) for {class_code}")
+    return downloaded
+
+
 # ── PROGRESSIVE LOAD STATE ────────────────────────────────────────────────────
 # Shared between the background encoding thread and the /api/local/load_progress
 # poll endpoint so the frontend can show a live counter.
@@ -159,6 +224,9 @@ def _load_class_faces_bg(class_code, session_meta):
     """
     global known_enc, known_names, recognizer, _camera_active
     global _current_class_code, _load_progress
+
+    # Download any face images missing locally (e.g. students imported via cloud app)
+    _ensure_class_faces(class_code)
 
     faces_dir   = _class_faces_dir(class_code)
     image_files = [

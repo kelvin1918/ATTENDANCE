@@ -80,18 +80,40 @@
 
 /* ── Navigation ─────────────────────────────────────────────────────────────── */
 .nav-collapsed {
-    width: 80px !important; 
+    width: 80px !important;
 }
 
 .nav-collapsed .nav-label {
     display: none !important;
 }
 
-.nav-collapsed .nav-btn, .nav-collapsed .flex {
+.nav-collapsed .nav-btn {
+    justify-content: center !important;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+    gap: 0 !important;
+}
+
+/* Center the logo row and profile/logout rows */
+.nav-collapsed .flex {
     justify-content: center !important;
 }
 
-.nav-collapsed .p-8, .nav-collapsed .p-6 {
+.nav-collapsed .p-8,
+.nav-collapsed .p-6 {
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+}
+
+/* Profile row: remove fixed percentage width and side margins when collapsed */
+.nav-collapsed [class*="w-\[90"] {
+    width: auto !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+}
+
+/* Logout button wrapper: no horizontal padding when collapsed */
+.nav-collapsed .px-4 {
     padding-left: 0 !important;
     padding-right: 0 !important;
 }
