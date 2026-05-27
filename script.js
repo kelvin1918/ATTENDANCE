@@ -534,16 +534,17 @@ function renderRecentActivityList(records, totalCount = null) {
         const _yr  = dateObj.getFullYear();
         const _t   = timeRaw ? (() => {
             const d = new Date('1970-01-01T' + timeRaw);
-            const hh = String(d.getHours()).padStart(2,'0');
-            const mm = String(d.getMinutes()).padStart(2,'0');
-            const ss = String(d.getSeconds()).padStart(2,'0');
-            const ampm = d.getHours() >= 12 ? 'PM' : 'AM';
+            if (isNaN(d.getTime())) return '';
             const h12  = d.getHours() % 12 || 12;
+            const mm   = String(d.getMinutes()).padStart(2,'0');
+            const ss   = String(d.getSeconds()).padStart(2,'0');
+            const ampm = d.getHours() >= 12 ? 'PM' : 'AM';
             return `${String(h12).padStart(2,'0')}-${mm}-${ss}${ampm}`;
         })() : '';
-        const dispTime = timeRaw
-            ? new Date('1970-01-01T' + timeRaw).toLocaleTimeString([], { hour:'2-digit', minute:'2-digit', second:'2-digit' })
-            : '';
+        const dispTime = timeRaw ? (() => {
+            const d = new Date('1970-01-01T' + timeRaw);
+            return isNaN(d.getTime()) ? '' : d.toLocaleTimeString([], { hour:'2-digit', minute:'2-digit', second:'2-digit' });
+        })() : '';
         const filename = `${_mo}-${_dy}-${_yr}${_t ? '_'+_t : ''}_Report.pdf`;
 
         return `
@@ -907,6 +908,7 @@ async function historyLoadFiles(class_code) {
         const _hYr   = _hDate.getFullYear();
         const _hT    = s.session_time ? (() => {
             const d = new Date('1970-01-01T' + s.session_time);
+            if (isNaN(d.getTime())) return '';
             const h12 = d.getHours() % 12 || 12;
             const mm  = String(d.getMinutes()).padStart(2,'0');
             const ss  = String(d.getSeconds()).padStart(2,'0');
@@ -916,9 +918,10 @@ async function historyLoadFiles(class_code) {
         const fileLabel = `${_hMo}-${_hDy}-${_hYr}${_hT ? '_'+_hT : ''}_Report.pdf`;
 
         // Display time in 12-hour format for subtitle
-        const dispTime = s.session_time
-            ? new Date('1970-01-01T' + s.session_time).toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' })
-            : '';
+        const dispTime = s.session_time ? (() => {
+            const d = new Date('1970-01-01T' + s.session_time);
+            return isNaN(d.getTime()) ? '' : d.toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' });
+        })() : '';
         return `
             <div onclick="historySelectSession('${s.class_code}','${s.date}','${s.session_time || ''}')"
                  class="p-4 rounded-2xl cursor-pointer transition border ${isActive ? 'bg-red-50 border-[#D32F2F]' : 'bg-white border-gray-100 hover:border-red-200'}">
@@ -2738,9 +2741,10 @@ async function saveAttendanceFromCamera() {
     const cls = classFolders.find(f => f.id === currentOpenedFolder) || {};
 
     // Capture session time NOW before any async calls that might clear _cameraOpenTime
-    const sessionTime = _cameraOpenTime
-        ? new Date(_cameraOpenTime).toTimeString().substring(0, 8)
-        : new Date().toTimeString().substring(0, 8);
+    const _tBase = _cameraOpenTime ? new Date(_cameraOpenTime) : new Date();
+    const sessionTime = isNaN(_tBase.getTime())
+        ? new Date().toTimeString().substring(0, 8)
+        : _tBase.toTimeString().substring(0, 8);
 
     try {
         // Stop camera and get final scan log from backend
