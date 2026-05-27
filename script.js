@@ -2058,7 +2058,7 @@ async function openPendingApprovals() {
                 ? `<img src="${s['photo_'+a]}" style="width:38px;height:38px;object-fit:cover;border-radius:6px;border:1.5px solid #22C55E" title="${a}">`
                 : `<div style="width:38px;height:38px;border-radius:6px;border:1.5px dashed #D1D5DB;display:flex;align-items:center;justify-content:center;font-size:.55rem;color:#9CA3AF;font-weight:700">${a}</div>`
               ).join('')}
-              ${s.signature ? `<img src="${s.signature}" style="height:38px;max-width:80px;object-fit:contain;border-radius:6px;border:1.5px solid #22C55E" title="sig">` : ''}
+              ${s.signature ? `<div style="height:38px;padding:0 8px;border-radius:6px;border:1.5px solid #22C55E;display:inline-flex;align-items:center;justify-content:center;font-size:.55rem;font-weight:900;color:#22C55E;letter-spacing:1.5px;white-space:nowrap">SIGNED</div>` : ''}
             </div>
           </div>
         </div>
@@ -2126,11 +2126,17 @@ async function handleApproval(studentId, action) {
 async function submitStudentForm(formEl) {
     const formData = new FormData(formEl);
     if (!formData.get('class_code')) formData.set('class_code', currentOpenedFolder);
-    const name=( formData.get('name')||'').trim(), sr=(formData.get('sr_code')||'').trim(),
+    const lastName =(formData.get('last_name') ||'').trim();
+    const firstName=(formData.get('first_name')||'').trim();
+    const mi       =(formData.get('mi')        ||'').trim();
+    const name     = mi ? `${lastName}, ${firstName} ${mi}` : `${lastName}, ${firstName}`;
+    formData.set('name', name);
+    const sr=(formData.get('sr_code')||'').trim(),
           phone=(formData.get('number')||'').trim(), email=(formData.get('email')||'').trim(),
           photo=formData.get('photo');
     const errors=[];
-    if(!name) errors.push('Full name is required.');
+    if(!lastName)  errors.push('Last Name is required.');
+    if(!firstName) errors.push('First Name is required.');
     if(!sr)   errors.push('SR Code is required.');
     if(!email||!email.includes('@')) errors.push('A valid email address is required.');
     const digits=phone.replace(/[\s\-]/g,'');

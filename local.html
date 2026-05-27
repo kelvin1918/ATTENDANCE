@@ -846,7 +846,20 @@ label.field-label{display:block;font-size:12px;font-weight:600;
     <div class="modal-body">
       <div class="field">
         <label class="field-label">Full Name</label>
-        <input class="input" id="reg-name" placeholder="Last Name, First Name">
+        <div style="display:grid;grid-template-columns:1fr 1fr 72px;gap:8px;">
+          <div>
+            <label style="font-size:10px;font-weight:700;color:#9CA3AF;text-transform:uppercase;display:block;margin-bottom:4px;">Last Name</label>
+            <input class="input" id="reg-last-name" placeholder="e.g. Dela Cruz">
+          </div>
+          <div>
+            <label style="font-size:10px;font-weight:700;color:#9CA3AF;text-transform:uppercase;display:block;margin-bottom:4px;">First Name</label>
+            <input class="input" id="reg-first-name" placeholder="e.g. Juan">
+          </div>
+          <div>
+            <label style="font-size:10px;font-weight:700;color:#9CA3AF;text-transform:uppercase;display:block;margin-bottom:4px;">M.I.</label>
+            <input class="input" id="reg-mi" placeholder="R." maxlength="5">
+          </div>
+        </div>
       </div>
             <div class="field">
         <label class="field-label">SR Code</label>
@@ -869,7 +882,8 @@ label.field-label{display:block;font-size:12px;font-weight:600;
           <!-- Front -->
           <div>
             <label style="font-size:11px;font-weight:600;color:#555;display:block;margin-bottom:4px;">
-              📷 Front Face <span style="color:#D32F2F;">*</span>
+              <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="display:inline;vertical-align:text-bottom;margin-right:3px"><path stroke-linecap="round" stroke-linejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/><circle cx="12" cy="13" r="3"/></svg>
+              Front Face <span style="color:#D32F2F;">*</span>
             </label>
             <div class="file-upload-area" id="photo-front-area" style="padding:10px;"
                  onclick="document.getElementById('reg-photo-front').click()">
@@ -882,7 +896,8 @@ label.field-label{display:block;font-size:12px;font-weight:600;
           <!-- Left -->
           <div>
             <label style="font-size:11px;font-weight:600;color:#555;display:block;margin-bottom:4px;">
-              👈 Left View <span style="color:#D32F2F;">*</span>
+              <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="display:inline;vertical-align:text-bottom;margin-right:3px"><path stroke-linecap="round" stroke-linejoin="round" d="M11 17l-5-5m0 0l5-5m-5 5h12"/></svg>
+              Left View <span style="color:#D32F2F;">*</span>
             </label>
             <div class="file-upload-area" id="photo-left-area" style="padding:10px;"
                  onclick="document.getElementById('reg-photo-left').click()">
@@ -895,7 +910,8 @@ label.field-label{display:block;font-size:12px;font-weight:600;
           <!-- Right -->
           <div>
             <label style="font-size:11px;font-weight:600;color:#555;display:block;margin-bottom:4px;">
-              👉 Right View <span style="color:#D32F2F;">*</span>
+              <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="display:inline;vertical-align:text-bottom;margin-right:3px"><path stroke-linecap="round" stroke-linejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6"/></svg>
+              Right View <span style="color:#D32F2F;">*</span>
             </label>
             <div class="file-upload-area" id="photo-right-area" style="padding:10px;"
                  onclick="document.getElementById('reg-photo-right').click()">
@@ -908,7 +924,8 @@ label.field-label{display:block;font-size:12px;font-weight:600;
           <!-- Up -->
           <div>
             <label style="font-size:11px;font-weight:600;color:#555;display:block;margin-bottom:4px;">
-              ☝️ Top View <span style="color:#D32F2F;">*</span>
+              <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="display:inline;vertical-align:text-bottom;margin-right:3px"><path stroke-linecap="round" stroke-linejoin="round" d="M7 11l5-5m0 0l5 5m-5-5v12"/></svg>
+              Top View <span style="color:#D32F2F;">*</span>
             </label>
             <div class="file-upload-area" id="photo-up-area" style="padding:10px;"
                  onclick="document.getElementById('reg-photo-up').click()">
@@ -1001,7 +1018,20 @@ label.field-label{display:block;font-size:12px;font-weight:600;
 
       <div class="field">
         <label class="field-label">Full Name</label>
-        <input class="input" id="edit-name" placeholder="Last Name, First Name Middle I.">
+        <div style="display:grid;grid-template-columns:1fr 1fr 72px;gap:8px;">
+          <div>
+            <label style="font-size:10px;font-weight:700;color:#9CA3AF;text-transform:uppercase;display:block;margin-bottom:4px;">Last Name</label>
+            <input class="input" id="edit-last-name" placeholder="e.g. Dela Cruz">
+          </div>
+          <div>
+            <label style="font-size:10px;font-weight:700;color:#9CA3AF;text-transform:uppercase;display:block;margin-bottom:4px;">First Name</label>
+            <input class="input" id="edit-first-name" placeholder="e.g. Juan">
+          </div>
+          <div>
+            <label style="font-size:10px;font-weight:700;color:#9CA3AF;text-transform:uppercase;display:block;margin-bottom:4px;">M.I.</label>
+            <input class="input" id="edit-mi" placeholder="R." maxlength="5">
+          </div>
+        </div>
       </div>
 
       <div class="field">
@@ -1025,7 +1055,8 @@ label.field-label{display:block;font-size:12px;font-weight:600;
           <!-- Front -->
           <div>
             <div style="font-size:11px;font-weight:600;color:#374151;margin-bottom:4px">
-              📷 Front Face <span id="edit-status-front" style="font-size:10px;font-weight:500"></span>
+              <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="display:inline;vertical-align:text-bottom;margin-right:3px"><path stroke-linecap="round" stroke-linejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/><circle cx="12" cy="13" r="3"/></svg>
+              Front Face <span id="edit-status-front" style="font-size:10px;font-weight:500"></span>
             </div>
             <div class="file-upload-area" id="edit-area-front" style="padding:12px 8px"
                  onclick="document.getElementById('edit-file-front').click()">
@@ -1039,7 +1070,8 @@ label.field-label{display:block;font-size:12px;font-weight:600;
           <!-- Left -->
           <div>
             <div style="font-size:11px;font-weight:600;color:#374151;margin-bottom:4px">
-              👈 Left View <span id="edit-status-left" style="font-size:10px;font-weight:500"></span>
+              <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="display:inline;vertical-align:text-bottom;margin-right:3px"><path stroke-linecap="round" stroke-linejoin="round" d="M11 17l-5-5m0 0l5-5m-5 5h12"/></svg>
+              Left View <span id="edit-status-left" style="font-size:10px;font-weight:500"></span>
             </div>
             <div class="file-upload-area" id="edit-area-left" style="padding:12px 8px"
                  onclick="document.getElementById('edit-file-left').click()">
@@ -1053,7 +1085,8 @@ label.field-label{display:block;font-size:12px;font-weight:600;
           <!-- Right -->
           <div>
             <div style="font-size:11px;font-weight:600;color:#374151;margin-bottom:4px">
-              👉 Right View <span id="edit-status-right" style="font-size:10px;font-weight:500"></span>
+              <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="display:inline;vertical-align:text-bottom;margin-right:3px"><path stroke-linecap="round" stroke-linejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6"/></svg>
+              Right View <span id="edit-status-right" style="font-size:10px;font-weight:500"></span>
             </div>
             <div class="file-upload-area" id="edit-area-right" style="padding:12px 8px"
                  onclick="document.getElementById('edit-file-right').click()">
@@ -1067,7 +1100,8 @@ label.field-label{display:block;font-size:12px;font-weight:600;
           <!-- Up -->
           <div>
             <div style="font-size:11px;font-weight:600;color:#374151;margin-bottom:4px">
-              👆 Top View <span id="edit-status-up" style="font-size:10px;font-weight:500"></span>
+              <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="display:inline;vertical-align:text-bottom;margin-right:3px"><path stroke-linecap="round" stroke-linejoin="round" d="M7 11l5-5m0 0l5 5m-5-5v12"/></svg>
+              Top View <span id="edit-status-up" style="font-size:10px;font-weight:500"></span>
             </div>
             <div class="file-upload-area" id="edit-area-up" style="padding:12px 8px"
                  onclick="document.getElementById('edit-file-up').click()">
@@ -1924,7 +1958,10 @@ async function openEditStudent(studentId) {
   if (!s) return;
 
   document.getElementById('edit-student-id').value = studentId;
-  document.getElementById('edit-name').value        = s.name    || '';
+  const pn = parseName(s.name || '');
+  document.getElementById('edit-last-name').value  = pn.last;
+  document.getElementById('edit-first-name').value = pn.first;
+  document.getElementById('edit-mi').value          = pn.mi;
   document.getElementById('edit-sr').value          = s.sr_code || '';
   document.getElementById('edit-email').value       = s.email   || '';
 
@@ -1984,9 +2021,13 @@ function handleEditSigPreview() {
 }
 
 document.getElementById('btn-save-edit').addEventListener('click', async () => {
-  const id   = document.getElementById('edit-student-id').value;
-  const name = document.getElementById('edit-name').value.trim();
-  if (!name) { toast('Name is required.', 'error'); return; }
+  const id        = document.getElementById('edit-student-id').value;
+  const lastName  = document.getElementById('edit-last-name').value.trim();
+  const firstName = document.getElementById('edit-first-name').value.trim();
+  const mi        = document.getElementById('edit-mi').value.trim();
+  if (!lastName)  { toast('Last Name is required.', 'error'); return; }
+  if (!firstName) { toast('First Name is required.', 'error'); return; }
+  const name = mi ? `${lastName}, ${firstName} ${mi}` : `${lastName}, ${firstName}`;
 
   const fd = new FormData();
   fd.append('name',  name);
@@ -2222,13 +2263,31 @@ document.querySelectorAll('.cam-side-tab').forEach(tab => {
 /* ═══════════════════════════════════════════════════════════════════════
    REGISTRATION
    ═══════════════════════════════════════════════════════════════════════ */
+function parseName(name) {
+  const commaIdx = name.indexOf(',');
+  if (commaIdx !== -1) {
+    const last  = name.slice(0, commaIdx).trim();
+    const rest  = name.slice(commaIdx + 1).trim();
+    const parts = rest.split(/\s+/);
+    const first = parts[0] || '';
+    const mi    = parts.slice(1).join(' ');
+    return { last, first, mi };
+  }
+  // Fallback for old format without comma: put all into last name
+  return { last: name.trim(), first: '', mi: '' };
+}
+
 document.getElementById('btn-open-register').addEventListener('click', () => {
   openModal('modal-register');
 });
 
 document.getElementById('btn-submit-reg').addEventListener('click', async () => {
-  const name = document.getElementById('reg-name').value.trim();
-  if (!name) { toast('Full name is required.', 'error'); return; }
+  const lastName  = document.getElementById('reg-last-name').value.trim();
+  const firstName = document.getElementById('reg-first-name').value.trim();
+  const mi        = document.getElementById('reg-mi').value.trim();
+  if (!lastName)  { toast('Last Name is required.', 'error'); return; }
+  if (!firstName) { toast('First Name is required.', 'error'); return; }
+  const name = mi ? `${lastName}, ${firstName} ${mi}` : `${lastName}, ${firstName}`;
 
   // Validate all 4 angles are uploaded
   const angles = ['front', 'left', 'right', 'up'];
@@ -2279,7 +2338,7 @@ document.getElementById('btn-submit-reg').addEventListener('click', async () => 
     renderStudentsList();
 
     // Clear form
-    ['reg-name','reg-sr','reg-email'].forEach(id => {
+    ['reg-last-name','reg-first-name','reg-mi','reg-sr','reg-email'].forEach(id => {
       document.getElementById(id).value = '';
     });
     // Clear all 4 angle photo inputs

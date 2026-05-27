@@ -283,7 +283,9 @@
             <h2 class="text-2xl font-black text-[#D32F2F] mb-6 tracking-tighter">Student Registration</h2>
             <input type="hidden" name="class_code" id="reg-class-code">
             <div class="grid grid-cols-2 gap-4">
-                <input type="text"   name="name"    placeholder="Full Name"      class="reg-input col-span-2" required>
+                <input type="text" name="last_name"  placeholder="Last Name"  class="reg-input" required>
+                <input type="text" name="first_name" placeholder="First Name" class="reg-input" required>
+                <input type="text" name="mi"         placeholder="M.I. (optional)" class="reg-input col-span-2" style="max-width:160px">
                 <input type="text"   name="sr_code" placeholder="SR Code"        class="reg-input col-span-2" required>
                 <input type="email"  name="email"   placeholder="Email Address"  class="reg-input col-span-2" required>
                 <div class="col-span-2">

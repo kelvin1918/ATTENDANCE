@@ -14,9 +14,23 @@ faces/
 build/
 dist/
 *.toc
+*.spec
 *.spec.bak
 AttendanceStation_SETUP*/
 BatStateU_Attendance_Setup*
+
+# Docker / packaging artifacts
+.dockerignore
+Dockerfile
+*.tar
+
+# PyInstaller launcher entry point
+launcher.py
+
+# buffalo_l subfolders (keep root, ignore contents)
+buffalo_l/*/
+
+
 
 # Personal notes and test files
 bug encountered.md

@@ -2084,6 +2084,15 @@ document.getElementById('regForm').addEventListener('submit', (e) => {{
     photosEl.appendChild(wrapper);
   }});
 
+  // Show "Signed" indicator — no signature image, just the badge
+  const existingBadge = document.getElementById('confirm-sig-badge');
+  if (existingBadge) existingBadge.remove();
+  const sigBadge = document.createElement('div');
+  sigBadge.id = 'confirm-sig-badge';
+  sigBadge.style.cssText = 'margin-top:12px;display:flex;align-items:center;gap:10px;background:#F0FDF4;border:1.5px solid #86EFAC;border-radius:10px;padding:10px 14px';
+  sigBadge.innerHTML = `<span style="font-size:1rem">✅</span><span style="font-size:.8rem;font-weight:700;color:#15803D">E-Signature: </span><span style="display:inline-block;color:#DC2626;border:2px solid #DC2626;border-radius:4px;padding:2px 10px;font-size:.75rem;font-weight:900;letter-spacing:3px;transform:rotate(-5deg);font-family:'Arial Black',Arial,sans-serif;text-transform:uppercase;box-shadow:1px 1px 0 #DC2626">SIGNED</span>`;
+  photosEl.parentNode.insertBefore(sigBadge, photosEl.nextSibling);
+
   document.getElementById('formCard').style.display = 'none';
   document.getElementById('confirmCard').style.display = 'block';
   window.scrollTo(0, 0);
