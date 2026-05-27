@@ -292,6 +292,19 @@ def api_add_curriculum():
                     "year_level": year_level, "program": program})
 
 
+@app.route("/api/curriculum/<int:item_id>", methods=["PUT"])
+def api_edit_curriculum(item_id):
+    data = request.get_json()
+    db.edit_curriculum(
+        item_id,
+        data.get("subject", "").strip(),
+        data.get("course_code", "").strip(),
+        data.get("year_level", ""),
+        data.get("program", "").strip()
+    )
+    return jsonify({"status": "ok"})
+
+
 @app.route("/api/curriculum/<int:item_id>", methods=["DELETE"])
 def api_delete_curriculum(item_id):
     db.delete_curriculum(item_id)

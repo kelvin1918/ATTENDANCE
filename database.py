@@ -498,6 +498,17 @@ def add_curriculum(subject, course_code, year_level, program=''):
     return row["id"]
 
 
+def edit_curriculum(item_id, subject, course_code, year_level, program):
+    conn = get_db()
+    cur  = get_cursor(conn)
+    cur.execute(
+        "UPDATE curriculum SET subject=%s, course_code=%s, year_level=%s, program=%s WHERE id=%s",
+        (subject, course_code, year_level, program.strip(), item_id)
+    )
+    conn.commit()
+    cur.close(); conn.close()
+
+
 def delete_curriculum(item_id):
     conn = get_db()
     cur  = get_cursor(conn)
