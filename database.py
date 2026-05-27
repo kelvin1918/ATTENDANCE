@@ -983,7 +983,10 @@ def get_sessions_by_class(class_code):
                TO_CHAR(a.date, 'YYYY-MM-DD')                              AS date,
                a.section,
                a.subject,
-               COALESCE(a.session_time, TO_CHAR(MIN(a.timestamp), 'HH24:MI')) AS session_time,
+               COALESCE(
+                   CASE WHEN a.session_time ~ '^[0-9]{2}:[0-9]{2}' THEN a.session_time ELSE NULL END,
+                   TO_CHAR(MIN(a.timestamp), 'HH24:MI:SS')
+               )                                                             AS session_time,
                COUNT(*)                                                     AS total,
                SUM(CASE WHEN a.status='Present' THEN 1 ELSE 0 END)         AS present,
                SUM(CASE WHEN a.status='Late'    THEN 1 ELSE 0 END)         AS late,
@@ -1012,7 +1015,10 @@ def get_recent_activity(limit=10, instructor_id=None):
                    TO_CHAR(a.date, 'YYYY-MM-DD')                            AS date,
                    a.section,
                    a.subject,
-                   COALESCE(a.session_time, TO_CHAR(MIN(a.timestamp), 'HH24:MI')) AS session_time,
+                   COALESCE(
+                       CASE WHEN a.session_time ~ '^[0-9]{2}:[0-9]{2}' THEN a.session_time ELSE NULL END,
+                       TO_CHAR(MIN(a.timestamp), 'HH24:MI:SS')
+                   )                                                         AS session_time,
                    TO_CHAR(MIN(a.timestamp), 'HH24:MI:SS')                  AS time
                FROM attendance a
                JOIN classes c ON c.id = a.class_code
@@ -1029,7 +1035,10 @@ def get_recent_activity(limit=10, instructor_id=None):
                    TO_CHAR(date, 'YYYY-MM-DD')                              AS date,
                    section,
                    subject,
-                   COALESCE(session_time, TO_CHAR(MIN(timestamp), 'HH24:MI')) AS session_time,
+                   COALESCE(
+                       CASE WHEN session_time ~ '^[0-9]{2}:[0-9]{2}' THEN session_time ELSE NULL END,
+                       TO_CHAR(MIN(timestamp), 'HH24:MI:SS')
+                   )                                                         AS session_time,
                    TO_CHAR(MIN(timestamp), 'HH24:MI:SS')                    AS time
                FROM attendance
                WHERE session_time != 'LIVE'
