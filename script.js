@@ -1849,6 +1849,11 @@ async function saveFolderModal() {
     const prefix     = (session.email || 'INS').split('@')[0].toUpperCase().substring(0, 6);
     const class_code = `${prefix}-${subject}-${section}-${course_code}`.replace(/\s+/g, '-').toUpperCase();
 
+    // Schedule conflict check (applies to both create and edit)
+    const _excludeCode   = editIdx > -1 ? classFolders[editIdx].id : null;
+    const schedConflict  = _findScheduleConflict(day, time_in, time_out, _excludeCode);
+    if (schedConflict) { _showScheduleConflictDialog(schedConflict, day, time_in, time_out); return; }
+
     if (editIdx > -1) {
         const existing = classFolders[editIdx];
         await authFetch(`/api/edit_class/${existing.id}`, {
@@ -1914,6 +1919,64 @@ function _openExistingClass(class_code) {
     closeClassModal();
     editIdx = -1;
     openFolderView(class_code);
+}
+
+function _timeToMins(timeStr) {
+    try {
+        const [time, ampm] = timeStr.trim().split(' ');
+        let [h, m] = time.split(':').map(Number);
+        if (ampm === 'PM' && h !== 12) h += 12;
+        if (ampm === 'AM' && h === 12) h = 0;
+        return h * 60 + m;
+    } catch { return -1; }
+}
+
+function _findScheduleConflict(day, time_in, time_out, excludeClassCode = null) {
+    const newStart = _timeToMins(time_in);
+    const newEnd   = _timeToMins(time_out);
+    if (newStart < 0 || newEnd < 0 || newEnd <= newStart) return null;
+    const conflictSched = schedules.find(s => {
+        if (excludeClassCode && s.class_code === excludeClassCode) return false;
+        if ((s.day || '').toUpperCase() !== (day || '').toUpperCase()) return false;
+        const parts = (s.time || '').split(' - ');
+        if (parts.length !== 2) return false;
+        const start = _timeToMins(parts[0].trim());
+        const end   = _timeToMins(parts[1].trim());
+        return start >= 0 && end >= 0 && newStart < end && newEnd > start;
+    });
+    if (!conflictSched) return null;
+    const cls = classFolders.find(f => f.id === conflictSched.class_code) || {};
+    return { ...conflictSched, subject: cls.subject || conflictSched.subject, section: cls.section || '' };
+}
+
+function _showScheduleConflictDialog(conflicting, day, time_in, time_out) {
+    document.getElementById('scheduleConflictModal')?.remove();
+    const el = document.createElement('div');
+    el.id = 'scheduleConflictModal';
+    el.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;z-index:99999;padding:16px';
+    el.innerHTML = `
+      <div style="background:#fff;border-radius:20px;width:100%;max-width:420px;padding:28px 24px;box-shadow:0 20px 60px rgba(0,0,0,.25)">
+        <div style="text-align:center;margin-bottom:4px">
+          <div style="font-size:2.2rem;margin-bottom:10px">⏰</div>
+          <h3 style="font-size:1.05rem;font-weight:800;color:#1a1a1a;margin:0 0 10px">Schedule Conflict</h3>
+          <p style="color:#6B7280;font-size:.85rem;line-height:1.5;margin:0">
+            The time slot <strong style="color:#D32F2F">${time_in} – ${time_out}</strong> on <strong style="color:#D32F2F">${day}</strong>
+            is already occupied by another class:<br><br>
+            <strong style="color:#1a1a1a">${conflicting.subject}</strong> &middot;
+            <strong style="color:#1a1a1a">${conflicting.section}</strong><br>
+            <span style="color:#6B7280;font-size:.8rem">${conflicting.time || ''}</span>
+            <br><br>Please choose a different day or time to avoid a schedule conflict.
+          </p>
+        </div>
+        <div style="margin-top:20px">
+          <button onclick="document.getElementById('scheduleConflictModal').remove()"
+            style="width:100%;padding:12px;background:#D32F2F;color:#fff;border:none;border-radius:12px;font-weight:700;font-size:.9rem;cursor:pointer">
+            OK, Change Schedule
+          </button>
+        </div>
+      </div>`;
+    document.body.appendChild(el);
+    el.addEventListener('click', e => { if (e.target === el) el.remove(); });
 }
 
 function editFolder(class_code) {
