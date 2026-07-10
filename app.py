@@ -401,6 +401,15 @@ def api_add_student():
                         "course_code": existing["course_code"],
                     }
                 }), 200
+            if existing and existing["class_code"] == class_code and form.get("force_update") != "1":
+                return jsonify({
+                    "status": "already_registered",
+                    "student": {
+                        "id":      existing["id"],
+                        "name":    existing["name"],
+                        "sr_code": existing["sr_code"],
+                    }
+                }), 200
 
     # Save profile photo → uploads/students/ and faces/
     photo_path = ""

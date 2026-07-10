@@ -2251,6 +2251,10 @@ async function submitStudentForm(formEl) {
             ]);
             return;
         }
+        if(data.status==='already_registered'){
+            _showAlreadyRegisteredDialog(formEl, data.student);
+            return;
+        }
         closeRegModal(); openFolderView(currentOpenedFolder);
     } catch(e){showRegError(['Server error: '+e.message]);}
 }
@@ -2261,6 +2265,60 @@ function showRegError(errors){
     box.innerHTML=`<p style="font-weight:800;margin:0 0 6px">Please fix the following:</p><ul style="margin:0;padding-left:16px;">${errors.map(e=>`<li style="margin-bottom:3px">${e}</li>`).join('')}</ul>`;
     const form=document.getElementById('studentRegForm');
     if(form){const first=form.querySelector('input,select');if(first)form.insertBefore(box,first);else form.prepend(box);box.scrollIntoView({behavior:'smooth',block:'center'});}
+}
+
+function _showAlreadyRegisteredDialog(formEl, student) {
+    document.getElementById('alreadyRegisteredModal')?.remove();
+    const el = document.createElement('div');
+    el.id = 'alreadyRegisteredModal';
+    el.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;z-index:99999;padding:16px';
+    el.innerHTML = `
+      <div style="background:#fff;border-radius:20px;width:100%;max-width:420px;padding:28px 24px;box-shadow:0 20px 60px rgba(0,0,0,.25)">
+        <div style="text-align:center;margin-bottom:4px">
+          <div style="font-size:2.2rem;margin-bottom:10px">🎓</div>
+          <h3 style="font-size:1.05rem;font-weight:800;color:#1a1a1a;margin:0 0 10px">Already Registered</h3>
+          <p style="color:#6B7280;font-size:.85rem;line-height:1.5;margin:0">
+            <strong style="color:#1a1a1a">${student.name}</strong> with SR Code
+            <strong style="color:#1a1a1a">${student.sr_code}</strong>
+            is already registered in this class.<br><br>
+            Would you like to <strong style="color:#D32F2F">update</strong> their information
+            (photo, contact details, etc.)?
+          </p>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:10px;margin-top:20px">
+          <button id="alreadyRegUpdateBtn"
+            style="width:100%;padding:12px;background:#D32F2F;color:#fff;border:none;border-radius:12px;font-weight:700;font-size:.9rem;cursor:pointer">
+            Yes, Update Info
+          </button>
+          <button onclick="document.getElementById('alreadyRegisteredModal').remove()"
+            style="width:100%;padding:12px;background:#fff;color:#374151;border:2px solid #E5E7EB;border-radius:12px;font-weight:700;font-size:.9rem;cursor:pointer">
+            Cancel
+          </button>
+        </div>
+      </div>`;
+    document.body.appendChild(el);
+    el.addEventListener('click', e => { if (e.target === el) el.remove(); });
+    document.getElementById('alreadyRegUpdateBtn').addEventListener('click', async () => {
+        el.remove();
+        const formData = new FormData(formEl);
+        if (!formData.get('class_code')) formData.set('class_code', currentOpenedFolder);
+        const lastName  = (formData.get('last_name')  || '').trim();
+        const firstName = (formData.get('first_name') || '').trim();
+        const mi        = (formData.get('mi')         || '').trim();
+        formData.set('name', mi ? `${lastName}, ${firstName} ${mi}` : `${lastName}, ${firstName}`);
+        formData.set('force_update', '1');
+        try {
+            const session = JSON.parse(localStorage.getItem('active_session') || '{}');
+            const res  = await fetch('/api/add_student', { method: 'POST', body: formData, headers: { 'X-Instructor-Email': session.email || '' } });
+            const data = await res.json();
+            if (!res.ok) { showRegError([data.error || 'Failed to update student.']); return; }
+            closeRegModal();
+            openFolderView(currentOpenedFolder);
+            showToast('Student info updated successfully.', 'success');
+        } catch(e) {
+            showRegError(['Server error: ' + e.message]);
+        }
+    });
 }
 
 // ── CAMERA ───────────────────────────────────────────────────────────────────
