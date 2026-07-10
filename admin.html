@@ -60,8 +60,9 @@
             padding-right: 18%; z-index: 1000;
         }
         .login-card {
-            background: white; padding: 48px; border-radius: 24px;
-            width: 440px; box-shadow: 0 30px 80px rgba(0,0,0,0.35);
+            background: white; padding: 45px; border-radius: 24px;
+            width: 460px; text-align: center; box-sizing: border-box;
+            box-shadow: 0 30px 60px rgba(0,0,0,0.4);
         }
 
         /* ── ADMIN MOBILE HEADER (hidden on desktop) ─────────── */
@@ -94,7 +95,7 @@
         /* ── ADMIN MOBILE RESPONSIVE ─────────────────────────── */
         @media (max-width: 768px) {
             #login-overlay { justify-content: center !important; padding: 24px !important; }
-            .login-card { width: 100% !important; max-width: 420px !important; padding: 32px 24px !important; }
+            .login-card { width: 100% !important; max-width: 420px !important; padding: 32px 24px !important; border-radius: 20px !important; }
             .login-card input { font-size: 16px !important; }
             #sidebar { display: none !important; }
             #page-area { margin-left: 0 !important; padding: 72px 16px 24px !important; }
@@ -110,34 +111,79 @@
         @media (max-width: 400px) {
             .stats-grid { grid-template-columns: 1fr !important; }
         }
-        .login-logo {
-            width: 48px; height: 48px; background: var(--red);
-            border-radius: 14px; display: flex; align-items: center;
-            justify-content: center; margin: 0 auto 20px;
+        #login-overlay, #login-overlay input, #login-overlay button {
+            font-family: 'Segoe UI', sans-serif;
         }
-        .login-logo svg { color: white; width: 24px; height: 24px; }
+        .login-card .logo {
+            color: var(--red); font-weight: 800; font-size: 2rem;
+            margin-bottom: 5px; letter-spacing: 1px;
+        }
         .login-card h2 {
-            text-align: center; font-size: 1.5rem; font-weight: 900;
-            color: var(--text); margin-bottom: 6px;
-        }
-        .login-card p {
-            text-align: center; color: var(--muted); font-size: 0.85rem;
-            margin-bottom: 28px;
+            margin-bottom: 30px; color: #333; font-weight: 600;
+            font-size: 1.2rem; text-transform: uppercase; letter-spacing: 1px;
         }
         .login-card input {
-            width: 100%; padding: 13px 16px; border: 1.5px solid #E5E7EB;
-            border-radius: 12px; font-size: 0.9rem; font-family: 'Inter', sans-serif;
-            outline: none; transition: 0.2s; margin-bottom: 12px; color: var(--text);
+            width: 100%; padding: 14px; margin: 10px 0;
+            border: 1px solid #eee; border-radius: 12px;
+            box-sizing: border-box; background: #f9f9f9;
+            font-size: 1rem; outline: none; transition: 0.3s; color: var(--text);
         }
-        .login-card input:focus { border-color: var(--red); box-shadow: 0 0 0 3px rgba(211,47,47,0.08); }
-        .login-card input::placeholder { color: #D1D5DB; }
+        .login-card input:focus { border-color: var(--red); background: white; box-shadow: 0 0 0 4px rgba(211,47,47,0.05); }
         .login-btn {
             width: 100%; padding: 14px; background: var(--red); color: white;
-            border: none; border-radius: 12px; cursor: pointer; font-weight: 800;
-            font-family: 'Inter', sans-serif; font-size: 0.9rem; margin-top: 6px;
-            transition: background 0.2s; letter-spacing: 0.02em;
+            border: none; border-radius: 12px; cursor: pointer; font-weight: bold;
+            margin-top: 20px; font-size: 1rem; transition: 0.3s;
         }
-        .login-btn:hover { background: var(--red-dark); }
+        .login-btn:hover { background: var(--red-dark); transform: translateY(-2px); }
+        .login-btn:disabled { background: #ccc; cursor: not-allowed; transform: none; }
+
+        .fade-in { animation: fadeIn 0.4s ease-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+
+        /* OTP boxes */
+        .otp-in {
+            width: 45px; height: 50px; text-align: center;
+            font-size: 1.2rem; font-weight: bold;
+            border: 2px solid #ddd; border-radius: 8px;
+            outline: none; transition: border-color 0.3s;
+        }
+        .otp-in:focus { border-color: var(--red); }
+        #otp-timer { font-size: 0.78rem; color: #888; margin-top: 10px; }
+        #otp-timer span { color: var(--red); font-weight: bold; }
+
+        /* Floating alert (shared visual language with instructor login) */
+        #custom-alert {
+            position: fixed; top: 20px; left: 50%;
+            transform: translateX(-50%) translateY(-100px);
+            background: #333; color: white; padding: 12px 25px;
+            border-radius: 10px; box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+            z-index: 9999; transition: transform 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+            display: flex; align-items: center; gap: 10px; font-weight: 500;
+            max-width: 90vw; text-align: center; font-family: 'Segoe UI', sans-serif;
+        }
+        #custom-alert.show { transform: translateX(-50%) translateY(0); }
+        .alert-success { border-left: 5px solid #4caf50; }
+        .alert-error   { border-left: 5px solid #f44336; }
+        .alert-info    { border-left: 5px solid #2196f3; }
+
+        /* Network slow banner */
+        #net-banner {
+            position: fixed; bottom: 20px; left: 50%;
+            transform: translateX(-50%) translateY(80px);
+            background: #1F2937; color: #F9FAFB;
+            padding: 10px 20px; border-radius: 10px;
+            font-size: 0.78rem; font-weight: 600;
+            display: flex; align-items: center; gap: 8px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+            transition: transform 0.4s cubic-bezier(0.34,1.56,0.64,1);
+            z-index: 8999; white-space: nowrap; font-family: 'Segoe UI', sans-serif;
+        }
+        #net-banner.show { transform: translateX(-50%) translateY(0); }
+        .net-dot {
+            width: 8px; height: 8px; border-radius: 50%;
+            background: #F59E0B; animation: pulse 1s ease-in-out infinite;
+        }
+        @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
 
         /* ── MAIN DASHBOARD LAYOUT ───────────────────────────── */
         #main-content {
@@ -394,10 +440,9 @@
         .table-scroll { max-height: 420px; overflow-y: auto; }
 
         .forgot-link {
-            background: none; border: none; color: #9CA3AF;
-            font-size: 0.78rem; font-weight: 500; cursor: pointer;
-            text-decoration: underline; margin-top: 8px; padding: 0;
-            transition: color 0.2s;
+            display: block; width: 100%; background: none; border: none; padding: 0;
+            margin-top: 10px; font-size: 0.8rem; color: #888; cursor: pointer;
+            text-decoration: underline; transition: color 0.2s;
         }
         .forgot-link:hover { color: var(--red); }
 
@@ -452,63 +497,72 @@
 </div>
 
 <!-- ── LOGIN OVERLAY ────────────────────────────────────────────────────── -->
+<div id="custom-alert">
+    <span id="alert-icon"></span>
+    <span id="alert-msg"></span>
+</div>
+
+<div id="net-banner">
+    <div class="net-dot"></div>
+    <span id="net-banner-msg">Connecting to server…</span>
+</div>
+
 <div id="login-overlay">
 
     <!-- ── STEP 1: Credentials ── -->
-    <div class="login-card" id="adm-step-credentials">
-        <div class="login-logo"><i data-lucide="shield-check"></i></div>
-        <h2>Admin Portal</h2>
-        <p>Secure access — enter your administrator credentials.</p>
+    <div class="login-card fade-in" id="adm-step-credentials">
+        <div class="logo">LOG IN</div>
+        <h2>Admin</h2>
         <input type="text"     id="adm-username" placeholder="Username" autocomplete="username">
         <input type="password" id="adm-pass"     placeholder="Password" autocomplete="current-password">
-        <div id="adm-login-err" style="color:#D32F2F;font-size:0.8rem;text-align:center;min-height:18px;"></div>
         <button class="login-btn" id="adm-login-btn" onclick="adminLogin()">Sign In</button>
         <button class="forgot-link" onclick="showAdmStep('forgot')">Forgot password?</button>
     </div>
 
     <!-- ── STEP 2: Enter email (forgot) ── -->
-    <div class="login-card hidden" id="adm-step-forgot">
-        <div class="login-logo" style="background:#FEF2F2;color:#D32F2F;">
-            <i data-lucide="key-round"></i>
-        </div>
-        <h2 style="font-size:1.1rem;">FORGOT?</h2>
-        <p style="font-size:0.9rem;font-weight:700;letter-spacing:0.02em;">RESET PASSWORD</p>
-        <p style="font-size:0.8rem;color:#6B7280;margin-top:4px;">
+    <div class="login-card fade-in hidden" id="adm-step-forgot">
+        <div class="logo" style="font-size:1.4rem;">FORGOT?</div>
+        <h2 style="margin-bottom:10px;">Reset Password</h2>
+        <p style="font-size:0.8rem;color:#888;margin-bottom:10px;">
             An OTP will be sent to the admin recovery email.
         </p>
-        <div id="adm-forgot-err" style="color:#D32F2F;font-size:0.8rem;text-align:center;min-height:18px;"></div>
-        <button class="login-btn" id="adm-send-otp-btn" onclick="adminSendOtp()">Send OTP</button>
-        <button class="forgot-link" onclick="showAdmStep('credentials')">← Back to Login</button>
+        <button class="login-btn" id="adm-send-otp-btn" style="margin-top:10px;" onclick="adminSendOtp()">SEND OTP</button>
+        <div style="display:flex;justify-content:space-between;margin-top:20px;">
+            <a onclick="showAdmStep('credentials')" style="cursor:pointer;font-size:0.8rem;color:#888;">⬅ Back to Login</a>
+        </div>
     </div>
 
     <!-- ── STEP 3: Enter OTP ── -->
-    <div class="login-card hidden" id="adm-step-otp">
-        <div class="login-logo" style="background:#EFF6FF;color:#2563EB;">
-            <i data-lucide="mail-check"></i>
-        </div>
-        <h2 style="font-size:1rem;">CHECK YOUR EMAIL</h2>
-        <p id="adm-otp-hint" style="font-size:0.8rem;color:#6B7280;margin-bottom:8px;">
-            Enter the 5-digit code sent to your recovery email.
+    <div class="login-card fade-in hidden" id="adm-step-otp">
+        <div class="logo" style="font-size:1.4rem;">OTP</div>
+        <h2>Password Reset</h2>
+        <p id="adm-otp-hint" style="font-size:0.8rem;margin-bottom:15px;color:#888;">
+            A 5-digit code was sent to<br><b id="adm-target-display" style="color:#333;"></b>
         </p>
-        <input type="text" id="adm-otp-input" placeholder="Enter OTP" maxlength="5"
-               style="text-align:center;letter-spacing:0.3em;font-size:1.2rem;font-weight:700;"
-               autocomplete="one-time-code">
-        <div id="adm-otp-err" style="color:#D32F2F;font-size:0.8rem;text-align:center;min-height:18px;"></div>
-        <button class="login-btn" id="adm-verify-otp-btn" onclick="adminVerifyOtp()">Verify OTP</button>
-        <button class="forgot-link" onclick="adminResendOtp()" id="adm-resend-btn">Resend OTP</button>
+        <div style="display:flex;gap:8px;justify-content:center;margin-bottom:20px;">
+            <input type="text" inputmode="numeric" class="otp-in" maxlength="1" oninput="admMoveNext(this,0)">
+            <input type="text" inputmode="numeric" class="otp-in" maxlength="1" oninput="admMoveNext(this,1)">
+            <input type="text" inputmode="numeric" class="otp-in" maxlength="1" oninput="admMoveNext(this,2)">
+            <input type="text" inputmode="numeric" class="otp-in" maxlength="1" oninput="admMoveNext(this,3)">
+            <input type="text" inputmode="numeric" class="otp-in" maxlength="1" oninput="admMoveNext(this,4)">
+        </div>
+        <div id="otp-timer">Code expires in <span id="adm-otp-countdown">10:00</span></div>
+        <button class="login-btn" id="adm-verify-otp-btn" onclick="adminVerifyOtp()">CONTINUE</button>
+        <p style="font-size:0.75rem;margin-top:15px;color:#888;">
+            Didn't receive the code?
+            <span id="adm-resend-link" onclick="adminResendOtp()" style="text-decoration:underline;cursor:pointer;color:var(--red);font-weight:bold;">Resend</span>
+            <span id="adm-resend-wait" class="hidden" style="color:#bbb;">Resend in <span id="adm-resend-sec">30</span>s</span>
+        </p>
     </div>
 
     <!-- ── STEP 4: New Password ── -->
-    <div class="login-card hidden" id="adm-step-newpass">
-        <div class="login-logo" style="background:#F0FDF4;color:#16A34A;">
-            <i data-lucide="lock-keyhole"></i>
-        </div>
-        <h2 style="font-size:1rem;">SET NEW PASSWORD</h2>
-        <p style="font-size:0.8rem;color:#6B7280;margin-bottom:8px;">Choose a strong password for the admin account.</p>
+    <div class="login-card fade-in hidden" id="adm-step-newpass">
+        <div class="logo" style="font-size:1.4rem;">NEW PASS</div>
+        <h2>Set New Password</h2>
+        <p style="font-size:0.75rem;color:#888;margin-bottom:5px;">Enter at least 6 characters</p>
         <input type="password" id="adm-newpass1" placeholder="New Password" autocomplete="new-password">
         <input type="password" id="adm-newpass2" placeholder="Confirm Password" autocomplete="new-password">
-        <div id="adm-newpass-err" style="color:#D32F2F;font-size:0.8rem;text-align:center;min-height:18px;"></div>
-        <button class="login-btn" id="adm-save-pass-btn" onclick="adminSaveNewPassword()">Save Password</button>
+        <button class="login-btn" id="adm-save-pass-btn" onclick="adminSaveNewPassword()">RESET PASSWORD</button>
     </div>
 
 </div>
@@ -1089,18 +1143,102 @@
         });
     }
 
+    // ── NETWORK SLOW BANNER ──────────────────────────────────────────────
+    let _netTimer = null;
+    function _netStart(msg) {
+        clearTimeout(_netTimer);
+        _netTimer = setTimeout(() => {
+            const b = document.getElementById('net-banner');
+            document.getElementById('net-banner-msg').textContent = msg || 'Connecting to server…';
+            b.classList.add('show');
+        }, 4000);
+    }
+    function _netStop() {
+        clearTimeout(_netTimer);
+        document.getElementById('net-banner').classList.remove('show');
+    }
+
+    // ── FLOATING ALERT ───────────────────────────────────────────────────
+    let _alertTimer = null;
+    function showAlert(msg, type = 'info', duration = 4000) {
+        const box = document.getElementById('custom-alert');
+        box.className = `alert-${type} show`;
+        document.getElementById('alert-msg').innerText = msg;
+        if (_alertTimer) clearTimeout(_alertTimer);
+        _alertTimer = setTimeout(() => box.classList.remove('show'), duration);
+    }
+
+    // ── OTP DIGIT INPUT HELPERS ──────────────────────────────────────────
+    function admMoveNext(current, index) {
+        current.value = current.value.replace(/\D/g, '');
+        const inputs = document.querySelectorAll('.otp-in');
+        if (current.value.length >= 1 && index < inputs.length - 1)
+            inputs[index + 1].focus();
+    }
+    document.querySelectorAll('.otp-in').forEach((input, index) => {
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Backspace' && input.value === '' && index > 0)
+                document.querySelectorAll('.otp-in')[index - 1].focus();
+        });
+    });
+
+    // ── OTP COUNTDOWN TIMER (10 min) ─────────────────────────────────────
+    let _countdownInt = null;
+    function startOTPCountdown(seconds = 600) {
+        if (_countdownInt) clearInterval(_countdownInt);
+        const el = document.getElementById('adm-otp-countdown');
+        let remaining = seconds;
+        _countdownInt = setInterval(() => {
+            remaining--;
+            const m = Math.floor(remaining / 60);
+            const s = remaining % 60;
+            if (el) el.textContent = `${m}:${String(s).padStart(2,'0')}`;
+            if (remaining <= 0) {
+                clearInterval(_countdownInt);
+                if (el) el.textContent = 'Expired';
+                showAlert('OTP has expired. Please request a new one.', 'error');
+                document.getElementById('adm-verify-otp-btn').disabled = true;
+            }
+        }, 1000);
+    }
+
+    // ── RESEND COOLDOWN (30 s) ───────────────────────────────────────────
+    let _resendInt = null;
+    function startResendCooldown() {
+        const resendLink = document.getElementById('adm-resend-link');
+        const resendWait = document.getElementById('adm-resend-wait');
+        const secEl      = document.getElementById('adm-resend-sec');
+        resendLink.classList.add('hidden');
+        resendWait.classList.remove('hidden');
+        let secs = 30;
+        if (_resendInt) clearInterval(_resendInt);
+        _resendInt = setInterval(() => {
+            secs--;
+            if (secEl) secEl.textContent = secs;
+            if (secs <= 0) {
+                clearInterval(_resendInt);
+                resendLink.classList.remove('hidden');
+                resendWait.classList.add('hidden');
+            }
+        }, 1000);
+    }
+
     // ── STEP NAVIGATION ──────────────────────────────────────────────────────
     function showAdmStep(step) {
         ['credentials','forgot','otp','newpass'].forEach(s => {
             document.getElementById('adm-step-' + s).classList.add('hidden');
         });
         document.getElementById('adm-step-' + step).classList.remove('hidden');
-        // Clear errors when switching
-        ['adm-login-err','adm-forgot-err','adm-otp-err','adm-newpass-err'].forEach(id => {
-            const el = document.getElementById(id);
-            if (el) el.textContent = '';
-        });
     }
+
+    // ── LOGIN VIEW ENTER-KEY DELEGATE ─────────────────────────────────────
+    document.addEventListener('keypress', (e) => {
+        if (e.key !== 'Enter') return;
+        if (!document.getElementById('adm-step-credentials').classList.contains('hidden'))    adminLogin();
+        else if (!document.getElementById('adm-step-forgot').classList.contains('hidden'))    adminSendOtp();
+        else if (!document.getElementById('adm-step-otp').classList.contains('hidden'))       adminVerifyOtp();
+        else if (!document.getElementById('adm-step-newpass').classList.contains('hidden'))   adminSaveNewPassword();
+    });
 
     // ── VERIFY SESSION ON LOAD ────────────────────────────────────────────────
     (async () => {
@@ -1166,11 +1304,11 @@
     async function adminLogin() {
         const username = document.getElementById('adm-username').value.trim();
         const pass     = document.getElementById('adm-pass').value;
-        const errEl    = document.getElementById('adm-login-err');
         const btn      = document.getElementById('adm-login-btn');
-        if (!username || !pass) { errEl.textContent = 'Enter username and password.'; return; }
+        if (!username || !pass) { showAlert('Enter username and password.', 'error'); return; }
 
         btn.disabled = true; btn.textContent = 'Signing in…';
+        _netStart('Signing in… this may take a moment.');
         try {
             const res  = await fetch('/api/admin/login', {
                 method: 'POST',
@@ -1178,17 +1316,15 @@
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ username, password: pass })
             });
+            _netStop();
             const data = await res.json();
-            if (!res.ok) { errEl.textContent = data.error || 'Invalid credentials.'; return; }
+            if (!res.ok) { showAlert(data.error || 'Invalid credentials.', 'error'); return; }
             // Store token in sessionStorage for reliable header-based auth
             if (data.token) sessionStorage.setItem('admin_token', data.token);
             _showAdminDashboard();
-        } catch { errEl.textContent = 'Network error. Try again.'; }
+        } catch { _netStop(); showAlert('Network error. Try again.', 'error'); }
         finally   { btn.disabled = false; btn.textContent = 'Sign In'; }
     }
-    document.getElementById('adm-pass').addEventListener('keypress', e => {
-        if (e.key === 'Enter') adminLogin();
-    });
 
     // ── SIGN OUT ──────────────────────────────────────────────────────────────
     async function handleSignOut() {
@@ -1201,35 +1337,51 @@
 
     // ── FORGOT PASSWORD: SEND OTP ─────────────────────────────────────────────
     async function adminSendOtp() {
-        const errEl = document.getElementById('adm-forgot-err');
-        const btn   = document.getElementById('adm-send-otp-btn');
-        btn.disabled = true; btn.textContent = 'Sending…';
+        const btn = document.getElementById('adm-send-otp-btn');
+        btn.disabled = true; btn.textContent = 'Sending...';
+        _netStart('Sending OTP… this may take a moment.');
         try {
             const res  = await _admFetch('/api/admin/send_otp', { method: 'POST' });
+            _netStop();
             const data = await res.json();
-            if (!res.ok) { errEl.textContent = data.error || 'Failed to send OTP.'; return; }
-            if (data.warn) { errEl.style.color = '#D97706'; errEl.textContent = data.warn; }
-            const hint = document.getElementById('adm-otp-hint');
-            if (data.masked_email) hint.textContent = `Code sent to ${data.masked_email}`;
+            if (!res.ok) { showAlert(data.error || 'Failed to send OTP.', 'error'); return; }
+
+            document.querySelectorAll('.otp-in').forEach(i => i.value = '');
+            document.getElementById('adm-verify-otp-btn').disabled = false;
+            if (data.masked_email) document.getElementById('adm-target-display').textContent = data.masked_email;
             showAdmStep('otp');
-        } catch { errEl.textContent = 'Network error.'; }
-        finally   { btn.disabled = false; btn.textContent = 'Send OTP'; }
+            startOTPCountdown(600);
+            startResendCooldown();
+
+            if (data.warn) showAlert(data.warn, 'info', 6000);
+            else showAlert('OTP sent! Check the admin recovery email inbox (and spam folder).', 'success', 5000);
+        } catch { _netStop(); showAlert('Could not reach the server. Check your internet connection.', 'error'); }
+        finally   { btn.disabled = false; btn.textContent = 'SEND OTP'; }
     }
 
     async function adminResendOtp() {
-        document.getElementById('adm-resend-btn').textContent = 'Sending…';
-        await adminSendOtp();
-        document.getElementById('adm-resend-btn').textContent = 'Resend OTP';
+        startResendCooldown();
+        document.querySelectorAll('.otp-in').forEach(i => i.value = '');
+        document.getElementById('adm-verify-otp-btn').disabled = false;
+        try {
+            const res  = await _admFetch('/api/admin/send_otp', { method: 'POST' });
+            const data = await res.json();
+            startOTPCountdown(600);
+            showAlert(data.warn || 'New OTP sent to the admin recovery email.', data.warn ? 'info' : 'success');
+        } catch {
+            showAlert('Could not resend. Try again.', 'error');
+        }
     }
 
     // ── FORGOT PASSWORD: VERIFY OTP ───────────────────────────────────────────
     async function adminVerifyOtp() {
-        const otp   = document.getElementById('adm-otp-input').value.trim();
-        const errEl = document.getElementById('adm-otp-err');
-        const btn   = document.getElementById('adm-verify-otp-btn');
-        if (!otp) { errEl.textContent = 'Enter the OTP.'; return; }
+        const inputs = document.querySelectorAll('.otp-in');
+        let otp = '';
+        inputs.forEach(i => otp += i.value.trim());
+        if (otp.length < 5) return showAlert('Enter all 5 digits.', 'error');
 
-        btn.disabled = true; btn.textContent = 'Verifying…';
+        const btn = document.getElementById('adm-verify-otp-btn');
+        btn.disabled = true; btn.textContent = 'Verifying...';
         try {
             const res  = await _admFetch('/api/admin/verify_otp', {
                 method: 'POST',
@@ -1237,25 +1389,28 @@
                 body: JSON.stringify({ otp })
             });
             const data = await res.json();
-            if (!res.ok) { errEl.textContent = data.error || 'Verification failed.'; return; }
+            if (!res.ok) {
+                showAlert(data.error || 'Verification failed.', 'error');
+                inputs.forEach(i => i.value = '');
+                inputs[0].focus();
+                return;
+            }
+            clearInterval(_countdownInt);
+            showAlert('OTP verified!', 'success');
             showAdmStep('newpass');
-        } catch { errEl.textContent = 'Network error.'; }
-        finally   { btn.disabled = false; btn.textContent = 'Verify OTP'; }
+        } catch { showAlert('Server error. Try again.', 'error'); }
+        finally   { btn.disabled = false; btn.textContent = 'CONTINUE'; }
     }
-    document.getElementById('adm-otp-input').addEventListener('keypress', e => {
-        if (e.key === 'Enter') adminVerifyOtp();
-    });
 
     // ── FORGOT PASSWORD: SAVE NEW PASSWORD ────────────────────────────────────
     async function adminSaveNewPassword() {
-        const p1    = document.getElementById('adm-newpass1').value;
-        const p2    = document.getElementById('adm-newpass2').value;
-        const errEl = document.getElementById('adm-newpass-err');
-        const btn   = document.getElementById('adm-save-pass-btn');
-        if (p1.length < 6)  { errEl.textContent = 'Password must be at least 6 characters.'; return; }
-        if (p1 !== p2)      { errEl.textContent = 'Passwords do not match.'; return; }
+        const p1  = document.getElementById('adm-newpass1').value;
+        const p2  = document.getElementById('adm-newpass2').value;
+        const btn = document.getElementById('adm-save-pass-btn');
+        if (p1.length < 6) return showAlert('Password must be at least 6 characters.', 'error');
+        if (p1 !== p2)     return showAlert('Passwords do not match.', 'error');
 
-        btn.disabled = true; btn.textContent = 'Saving…';
+        btn.disabled = true; btn.textContent = 'Saving...';
         try {
             const res  = await _admFetch('/api/admin/reset_password', {
                 method: 'POST',
@@ -1263,11 +1418,12 @@
                 body: JSON.stringify({ password: p1 })
             });
             const data = await res.json();
-            if (!res.ok) { errEl.textContent = data.error || 'Failed to save.'; return; }
-            showToast('Password updated successfully.');
-            showAdmStep('credentials');
-        } catch { errEl.textContent = 'Network error.'; }
-        finally   { btn.disabled = false; btn.textContent = 'Save Password'; }
+            if (!res.ok) return showAlert(data.error || 'Failed to save.', 'error');
+
+            showAlert('Password updated! Please log in.', 'success');
+            setTimeout(() => showAdmStep('credentials'), 2000);
+        } catch { showAlert('Server error. Try again.', 'error'); }
+        finally   { btn.disabled = false; btn.textContent = 'RESET PASSWORD'; }
     }
 
     // ── RENDER ADMIN (loads all data for dashboard overview) ─────────────────

@@ -234,7 +234,7 @@
 
         // ── VIEW SWITCHER ────────────────────────────────────────────────────
         function toggleMainView(viewName) {
-            ['login','reg','forgot-email','otp','new-pass'].forEach(v => {
+            ['login','forgot-email','otp','new-pass'].forEach(v => {
                 document.getElementById('view-' + v).classList.add('hidden');
             });
             document.getElementById('view-' + viewName).classList.remove('hidden');
@@ -471,7 +471,6 @@
         document.addEventListener('keypress', (e) => {
             if (e.key !== 'Enter') return;
             if (!document.getElementById('view-login').classList.contains('hidden'))    handleLogin();
-            else if (!document.getElementById('view-reg').classList.contains('hidden')) handleRegister();
             else if (!document.getElementById('view-forgot-email').classList.contains('hidden')) sendOTP();
             else if (!document.getElementById('view-otp').classList.contains('hidden')) validateOTP();
         });
