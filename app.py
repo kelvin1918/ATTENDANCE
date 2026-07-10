@@ -2213,6 +2213,14 @@ async function doSubmit() {{
     if (f) fd.append('photo_' + angle, f);
   }});
 
+  function _showSuccess() {{
+    document.getElementById('confirmCard').style.display = 'none';
+    document.getElementById('formCard').style.display = 'block';
+    document.getElementById('formCard').querySelector('form').style.display = 'none';
+    document.getElementById('successMsg').style.display = 'block';
+    window.scrollTo(0, 0);
+  }}
+
   try {{
     const res  = await fetch('/api/registration/submit', {{method:'POST', body:fd}});
     const data = await res.json();
@@ -2223,11 +2231,62 @@ async function doSubmit() {{
       btn.textContent = '✓ Confirm & Submit';
       return;
     }}
-    document.getElementById('confirmCard').style.display = 'none';
-    document.getElementById('formCard').style.display = 'block';
-    document.getElementById('formCard').querySelector('form').style.display = 'none';
-    document.getElementById('successMsg').style.display = 'block';
-    window.scrollTo(0, 0);
+    if (data.status === 'already_registered') {{
+      const s = data.student;
+      const overlay = document.createElement('div');
+      overlay.id = 'alreadyRegOverlay';
+      overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;z-index:9999;padding:16px';
+      overlay.innerHTML = `
+        <div style="background:#fff;border-radius:20px;width:100%;max-width:380px;padding:28px 24px;box-shadow:0 20px 60px rgba(0,0,0,.25);text-align:center">
+          <div style="font-size:2.2rem;margin-bottom:10px">🎓</div>
+          <h3 style="font-size:1rem;font-weight:800;color:#1a1a1a;margin:0 0 10px">Already Registered</h3>
+          <p style="color:#6B7280;font-size:.85rem;line-height:1.5;margin:0">
+            <strong style="color:#1a1a1a">${{s.name}}</strong> with SR Code
+            <strong style="color:#1a1a1a">${{s.sr_code}}</strong>
+            is already registered in this class.<br><br>
+            Would you like to <strong style="color:#D32F2F">update</strong> your information
+            (photos, contact details, etc.)?
+          </p>
+          <div style="display:flex;flex-direction:column;gap:10px;margin-top:20px">
+            <button id="alreadyRegUpdateBtn"
+              style="width:100%;padding:12px;background:#D32F2F;color:#fff;border:none;border-radius:12px;font-weight:700;font-size:.9rem;cursor:pointer">
+              Yes, Update My Info
+            </button>
+            <button onclick="document.getElementById('alreadyRegOverlay').remove()"
+              style="width:100%;padding:12px;background:#fff;color:#374151;border:2px solid #E5E7EB;border-radius:12px;font-weight:700;font-size:.9rem;cursor:pointer">
+              Cancel
+            </button>
+          </div>
+        </div>`;
+      document.body.appendChild(overlay);
+      btn.disabled = false;
+      btn.textContent = '✓ Confirm & Submit';
+      document.getElementById('alreadyRegUpdateBtn').addEventListener('click', async () => {{
+        overlay.remove();
+        btn.disabled = true;
+        btn.textContent = 'Updating…';
+        fd.append('force_update', '1');
+        try {{
+          const res2  = await fetch('/api/registration/submit', {{method:'POST', body:fd}});
+          const data2 = await res2.json();
+          if (!res2.ok) {{
+            document.getElementById('confirm-error').textContent = data2.error || 'Update failed.';
+            document.getElementById('confirm-error').style.display = 'block';
+            btn.disabled = false;
+            btn.textContent = '✓ Confirm & Submit';
+            return;
+          }}
+          _showSuccess();
+        }} catch {{
+          document.getElementById('confirm-error').textContent = 'Network error. Please try again.';
+          document.getElementById('confirm-error').style.display = 'block';
+          btn.disabled = false;
+          btn.textContent = '✓ Confirm & Submit';
+        }}
+      }});
+      return;
+    }}
+    _showSuccess();
   }} catch {{
     document.getElementById('confirm-error').textContent = 'Network error. Please try again.';
     document.getElementById('confirm-error').style.display = 'block';
@@ -2266,6 +2325,26 @@ def api_registration_submit():
 
     if "photo_front" not in request.files:
         return jsonify({"error": "Front face photo is required."}), 400
+
+    # Check if already registered in this class before uploading to Cloudinary
+    if sr_code and request.form.get("force_update") != "1":
+        _conn = db.get_db()
+        _cur  = db.get_cursor(_conn)
+        _cur.execute(
+            "SELECT id, name, sr_code FROM students WHERE class_code = %s AND sr_code = %s LIMIT 1",
+            (class_code, sr_code)
+        )
+        _existing = _cur.fetchone()
+        _cur.close(); _conn.close()
+        if _existing:
+            return jsonify({
+                "status":  "already_registered",
+                "student": {
+                    "id":      _existing["id"],
+                    "name":    _existing["name"],
+                    "sr_code": _existing["sr_code"],
+                }
+            }), 200
 
     safe_name  = name.replace(" ", "_").replace("/", "_")
     safe_class = class_code.replace(" ", "_").replace("/", "_")
