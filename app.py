@@ -39,6 +39,7 @@ except ImportError:
 
 import database as db
 from pdf_generator import generate_attendance_pdf
+from excel_generator import generate_duration_excel
 try:
     from face_recognition_a import FaceRecognizer, load_known_faces
     CAMERA_ENABLED = True
@@ -937,6 +938,57 @@ def api_download_pdf(class_code, date):
         mimetype      = "application/pdf"
     )
 
+
+# ════════════════════════════════════════════════════════════════════════════════
+# EXCEL DOWNLOAD — duration comparison report
+# ════════════════════════════════════════════════════════════════════════════════
+
+@app.route("/api/download_excel/<class_code>/<date>")
+def api_download_excel(class_code, date):
+    cls          = db.get_class(class_code)
+    session_time = request.args.get("session_time")
+    records      = db.get_attendance_session(class_code, date, session_time)
+
+    if not cls:
+        return jsonify({"error": "class not found"}), 404
+
+    schedules = db.get_schedules(class_code)
+    room      = schedules[0]["room"] if schedules else "TBA"
+    time_str  = schedules[0]["time"] if schedules else ""
+
+    instructor = db.get_instructor_by_id(cls["instructor_id"]) if cls.get("instructor_id") else None
+    if instructor:
+        faculty_name = instructor["name"].strip() if instructor["name"].strip() \
+                       else instructor["email"].split("@")[0].replace(".", " ").replace("_", " ").title()
+    else:
+        faculty_name = "Instructor"
+
+    # Unlike the PDF (university format, Present/Late only), the duration
+    # report includes every status — Absent and Excused rows are exactly
+    # what a duration comparison is for.
+    try:
+        buf, filename = generate_duration_excel(
+            class_id     = class_code,
+            subject      = cls["subject"],
+            section      = cls["section"],
+            room         = room,
+            date         = date,
+            time_str     = time_str,
+            faculty_name = faculty_name,
+            records      = records,
+            session_time = session_time or "",
+        )
+    except Exception as xlsx_err:
+        print(f"[EXCEL] Generation error: {xlsx_err}")
+        import traceback; traceback.print_exc()
+        return jsonify({"error": f"Excel generation failed: {xlsx_err}"}), 500
+
+    return send_file(
+        buf,
+        as_attachment = True,
+        download_name = filename,
+        mimetype      = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
 
 
 # ════════════════════════════════════════════════════════════════════════════════

@@ -1317,6 +1317,40 @@ async function viewAndPrintPDF(class_code, date, session_time) {
             };
         }
 
+        // ── Download Excel — duration-comparison report (openpyxl backend) ───
+        const dlExcelBtn = document.getElementById('downloadExcelBtn');
+        if (dlExcelBtn) {
+            dlExcelBtn.onclick = async () => {
+                const origHTML = dlExcelBtn.innerHTML;
+                dlExcelBtn.innerHTML = '<span>Downloading...</span>';
+                dlExcelBtn.disabled  = true;
+
+                try {
+                    const sp  = session_time ? `?session_time=${encodeURIComponent(session_time)}` : '';
+                    const res = await authFetch(`/api/download_excel/${class_code}/${date}${sp}`);
+
+                    if (!res.ok) throw new Error(`Server error ${res.status}`);
+
+                    const blob = await res.blob();
+                    const url  = URL.createObjectURL(blob);
+                    const a    = document.createElement('a');
+                    a.href     = url;
+                    a.download = `Duration_${cls.subject || class_code}_${shortDate}.xlsx`;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                } catch (err) {
+                    console.error('Excel download failed:', err);
+                    alert('Duration report download failed: ' + err.message);
+                } finally {
+                    dlExcelBtn.innerHTML = origHTML;
+                    dlExcelBtn.disabled  = false;
+                    if (window.lucide) lucide.createIcons();
+                }
+            };
+        }
+
         // ── Update viewer title ──────────────────────────────────────────────
         document.getElementById('docTitle').innerText =
             `Attendance Sheet — ${cls.subject || class_code} | ${shortDate}`;

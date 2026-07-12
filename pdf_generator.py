@@ -42,7 +42,13 @@ from reportlab.lib.enums import TA_CENTER, TA_LEFT
 BLACK      = colors.black
 GRAY_LIGHT = colors.HexColor("#D9D9D9")   # divider bar only
 GREEN      = colors.HexColor("#1B5E20")   # Present name
-ORANGE     = colors.HexColor("#E65100")   # Late name
+ORANGE     = colors.HexColor("#E65100")   # Late/Partial/Excused name — same
+                                           # existing color, reused, not new
+
+# Non-Present attended statuses get a parenthetical tag after the name —
+# same mechanism "(Late)" already used, just extended to the two new
+# statuses. Sheet layout/colors otherwise stay exactly as before.
+STATUS_TAG = {"Late": " (Late)", "Partial": " (Partial)", "Excused": " (Excused)"}
 
 # ── FONTS ────────────────────────────────────────────────────────────────────
 TNR      = "Times-Roman"
@@ -127,9 +133,12 @@ _fetch_image_bytes._cache = {}
 
 def _sig_cell(sig_path, status, norm9c_style):
     """Return a ReportLab flowable for the SIGNATURE column cell."""
-    # "SIGNED" marker — render as plain text for attended, blank for absent
+    # "SIGNED" marker — render as plain text for attended, blank for absent.
+    # Partial/Excused count as attended: the signature represents that the
+    # student was physically in class, same as a manual paper sheet would —
+    # only a genuinely undetected/Absent student gets a blank cell.
     if sig_path == "SIGNED":
-        attended = status in ("Present", "Late")
+        attended = status in ("Present", "Late", "Partial", "Excused")
         if not attended:
             return Paragraph("", norm9c_style)
         return Paragraph(
@@ -284,10 +293,15 @@ def generate_attendance_pdf(class_id, subject, section, room, date,
     # ══════════════════════════════════════════════════════════════════════════
     # TABLE 3 — ATTENDANCE ROSTER
     # ══════════════════════════════════════════════════════════════════════════
+    # Everyone except a genuinely undetected/Absent student belongs on the
+    # official sheet — Present, Late, Partial, and Excused all indicate the
+    # student attended the class in one form or another.
     present  = [r for r in records if r.get("status") == "Present"]
     late     = [r for r in records if r.get("status") == "Late"]
+    partial  = [r for r in records if r.get("status") == "Partial"]
+    excused  = [r for r in records if r.get("status") == "Excused"]
     absent   = [r for r in records if r.get("status") == "Absent"]
-    attended = present + late
+    attended = present + late + partial + excused
 
     ROWS_PER_COL = 30
     slot = {}
@@ -308,7 +322,7 @@ def generate_attendance_pdf(class_id, subject, section, room, date,
 
         if left_r:
             st      = left_r["status"]
-            tag     = " (Late)" if st == "Late" else ""
+            tag     = STATUS_TAG.get(st, "")
             col     = BLACK if st == "Present" else ORANGE
             l_nm    = Paragraph(f"{i+1}. {left_r['name']}{tag}",
                                 ps(f"ln{i}", fontSize=9, fontName=TNR, textColor=col))
@@ -319,7 +333,7 @@ def generate_attendance_pdf(class_id, subject, section, room, date,
 
         if right_r:
             st      = right_r["status"]
-            tag     = " (Late)" if st == "Late" else ""
+            tag     = STATUS_TAG.get(st, "")
             col     = BLACK if st == "Present" else ORANGE
             r_nm    = Paragraph(f"{i+1+ROWS_PER_COL}. {right_r['name']}{tag}",
                                 ps(f"rn{i}", fontSize=9, fontName=TNR, textColor=col))

@@ -10,7 +10,7 @@ Key improvements over v2 (dlib/HOG):
   ✓ Detects multiple faces simultaneously in one pass
   ✓ Much lower false match rate (512-d vs 128-d embeddings)
   ✓ Supports 4-angle registration (front, left, right, up)
-  ✓ Confirmation buffer (3 consecutive frames) still in place
+  ✓ Confirmation buffer — rolling window (tolerates recognition flicker)
   ✓ Same threading architecture — Flask stream never blocks
   ✓ No GPU required — runs on CPU via ONNX Runtime
 
@@ -27,6 +27,7 @@ import os
 import threading
 import time
 import requests
+from collections import deque
 from datetime import datetime as _dt
 
 # InsightFace — replaces face_recognition + dlib
@@ -52,10 +53,23 @@ DET_SIZE        = (640, 640)
 THRESHOLD       = 0.35
 
 # Recognition FPS — how many times per second the recognizer runs
-RECOGNITION_FPS = 3    # 3 fps gives faster 2-frame confirmation (~0.67s minimum)
+RECOGNITION_FPS = 3    # 3 fps → one processed frame every ~0.33s
 
-# Confirmation buffer — must appear N consecutive recognition frames
-CONFIRM_FRAMES  = 2    # 2 = fast enough, still blocks single-frame false positives
+# Confirmation buffer — rolling window instead of strict-consecutive frames.
+# A borderline face (similarity score sitting near THRESHOLD) flickers
+# match/no-match frame to frame; requiring N-in-a-row makes confirmation
+# depend on lucky streaks. Instead: confirm once matched in CONFIRM_HITS
+# of the last CONFIRM_WINDOW processed frames — order doesn't matter, so
+# normal recognition flicker no longer resets progress to zero.
+CONFIRM_WINDOW  = 6    # look at the last 6 processed frames (~2s at 3fps)
+CONFIRM_HITS    = 2    # confirmed once matched in >= 2 of those frames
+
+# Presence grace period — how many seconds a name can go unmatched before
+# the system treats them as having actually left frame (vs. a brief
+# recognition dropout from angle/occlusion/lighting). Keeps the duration
+# timer — and any future "away" alert built on it — from reacting to
+# noise instead of real absence.
+PRESENCE_GRACE_SECONDS = 8
 
 # Camera
 CAMERA_SOURCE   = 0
@@ -182,8 +196,9 @@ class FaceRecognizer:
     Thread 1 (Flask)       — reads camera, draws boxes, streams MJPEG
     Thread 2 (recognition) — runs RetinaFace + ArcFace, updates shared state
 
-    Confirmation buffer: a name must appear in CONFIRM_FRAMES consecutive
-    recognition frames before being marked Present.
+    Confirmation buffer: a name must appear in CONFIRM_HITS of the last
+    CONFIRM_WINDOW recognition frames (order doesn't matter) before being
+    marked Present.
     """
 
     def __init__(self, known_embeddings, known_names, app=None):
@@ -199,9 +214,10 @@ class FaceRecognizer:
         self._present_set          = set()
         self._scan_log             = {}   # {name: first_seen_unix}
         self._scan_status          = {}   # {name: "Present" | "Late"}
-        self._pending_counts       = {}   # {name: consecutive_frame_count}
+        self._pending_windows       = {}   # {name: deque[bool]} — rolling match/miss window
         self._presence_start       = {}   # {name: unix_time} — current detection period start
         self._presence_accumulated = {}   # {name: float seconds} — total confirmed presence
+        self._last_seen            = {}   # {name: unix_time} — last frame actually matched
 
         self._running         = False
         self._rec_thread      = None
@@ -366,9 +382,10 @@ class FaceRecognizer:
             self._present_set          = set()
             self._scan_log             = {}
             self._scan_status          = {}
-            self._pending_counts       = {}
+            self._pending_windows      = {}
             self._presence_start       = {}
             self._presence_accumulated = {}
+            self._last_seen            = {}
 
     def stop_and_reset(self):
         self._running = False
@@ -379,9 +396,10 @@ class FaceRecognizer:
             self._present_set          = set()
             self._scan_log             = {}
             self._scan_status          = {}
-            self._pending_counts       = {}
+            self._pending_windows      = {}
             self._presence_start       = {}
             self._presence_accumulated = {}
+            self._last_seen            = {}
             self._latest_frame         = None
             self._face_boxes           = []
             self._face_names           = []
@@ -400,7 +418,7 @@ class FaceRecognizer:
                 names     = list(self._face_names)
                 scores    = list(self._face_scores)
                 confirmed = set(self._present_set)
-                pending   = dict(self._pending_counts)
+                pending   = {name: sum(window) for name, window in self._pending_windows.items()}
 
             if frame is None:
                 time.sleep(0.03)
@@ -461,29 +479,48 @@ class FaceRecognizer:
                     name_scores[name] = score
 
             with self._lock:
-                # ── Presence duration tracking ───────────────────────────────
-                # Close period for any face that left the frame
-                for name in list(self._presence_start.keys()):
-                    if name not in detected_names:
-                        elapsed = now - self._presence_start.pop(name)
-                        self._presence_accumulated[name] = (
-                            self._presence_accumulated.get(name, 0.0) + elapsed
-                        )
-                # Open period for any face newly entering the frame
+                # ── Presence duration tracking (with grace period) ───────────
+                # A brief recognition dropout (angle/occlusion/lighting) looks
+                # identical, frame to frame, to someone actually leaving.
+                # Only close the presence period once a name has gone
+                # unmatched for PRESENCE_GRACE_SECONDS — short blips get
+                # absorbed instead of fragmenting/eroding accumulated time.
                 for name in detected_names:
+                    self._last_seen[name] = now
                     if name not in self._presence_start:
                         self._presence_start[name] = now
 
-                # ── Confirmation buffer (name-based) ─────────────────────────
-                for name in detected_names:
-                    if name in self._present_set:
+                for name in list(self._presence_start.keys()):
+                    if name in detected_names:
                         continue
-                    self._pending_counts[name] = (
-                        self._pending_counts.get(name, 0) + 1
-                    )
-                    count = self._pending_counts[name]
-                    if count >= CONFIRM_FRAMES:
+                    last_seen = self._last_seen.get(name, self._presence_start[name])
+                    if now - last_seen > PRESENCE_GRACE_SECONDS:
+                        # Count up to the last real sighting, not to now —
+                        # the grace gap itself was never actually present.
+                        elapsed = last_seen - self._presence_start.pop(name)
+                        self._presence_accumulated[name] = (
+                            self._presence_accumulated.get(name, 0.0) + elapsed
+                        )
+                        self._last_seen.pop(name, None)
+
+                # ── Confirmation buffer (rolling window, name-based) ─────────
+                # Confirm once matched in CONFIRM_HITS of the last
+                # CONFIRM_WINDOW frames — order doesn't matter, so ordinary
+                # flicker no longer resets progress back to zero.
+                for name in detected_names:
+                    if name not in self._present_set and name not in self._pending_windows:
+                        self._pending_windows[name] = deque(maxlen=CONFIRM_WINDOW)
+
+                for name in list(self._pending_windows.keys()):
+                    if name in self._present_set:
+                        del self._pending_windows[name]
+                        continue
+                    window = self._pending_windows[name]
+                    window.append(name in detected_names)
+                    hits = sum(window)
+                    if hits >= CONFIRM_HITS:
                         self._present_set.add(name)
+                        del self._pending_windows[name]
                         ts      = now
                         elapsed = (_dt.now() - self._session_start).total_seconds() / 60
                         status  = "Late" if elapsed > self._late_minutes else "Present"
@@ -496,13 +533,8 @@ class FaceRecognizer:
                         self._cloud_sync(name, ts_str)
                     else:
                         print(f"[DETECT] Pending: {name} "
-                              f"({count}/{CONFIRM_FRAMES}, "
+                              f"({hits}/{CONFIRM_HITS} in last {len(window)} frames, "
                               f"score={name_scores.get(name, 0):.3f})")
-
-                # Reset pending count for absent unconfirmed names
-                for name in list(self._pending_counts.keys()):
-                    if name not in detected_names and name not in self._present_set:
-                        self._pending_counts[name] = 0
 
                 self._face_boxes  = boxes
                 self._face_names  = names
@@ -548,7 +580,7 @@ class FaceRecognizer:
             else:
                 count = pending.get(name, 0)
                 color = (30, 140, 255)
-                label = f"{name} ({count}/{CONFIRM_FRAMES})"
+                label = f"{name} ({count}/{CONFIRM_HITS})"
 
             cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
             bar_top = max(y2 - 32, y1)

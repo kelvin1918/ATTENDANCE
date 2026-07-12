@@ -198,6 +198,7 @@ def init_db():
     """)
     cur.execute("ALTER TABLE attendance ADD COLUMN IF NOT EXISTS session_time VARCHAR(8);")
     cur.execute("ALTER TABLE attendance ADD COLUMN IF NOT EXISTS presence_duration_sec REAL DEFAULT 0;")
+    cur.execute("ALTER TABLE attendance ADD COLUMN IF NOT EXISTS note TEXT DEFAULT '';")
 
     # ── 6. schedules — references classes + instructors ───────────────────────
     cur.execute("""
@@ -909,9 +910,13 @@ def save_attendance(class_code, section, subject, records,
     records = list of dicts:
         [
             {"name": "JohnDoe", "sr_code": "2021-0001",
-             "status": "Present", "timestamp": "07:02:34"},
+             "status": "Present", "timestamp": "07:02:34",
+             "note": "Instructor override — see note"},
             ...
         ]
+    status may be "Present" | "Late" | "Absent" | "Excused" — Excused covers
+    instructor-approved cases (sleeping, outside activity, etc.); the specific
+    reason goes in "note" rather than the status itself.
     session_time = "HH:MM:SS" string — the camera-open time, used to group all
     students from one scanning session. Stored on every row so sessions are never
     mixed up even when students scan across different minutes.
@@ -936,12 +941,13 @@ def save_attendance(class_code, section, subject, records,
         scan_time      = r.get("timestamp", "")
         full_timestamp = f"{date} {scan_time}" if scan_time else None
         duration_sec   = r.get("duration_sec", 0) or 0
+        note           = r.get("note", "") or ""
 
         cur.execute(
             """INSERT INTO attendance
                (class_code, sr_code, name, section, subject, status,
-                timestamp, date, session_time, presence_duration_sec)
-               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                timestamp, date, session_time, presence_duration_sec, note)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
             (
                 class_code,
                 r.get("sr_code", ""),
@@ -953,6 +959,7 @@ def save_attendance(class_code, section, subject, records,
                 date,
                 session_time[:5],
                 duration_sec,
+                note,
             )
         )
 
@@ -971,14 +978,16 @@ def get_attendance_session(class_code, date, session_time=None):
                    id, class_code, sr_code, name, section, subject, status,
                    TO_CHAR(timestamp, 'YYYY-MM-DD HH24:MI:SS') AS timestamp,
                    TO_CHAR(date, 'YYYY-MM-DD')                 AS date,
-                   session_time
+                   session_time, presence_duration_sec, note
                FROM attendance
                WHERE class_code = %s AND date = %s AND session_time = %s
                ORDER BY
                  CASE status
                    WHEN 'Present' THEN 1
                    WHEN 'Late'    THEN 2
-                   WHEN 'Absent'  THEN 3
+                   WHEN 'Partial' THEN 3
+                   WHEN 'Excused' THEN 4
+                   WHEN 'Absent'  THEN 5
                  END, name""",
             (class_code, date, session_time[:5])
         )
@@ -988,14 +997,16 @@ def get_attendance_session(class_code, date, session_time=None):
                    id, class_code, sr_code, name, section, subject, status,
                    TO_CHAR(timestamp, 'YYYY-MM-DD HH24:MI:SS') AS timestamp,
                    TO_CHAR(date, 'YYYY-MM-DD')                 AS date,
-                   session_time
+                   session_time, presence_duration_sec, note
                FROM attendance
                WHERE class_code = %s AND date = %s
                ORDER BY
                  CASE status
                    WHEN 'Present' THEN 1
                    WHEN 'Late'    THEN 2
-                   WHEN 'Absent'  THEN 3
+                   WHEN 'Partial' THEN 3
+                   WHEN 'Excused' THEN 4
+                   WHEN 'Absent'  THEN 5
                  END, name""",
             (class_code, date)
         )

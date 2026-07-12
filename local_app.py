@@ -1432,12 +1432,16 @@ def api_local_save_attendance():
 
     present_cnt = sum(1 for r in records if r.get("status") == "Present")
     late_cnt    = sum(1 for r in records if r.get("status") == "Late")
+    partial_cnt = sum(1 for r in records if r.get("status") == "Partial")
+    excused_cnt = sum(1 for r in records if r.get("status") == "Excused")
     absent_cnt  = sum(1 for r in records if r.get("status") == "Absent")
 
     return jsonify({
         "status":      "ok",
         "present":     present_cnt,
         "late":        late_cnt,
+        "partial":     partial_cnt,
+        "excused":     excused_cnt,
         "absent":      absent_cnt,
         "session_time":session_time,
     })

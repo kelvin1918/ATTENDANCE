@@ -14,6 +14,7 @@
   --red:#D32F2F; --red-dark:#B71C1C; --red-light:#FFEBEE;
   --green:#2E7D32; --green-light:#E8F5E9;
   --amber:#F57F17; --amber-light:#FFF8E1;
+  --excused:#5B4FC4; --excused-light:#EEECFB;
   --bg:#F7F8FA; --surface:#FFFFFF;
   --border:#E8EAED; --border-strong:#D1D5DB;
   --text:#111827; --muted:#6B7280; --subtle:#9CA3AF;
@@ -469,8 +470,8 @@ label.field-label{display:block;font-size:12px;font-weight:600;
 /* ══════════════════════════════════════════════════════════════════════
    SESSION SUMMARY MODAL
    ══════════════════════════════════════════════════════════════════════ */
-#modal-summary .modal{max-width:440px}
-.summary-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;
+#modal-summary .modal{max-width:840px}
+.summary-stats{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;
                margin:16px 0}
 .summary-stat{text-align:center;padding:16px;border-radius:var(--r-sm);
               border:1px solid var(--border)}
@@ -479,7 +480,42 @@ label.field-label{display:block;font-size:12px;font-weight:600;
                     margin-top:4px;text-transform:uppercase;letter-spacing:.4px}
 .stat-present .summary-stat-num{color:var(--green)}
 .stat-late .summary-stat-num{color:var(--amber)}
+.stat-partial .summary-stat-num{color:var(--amber)}
 .stat-absent .summary-stat-num{color:var(--red)}
+.stat-excused .summary-stat-num{color:var(--excused)}
+
+/* Review table — per-student manual override */
+#sum-table-wrap{max-height:320px;overflow-y:auto;border:1px solid var(--border);
+                border-radius:var(--r-sm)}
+#sum-table{width:100%;border-collapse:collapse;font-size:13px}
+#sum-table thead th{position:sticky;top:0;background:var(--bg);text-align:left;
+                    font-size:10.5px;font-weight:700;text-transform:uppercase;
+                    letter-spacing:.4px;color:var(--subtle);padding:8px 10px;
+                    border-bottom:1px solid var(--border)}
+#sum-table tbody td{padding:7px 10px;border-bottom:1px solid var(--border);
+                    vertical-align:middle}
+#sum-table tbody tr:last-child td{border-bottom:none}
+.sum-name{font-weight:600}
+.sum-dur{display:block;font-size:11px;color:var(--subtle);margin-top:1px}
+.sum-badge{display:inline-flex;align-items:center;gap:4px;font-size:11px;
+           font-weight:700;padding:3px 8px;border-radius:99px;white-space:nowrap}
+.sum-badge.st-present{background:var(--green-light);color:var(--green)}
+.sum-badge.st-late{background:var(--amber-light);color:var(--amber)}
+.sum-badge.st-partial{background:var(--amber-light);color:var(--amber)}
+.sum-badge.st-absent{background:#F3F4F6;color:var(--muted)}
+.sum-badge.st-excused{background:var(--excused-light);color:var(--excused)}
+.sum-override{font-family:var(--font);font-size:12px;font-weight:600;color:var(--text);
+              background:var(--surface);border:1.5px solid var(--border-strong);
+              border-radius:var(--r-sm);padding:5px 22px 5px 8px;cursor:pointer;
+              appearance:none;
+              background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6' fill='none'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%236b7280' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+              background-repeat:no-repeat;background-position:right 8px center}
+.sum-override:hover{border-color:var(--red)}
+.sum-override.is-overridden{border-color:var(--excused);color:var(--excused)}
+.sum-note{width:160px;font-family:var(--font);font-size:12px;color:var(--text);
+          background:var(--surface);border:1.5px solid var(--border);
+          border-radius:var(--r-sm);padding:5px 8px;resize:vertical;min-height:30px}
+.sum-note::placeholder{color:var(--subtle)}
 
 /* ══════════════════════════════════════════════════════════════════════
    TOAST
@@ -972,7 +1008,9 @@ label.field-label{display:block;font-size:12px;font-weight:600;
     </div>
     <div class="modal-body">
       <p style="font-size:14px;color:var(--muted)">
-        Review before saving. Absent students are those enrolled but not detected.
+        Review before saving. Absent students are those enrolled but not detected —
+        override any row below for excused sleeping, outside activities, or a
+        correction, before confirming.
       </p>
       <div class="summary-stats">
         <div class="summary-stat stat-present">
@@ -983,13 +1021,32 @@ label.field-label{display:block;font-size:12px;font-weight:600;
           <div class="summary-stat-num" id="sum-late">0</div>
           <div class="summary-stat-label">Late</div>
         </div>
+        <div class="summary-stat stat-partial">
+          <div class="summary-stat-num" id="sum-partial">0</div>
+          <div class="summary-stat-label">Partial</div>
+        </div>
+        <div class="summary-stat stat-excused">
+          <div class="summary-stat-num" id="sum-excused">0</div>
+          <div class="summary-stat-label">Excused</div>
+        </div>
         <div class="summary-stat stat-absent">
           <div class="summary-stat-num" id="sum-absent">0</div>
           <div class="summary-stat-label">Absent</div>
         </div>
       </div>
-      <div id="sum-detail" style="max-height:200px;overflow-y:auto;
-           border:1px solid var(--border);border-radius:var(--r-sm);padding:10px"></div>
+      <div id="sum-table-wrap">
+        <table id="sum-table">
+          <thead>
+            <tr>
+              <th>Student</th>
+              <th>Auto-detected</th>
+              <th>Override</th>
+              <th>Note (optional)</th>
+            </tr>
+          </thead>
+          <tbody id="sum-detail"></tbody>
+        </table>
+      </div>
       <div class="modal-actions">
         <button class="btn btn-ghost" onclick="closeModal('modal-summary')">
           Keep Scanning
@@ -2406,40 +2463,124 @@ document.getElementById('btn-save-attendance').addEventListener('click', async (
     return;
   }
 
+  // Real scheduled class length, parsed from "9:00 AM - 10:30 AM" — used to
+  // auto-flag "Partial" when a student's on-camera time falls short of it,
+  // even though they were detected (e.g. gone 30 min mid-class, back late).
+  function timeToMins(timeStr) {
+    try {
+      const [time, ampm] = timeStr.trim().split(' ');
+      let [h, m] = time.split(':').map(Number);
+      if (ampm === 'PM' && h !== 12) h += 12;
+      if (ampm === 'AM' && h === 12) h = 0;
+      return h * 60 + m;
+    } catch { return -1; }
+  }
+  const PARTIAL_THRESHOLD_PCT = 70;
+  const sched0 = (STATE.allSchedules || []).find(s => s.class_code === STATE.currentClass.class_code);
+  let classDurationMin = 0;
+  if (sched0 && sched0.time) {
+    const parts = sched0.time.split(' - ');
+    if (parts.length === 2) {
+      const start = timeToMins(parts[0].trim());
+      const end   = timeToMins(parts[1].trim());
+      if (start >= 0 && end > start) classDurationMin = end - start;
+    }
+  }
+
   const records = enrolled.map(s => {
     const exact        = (s.name || '').replace(/[.]/g,'').replace(/\s+/g,' ').trim().toLowerCase();
     const tok          = normKey(s.name);
-    const status       = detectedMap[exact]      || detectedMapTok[tok]   || 'Absent';
+    let status         = detectedMap[exact]      || detectedMapTok[tok]   || 'Absent';
     const duration_sec = detectedDuration[exact] || detectedDurTok[tok]   || 0;
+
+    // Auto-flag Partial: detected at some point, but total on-camera time
+    // fell below the threshold share of the actual scheduled class length.
+    if ((status === 'Present' || status === 'Late') && classDurationMin > 0) {
+      const pct = (duration_sec / (classDurationMin * 60)) * 100;
+      if (pct < PARTIAL_THRESHOLD_PCT) status = 'Partial';
+    }
+
     return { name: s.name, sr_code: s.sr_code || '', status, duration_sec };
   });
 
-  const presentCnt = records.filter(r => r.status === 'Present').length;
-  const lateCnt    = records.filter(r => r.status === 'Late').length;
-  const absentCnt  = records.filter(r => r.status === 'Absent').length;
+  // Manual overrides — keyed by student name, reset fresh every time the
+  // summary modal is opened. 'auto' means "use the camera's own status".
+  window._overrides = {};
+  records.forEach(r => { window._overrides[r.name] = { status: 'auto', note: '' }; });
 
-  // Populate summary modal
-  document.getElementById('sum-present').textContent = presentCnt;
-  document.getElementById('sum-late').textContent    = lateCnt;
-  document.getElementById('sum-absent').textContent  = absentCnt;
-  document.getElementById('sum-detail').innerHTML = records.map(r => {
-    const dot  = r.status === 'Present' ? '#22C55E'
-               : r.status === 'Late'    ? '#F59E0B' : '#E5E7EB';
-    const text = r.status === 'Present' ? 'var(--green)'
-               : r.status === 'Late'    ? '#D97706'  : 'var(--muted)';
-    const d    = r.duration_sec || 0;
-    const durStr = d >= 60
-      ? `${Math.floor(d/60)}m ${Math.round(d%60)}s`
-      : d > 0 ? `${Math.round(d)}s` : '';
-    const durTag = (r.status !== 'Absent' && durStr)
-      ? `<span style="font-size:10px;color:#9CA3AF;margin-left:4px">${durStr}</span>` : '';
-    return `<div style="display:flex;align-items:center;gap:8px;padding:5px 0;
-                 border-bottom:1px solid #F3F4F6;font-size:13px">
-      <div style="width:8px;height:8px;border-radius:50%;flex-shrink:0;background:${dot}"></div>
-      <span style="flex:1">${r.name}${durTag}</span>
-      <span style="font-weight:600;color:${text};font-size:12px">${r.status}</span>
-    </div>`;
-  }).join('');
+  function durationLabel(d) {
+    d = d || 0;
+    if (d >= 60) return `${Math.floor(d/60)}m ${Math.round(d%60)}s`;
+    return d > 0 ? `${Math.round(d)}s` : '';
+  }
+
+  function finalStatusOf(r) {
+    const ov = window._overrides[r.name];
+    return (ov && ov.status !== 'auto') ? ov.status : r.status;
+  }
+
+  function badgeHtml(status) {
+    const cls = { Present:'st-present', Late:'st-late', Partial:'st-partial',
+                  Absent:'st-absent', Excused:'st-excused' }[status] || 'st-absent';
+    return `<span class="sum-badge ${cls}">${status}</span>`;
+  }
+
+  function renderSummaryTable() {
+    document.getElementById('sum-detail').innerHTML = records.map(r => {
+      const durStr = durationLabel(r.duration_sec);
+      let durTag = (r.status !== 'Absent' && durStr) ? `<span class="sum-dur">${durStr} on camera</span>` : '';
+      if (r.status === 'Partial' && classDurationMin > 0) {
+        const pct = Math.round((r.duration_sec / (classDurationMin * 60)) * 100);
+        durTag = `<span class="sum-dur">${durStr} on camera — ${pct}% of class</span>`;
+      }
+      const ov = window._overrides[r.name];
+      return `<tr>
+        <td><span class="sum-name">${r.name}</span></td>
+        <td>${badgeHtml(r.status)}${durTag}</td>
+        <td>
+          <select class="sum-override ${ov.status!=='auto'?'is-overridden':''}" data-name="${r.name}">
+            <option value="auto"    ${ov.status==='auto'?'selected':''}>Auto (camera)</option>
+            <option value="Present" ${ov.status==='Present'?'selected':''}>Present</option>
+            <option value="Late"    ${ov.status==='Late'?'selected':''}>Late</option>
+            <option value="Partial" ${ov.status==='Partial'?'selected':''}>Partial</option>
+            <option value="Absent"  ${ov.status==='Absent'?'selected':''}>Absent</option>
+            <option value="Excused" ${ov.status==='Excused'?'selected':''}>Excused</option>
+          </select>
+        </td>
+        <td><textarea class="sum-note" data-name="${r.name}" placeholder="Optional context…">${ov.note}</textarea></td>
+      </tr>`;
+    }).join('');
+
+    document.querySelectorAll('.sum-override').forEach(sel => {
+      sel.addEventListener('change', e => {
+        window._overrides[e.target.dataset.name].status = e.target.value;
+        renderSummaryTable();
+        recomputeSummaryStats();
+      });
+    });
+    document.querySelectorAll('.sum-note').forEach(ta => {
+      ta.addEventListener('input', e => {
+        window._overrides[e.target.dataset.name].note = e.target.value;
+      });
+    });
+  }
+
+  function recomputeSummaryStats() {
+    const presentCnt = records.filter(r => finalStatusOf(r) === 'Present').length;
+    const lateCnt    = records.filter(r => finalStatusOf(r) === 'Late').length;
+    const partialCnt = records.filter(r => finalStatusOf(r) === 'Partial').length;
+    const excusedCnt = records.filter(r => finalStatusOf(r) === 'Excused').length;
+    const absentCnt  = records.filter(r => finalStatusOf(r) === 'Absent').length;
+    document.getElementById('sum-present').textContent = presentCnt;
+    document.getElementById('sum-late').textContent    = lateCnt;
+    document.getElementById('sum-partial').textContent = partialCnt;
+    document.getElementById('sum-excused').textContent = excusedCnt;
+    document.getElementById('sum-absent').textContent  = absentCnt;
+    return { presentCnt, lateCnt, partialCnt, excusedCnt, absentCnt };
+  }
+
+  renderSummaryTable();
+  const { presentCnt, lateCnt, absentCnt } = recomputeSummaryStats();
 
   window._pendingSave = { records, presentCnt, lateCnt, absentCnt };
 
@@ -2458,6 +2599,18 @@ document.getElementById('btn-confirm-save').addEventListener('click', async () =
   const { records } = window._pendingSave || {};
   if (!records || records.length === 0) { toast('Nothing to save.', 'error'); return; }
   if (!STATE.currentClass) { toast('No class selected.', 'error'); return; }
+
+  // Apply any manual overrides made in the review table — the instructor's
+  // decision always wins over the camera's raw status.
+  const overrides   = window._overrides || {};
+  const finalRecords = records.map(r => {
+    const ov = overrides[r.name];
+    return {
+      ...r,
+      status: (ov && ov.status !== 'auto') ? ov.status : r.status,
+      note:   (ov && ov.note) ? ov.note : '',
+    };
+  });
 
   const cls         = STATE.currentClass;
   const sessionTime = new Date().toLocaleTimeString('en-PH', {hour12: false});
@@ -2480,7 +2633,7 @@ document.getElementById('btn-confirm-save').addEventListener('click', async () =
         section:      cls.section   || '',
         subject:      cls.subject   || '',
         session_time: sched?.time   || sessionTime,
-        records,
+        records: finalRecords,
       })
     });
     const data = await res.json();
@@ -2491,7 +2644,9 @@ document.getElementById('btn-confirm-save').addEventListener('click', async () =
       closeModal('modal-summary');
       await stopCamera();
       stopPresentPoll();
-      toast(`Saved ✓  ${data.present} Present · ${data.late} Late · ${data.absent} Absent`, 'success', 4000);
+      const partialTag = data.partial ? ` · ${data.partial} Partial` : '';
+      const excusedTag = data.excused ? ` · ${data.excused} Excused` : '';
+      toast(`Saved ✓  ${data.present} Present · ${data.late} Late${partialTag}${excusedTag} · ${data.absent} Absent`, 'success', 4000);
       setTimeout(() => showScreen('screen-classes'), 1800);
     }
   } catch (err) {
