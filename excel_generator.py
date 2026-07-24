@@ -97,13 +97,18 @@ def generate_duration_excel(class_id, subject, section, room, date,
         c.fill = PatternFill("solid", fgColor=RED)
         c.alignment = Alignment(horizontal="center", vertical="center")
 
-    # Reference "class duration" — the actual scheduled length, parsed from
-    # the class's real time slot (e.g. "7:00 AM - 11:00 AM"). Falls back to
-    # the longest on-camera time observed this session only if the schedule
-    # string can't be parsed — that fallback is never the primary source,
-    # since it silently breaks down to 100% whenever only one student is
-    # detected (their own duration becomes "the whole class").
-    class_duration_min = _class_duration_minutes(time_str)
+    # Reference "class duration" — the real elapsed camera-session length
+    # (Start Camera click to Save Attendance click), stored per-record at
+    # save time. Instructors don't always run a session for the exact
+    # scheduled block, so this must reflect what actually happened, not the
+    # schedule. Falls back to parsing the scheduled time slot only for
+    # older records saved before this was tracked, and to the longest
+    # on-camera time observed as a last resort.
+    class_duration_min = max(
+        [r.get("class_duration_min", 0) or 0 for r in records], default=0
+    )
+    if not class_duration_min:
+        class_duration_min = _class_duration_minutes(time_str)
     if not class_duration_min:
         non_excused = [r for r in records if r.get("status") != "Excused"]
         max_dur_sec = max([r.get("presence_duration_sec", 0) or 0 for r in non_excused], default=0)

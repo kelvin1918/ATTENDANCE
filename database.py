@@ -199,6 +199,11 @@ def init_db():
     cur.execute("ALTER TABLE attendance ADD COLUMN IF NOT EXISTS session_time VARCHAR(8);")
     cur.execute("ALTER TABLE attendance ADD COLUMN IF NOT EXISTS presence_duration_sec REAL DEFAULT 0;")
     cur.execute("ALTER TABLE attendance ADD COLUMN IF NOT EXISTS note TEXT DEFAULT '';")
+    # Real elapsed camera-session length (start-camera click to save-attendance
+    # click), not the scheduled class block — instructors don't always run a
+    # session for the exact scheduled duration, so % Attended must be measured
+    # against what actually happened, not what was planned.
+    cur.execute("ALTER TABLE attendance ADD COLUMN IF NOT EXISTS class_duration_min REAL DEFAULT 0;")
 
     # ── 6. schedules — references classes + instructors ───────────────────────
     cur.execute("""
@@ -938,16 +943,18 @@ def save_attendance(class_code, section, subject, records,
     )
 
     for r in records:
-        scan_time      = r.get("timestamp", "")
-        full_timestamp = f"{date} {scan_time}" if scan_time else None
-        duration_sec   = r.get("duration_sec", 0) or 0
-        note           = r.get("note", "") or ""
+        scan_time         = r.get("timestamp", "")
+        full_timestamp    = f"{date} {scan_time}" if scan_time else None
+        duration_sec      = r.get("duration_sec", 0) or 0
+        note              = r.get("note", "") or ""
+        class_duration_min = r.get("class_duration_min", 0) or 0
 
         cur.execute(
             """INSERT INTO attendance
                (class_code, sr_code, name, section, subject, status,
-                timestamp, date, session_time, presence_duration_sec, note)
-               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                timestamp, date, session_time, presence_duration_sec, note,
+                class_duration_min)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
             (
                 class_code,
                 r.get("sr_code", ""),
@@ -960,6 +967,7 @@ def save_attendance(class_code, section, subject, records,
                 session_time[:5],
                 duration_sec,
                 note,
+                class_duration_min,
             )
         )
 
@@ -978,7 +986,7 @@ def get_attendance_session(class_code, date, session_time=None):
                    id, class_code, sr_code, name, section, subject, status,
                    TO_CHAR(timestamp, 'YYYY-MM-DD HH24:MI:SS') AS timestamp,
                    TO_CHAR(date, 'YYYY-MM-DD')                 AS date,
-                   session_time, presence_duration_sec, note
+                   session_time, presence_duration_sec, note, class_duration_min
                FROM attendance
                WHERE class_code = %s AND date = %s AND session_time = %s
                ORDER BY
@@ -997,7 +1005,7 @@ def get_attendance_session(class_code, date, session_time=None):
                    id, class_code, sr_code, name, section, subject, status,
                    TO_CHAR(timestamp, 'YYYY-MM-DD HH24:MI:SS') AS timestamp,
                    TO_CHAR(date, 'YYYY-MM-DD')                 AS date,
-                   session_time, presence_duration_sec, note
+                   session_time, presence_duration_sec, note, class_duration_min
                FROM attendance
                WHERE class_code = %s AND date = %s
                ORDER BY

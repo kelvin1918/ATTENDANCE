@@ -2463,29 +2463,16 @@ document.getElementById('btn-save-attendance').addEventListener('click', async (
     return;
   }
 
-  // Real scheduled class length, parsed from "9:00 AM - 10:30 AM" — used to
-  // auto-flag "Partial" when a student's on-camera time falls short of it,
-  // even though they were detected (e.g. gone 30 min mid-class, back late).
-  function timeToMins(timeStr) {
-    try {
-      const [time, ampm] = timeStr.trim().split(' ');
-      let [h, m] = time.split(':').map(Number);
-      if (ampm === 'PM' && h !== 12) h += 12;
-      if (ampm === 'AM' && h === 12) h = 0;
-      return h * 60 + m;
-    } catch { return -1; }
-  }
+  // Real elapsed camera-session length — from the moment "Start Camera" was
+  // clicked (STATE.sessionStart, set in startCamera()) to right now. This is
+  // used instead of the scheduled class block because instructors don't
+  // always run a session for the exact scheduled duration — the % Attended
+  // math must be measured against what actually happened this session, not
+  // what was planned on the schedule.
   const PARTIAL_THRESHOLD_PCT = 70;
-  const sched0 = (STATE.allSchedules || []).find(s => s.class_code === STATE.currentClass.class_code);
-  let classDurationMin = 0;
-  if (sched0 && sched0.time) {
-    const parts = sched0.time.split(' - ');
-    if (parts.length === 2) {
-      const start = timeToMins(parts[0].trim());
-      const end   = timeToMins(parts[1].trim());
-      if (start >= 0 && end > start) classDurationMin = end - start;
-    }
-  }
+  const classDurationMin = STATE.sessionStart
+    ? (Date.now() - STATE.sessionStart) / 60000
+    : 0;
 
   const records = enrolled.map(s => {
     const exact        = (s.name || '').replace(/[.]/g,'').replace(/\s+/g,' ').trim().toLowerCase();
@@ -2494,13 +2481,13 @@ document.getElementById('btn-save-attendance').addEventListener('click', async (
     const duration_sec = detectedDuration[exact] || detectedDurTok[tok]   || 0;
 
     // Auto-flag Partial: detected at some point, but total on-camera time
-    // fell below the threshold share of the actual scheduled class length.
+    // fell below the threshold share of the actual session length.
     if ((status === 'Present' || status === 'Late') && classDurationMin > 0) {
       const pct = (duration_sec / (classDurationMin * 60)) * 100;
       if (pct < PARTIAL_THRESHOLD_PCT) status = 'Partial';
     }
 
-    return { name: s.name, sr_code: s.sr_code || '', status, duration_sec };
+    return { name: s.name, sr_code: s.sr_code || '', status, duration_sec, class_duration_min: classDurationMin };
   });
 
   // Manual overrides — keyed by student name, reset fresh every time the
