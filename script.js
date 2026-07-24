@@ -956,7 +956,10 @@ async function historyLoadDetail(class_code, date, session_time) {
         const records = await res.json();
         const present = records.filter(r => r.status === 'Present');
         const late    = records.filter(r => r.status === 'Late');
-        const absent  = records.filter(r => r.status === 'Absent');
+        // Partial counts as Absent here — same policy as the attendance
+        // sheet: falling below the duration threshold means they didn't
+        // really attend enough to count.
+        const absent  = records.filter(r => r.status === 'Absent' || r.status === 'Partial');
         const cls     = classFolders.find(f => f.id === class_code) || {};
         // Parse date safely — PostgreSQL returns "YYYY-MM-DD" plain string
         const [dyr, dmo, ddy] = (date || '').split('-');

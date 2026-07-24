@@ -1080,7 +1080,9 @@ def get_sessions_by_class(class_code):
                COUNT(*)                                                     AS total,
                SUM(CASE WHEN a.status='Present' THEN 1 ELSE 0 END)         AS present,
                SUM(CASE WHEN a.status='Late'    THEN 1 ELSE 0 END)         AS late,
-               SUM(CASE WHEN a.status='Absent'  THEN 1 ELSE 0 END)         AS absent
+               -- Partial counts as Absent here too — fell below the
+               -- attendance-duration threshold, same policy as the sheet.
+               SUM(CASE WHEN a.status IN ('Absent','Partial') THEN 1 ELSE 0 END) AS absent
            FROM attendance a
            WHERE a.class_code = %s AND a.session_time != 'LIVE'
            GROUP BY a.class_code, a.date, a.section, a.subject, a.session_time
