@@ -39,16 +39,10 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.enums import TA_CENTER, TA_LEFT
 
 # ── COLOURS ──────────────────────────────────────────────────────────────────
+# Names are always plain black, no per-status tag — matches the on-screen
+# preview/print sheet in script.js exactly, which is the reference format.
 BLACK      = colors.black
 GRAY_LIGHT = colors.HexColor("#D9D9D9")   # divider bar only
-GREEN      = colors.HexColor("#1B5E20")   # Present name
-ORANGE     = colors.HexColor("#E65100")   # Late/Partial/Excused name — same
-                                           # existing color, reused, not new
-
-# Non-Present attended statuses get a parenthetical tag after the name —
-# same mechanism "(Late)" already used, just extended to the two new
-# statuses. Sheet layout/colors otherwise stay exactly as before.
-STATUS_TAG = {"Late": " (Late)", "Partial": " (Partial)", "Excused": " (Excused)"}
 
 # ── FONTS ────────────────────────────────────────────────────────────────────
 TNR      = "Times-Roman"
@@ -134,11 +128,11 @@ _fetch_image_bytes._cache = {}
 def _sig_cell(sig_path, status, norm9c_style):
     """Return a ReportLab flowable for the SIGNATURE column cell."""
     # "SIGNED" marker — render as plain text for attended, blank for absent.
-    # Partial/Excused count as attended: the signature represents that the
-    # student was physically in class, same as a manual paper sheet would —
-    # only a genuinely undetected/Absent student gets a blank cell.
+    # Excused counts as attended: the signature represents that the student
+    # was physically in class, same as a manual paper sheet would. Partial
+    # is treated like Absent here — didn't attend enough to count.
     if sig_path == "SIGNED":
-        attended = status in ("Present", "Late", "Partial", "Excused")
+        attended = status in ("Present", "Late", "Excused")
         if not attended:
             return Paragraph("", norm9c_style)
         return Paragraph(
@@ -293,15 +287,15 @@ def generate_attendance_pdf(class_id, subject, section, room, date,
     # ══════════════════════════════════════════════════════════════════════════
     # TABLE 3 — ATTENDANCE ROSTER
     # ══════════════════════════════════════════════════════════════════════════
-    # Everyone except a genuinely undetected/Absent student belongs on the
-    # official sheet — Present, Late, Partial, and Excused all indicate the
-    # student attended the class in one form or another.
+    # Present, Late, and Excused all indicate the student attended the class
+    # in some form and belong on the official sheet. Partial is treated the
+    # same as Absent here — falling below the attendance-duration threshold
+    # means they didn't really attend enough to count, so neither appears
+    # anywhere on the sheet, same as the on-screen preview/print.
     present  = [r for r in records if r.get("status") == "Present"]
     late     = [r for r in records if r.get("status") == "Late"]
-    partial  = [r for r in records if r.get("status") == "Partial"]
     excused  = [r for r in records if r.get("status") == "Excused"]
-    absent   = [r for r in records if r.get("status") == "Absent"]
-    attended = present + late + partial + excused
+    attended = present + late + excused
 
     ROWS_PER_COL = 30
     slot = {}
@@ -322,10 +316,8 @@ def generate_attendance_pdf(class_id, subject, section, room, date,
 
         if left_r:
             st      = left_r["status"]
-            tag     = STATUS_TAG.get(st, "")
-            col     = BLACK if st == "Present" else ORANGE
-            l_nm    = Paragraph(f"{i+1}. {left_r['name']}{tag}",
-                                ps(f"ln{i}", fontSize=9, fontName=TNR, textColor=col))
+            l_nm    = Paragraph(f"{i+1}. {left_r['name']}",
+                                ps(f"ln{i}", fontSize=9, fontName=TNR, textColor=BLACK))
             l_sg    = _sig_cell(left_r.get("sig_path", ""), st, norm9c)
         else:
             l_nm = Paragraph(f"{i+1}.", ps(f"le{i}", fontSize=9, fontName=TNR))
@@ -333,10 +325,8 @@ def generate_attendance_pdf(class_id, subject, section, room, date,
 
         if right_r:
             st      = right_r["status"]
-            tag     = STATUS_TAG.get(st, "")
-            col     = BLACK if st == "Present" else ORANGE
-            r_nm    = Paragraph(f"{i+1+ROWS_PER_COL}. {right_r['name']}{tag}",
-                                ps(f"rn{i}", fontSize=9, fontName=TNR, textColor=col))
+            r_nm    = Paragraph(f"{i+1+ROWS_PER_COL}. {right_r['name']}",
+                                ps(f"rn{i}", fontSize=9, fontName=TNR, textColor=BLACK))
             r_sg    = _sig_cell(right_r.get("sig_path", ""), st, norm9c)
         else:
             r_nm = Paragraph(f"{i+1+ROWS_PER_COL}.", ps(f"re{i}", fontSize=9, fontName=TNR))
@@ -360,44 +350,9 @@ def generate_attendance_pdf(class_id, subject, section, room, date,
     ])))
     story.append(roster_tbl)
 
-    # ══════════════════════════════════════════════════════════════════════════
-    # ABSENT SECTION
-    # ══════════════════════════════════════════════════════════════════════════
-    if absent:
-        story.append(Spacer(1, 6))
-        story.append(Paragraph(
-            "Absent Students:",
-            ps("abshdr", fontSize=9, fontName=TNR_BOLD, spaceAfter=2)
-        ))
-        abs_rows = [[
-            Paragraph("#",       bold9c),
-            Paragraph("NAME",    bold9c),
-            Paragraph("SR CODE", bold9c),
-        ]]
-        for idx, r in enumerate(absent, 1):
-            abs_rows.append([
-                Paragraph(str(idx), norm9c),
-                Paragraph(r.get("name", ""),    ps(f"an{idx}", fontSize=9, fontName=TNR)),
-                Paragraph(r.get("sr_code", ""), norm9c),
-            ])
-        abs_tbl = Table(
-            abs_rows,
-            colWidths=[0.45 * inch, USABLE * 0.70, USABLE * 0.20],
-            repeatRows=1,
-        )
-        abs_tbl.setStyle(TableStyle([
-            ("BOX",           (0, 0), (-1, -1), B, BLACK),
-            ("INNERGRID",     (0, 0), (-1, -1), B, BLACK),
-            ("BACKGROUND",    (0, 0), (-1,  0), GRAY_LIGHT),
-            ("FONTSIZE",      (0, 0), (-1, -1), 9),
-            ("VALIGN",        (0, 0), (-1, -1), "MIDDLE"),
-            ("TOPPADDING",    (0, 0), (-1, -1), 3),
-            ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
-            ("LEFTPADDING",   (0, 0), (-1, -1), 4),
-            ("ALIGN",         (0, 0), (0,  -1), "CENTER"),
-            ("ALIGN",         (2, 0), (2,  -1), "CENTER"),
-        ]))
-        story.append(abs_tbl)
+    # No appendix section — the official BatStateU-REC-ATT-11 sheet (and the
+    # on-screen preview/print it must match) lists attended students only.
+    # Absent and Partial students simply don't appear anywhere on the form.
 
     # ── BUILD ────────────────────────────────────────────────────────────────
     doc.build(story)

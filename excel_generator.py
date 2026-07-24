@@ -23,6 +23,40 @@ def _safe(s):
     return re.sub(r'[:*?"<>|,\s]', '_', str(s)).strip('_')
 
 
+def _time_to_mins(t):
+    """'7:00 AM' -> 420. Returns -1 if unparseable."""
+    try:
+        time_part, ampm = t.strip().rsplit(' ', 1)
+        h, m = (int(x) for x in time_part.split(':'))
+        ampm = ampm.upper()
+        if ampm == 'PM' and h != 12:
+            h += 12
+        if ampm == 'AM' and h == 12:
+            h = 0
+        return h * 60 + m
+    except Exception:
+        return -1
+
+
+def _class_duration_minutes(time_str):
+    """'7:00 AM - 11:00 AM' -> 240. Returns 0 if unparseable."""
+    if not time_str or ' - ' not in time_str:
+        return 0
+    start_s, end_s = time_str.split(' - ', 1)
+    start, end = _time_to_mins(start_s), _time_to_mins(end_s)
+    if start < 0 or end < 0 or end <= start:
+        return 0
+    return end - start
+
+
+def _fmt_duration(total_seconds):
+    """Seconds -> 'Xm Ys' — matches how instructors actually read a stopwatch,
+    not a decimal fraction of a minute."""
+    total_seconds = round(total_seconds or 0)
+    m, s = divmod(total_seconds, 60)
+    return f"{m}m {s}s"
+
+
 RED = "D32F2F"
 STATUS_FILL = {"Present": "E8F5E9", "Late": "FFF8E1", "Partial": "FFF8E1",
                 "Excused": "EEECFB", "Absent": "F3F4F6"}
@@ -55,20 +89,27 @@ def generate_duration_excel(class_id, subject, section, room, date,
     ws["A2"].font = Font(size=10, color="6B7280")
 
     header_row = 4
-    headers = ["Student", "SR Code", "Status", "Time Present (min)",
-               "Class Duration (min)", "% Attended", "Note"]
+    headers = ["Student", "SR Code", "Status", "Time Present",
+               "Class Duration", "% Attended", "Note"]
     for col, h in enumerate(headers, start=1):
         c = ws.cell(row=header_row, column=col, value=h)
         c.font = Font(bold=True, size=10, color="FFFFFF")
         c.fill = PatternFill("solid", fgColor=RED)
         c.alignment = Alignment(horizontal="center", vertical="center")
 
-    # Reference "class duration" — a fixed scheduled length isn't reliably
-    # available at this layer, so the longest on-camera time observed this
-    # session is used as the comparison baseline (best available proxy).
-    non_excused = [r for r in records if r.get("status") != "Excused"]
-    max_dur_sec = max([r.get("presence_duration_sec", 0) or 0 for r in non_excused], default=0)
-    class_duration_min = round(max_dur_sec / 60, 1) if max_dur_sec else 0
+    # Reference "class duration" — the actual scheduled length, parsed from
+    # the class's real time slot (e.g. "7:00 AM - 11:00 AM"). Falls back to
+    # the longest on-camera time observed this session only if the schedule
+    # string can't be parsed — that fallback is never the primary source,
+    # since it silently breaks down to 100% whenever only one student is
+    # detected (their own duration becomes "the whole class").
+    class_duration_min = _class_duration_minutes(time_str)
+    if not class_duration_min:
+        non_excused = [r for r in records if r.get("status") != "Excused"]
+        max_dur_sec = max([r.get("presence_duration_sec", 0) or 0 for r in non_excused], default=0)
+        class_duration_min = round(max_dur_sec / 60, 1) if max_dur_sec else 0
+
+    class_duration_sec = class_duration_min * 60
 
     thin   = Side(style="thin", color="E5E7EB")
     border = Border(left=thin, right=thin, top=thin, bottom=thin)
@@ -77,16 +118,15 @@ def generate_duration_excel(class_id, subject, section, room, date,
     for r in records:
         status  = r.get("status", "Absent")
         dur_sec = r.get("presence_duration_sec", 0) or 0
-        dur_min = round(dur_sec / 60, 1)
         excused = status == "Excused"
-        pct     = None if (excused or class_duration_min == 0) else round((dur_min / class_duration_min) * 100, 1)
+        pct     = None if (excused or class_duration_sec == 0) else round((dur_sec / class_duration_sec) * 100, 1)
 
         values = [
             r.get("name", ""),
             r.get("sr_code", ""),
             status,
-            "—" if excused else dur_min,
-            "—" if excused else class_duration_min,
+            "—" if excused else _fmt_duration(dur_sec),
+            "—" if excused else _fmt_duration(class_duration_sec),
             "—" if pct is None else pct,
             r.get("note", "") or "",
         ]

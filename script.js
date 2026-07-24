@@ -1072,16 +1072,18 @@ async function viewAndPrintPDF(class_code, date, session_time) {
 
         /// ── fixing part absent showing  ─────────────────────────────────
 
-        // ── University format: ONLY Present and Late students in the roster ──
-        // Absent students are NOT included — the dean monitors only those who
-        // physically attended. The roster is renumbered sequentially starting
-        // from 1 based on who actually attended.
+        // ── University format: only students who actually attended appear ──
+        // Absent students are excluded. Partial is treated the same as
+        // Absent — falling below the attendance-duration threshold means
+        // they didn't really attend enough to count, so they're left off
+        // the roster entirely. The roster is renumbered sequentially
+        // starting from 1 based on who actually attended.
 
         // Layout: rows 1–30 in the LEFT column, rows 31–60 in the RIGHT column.
         // The roster always has a minimum of 30 blank rows (one full left column).
 
 
-        const attended     = records.filter(r => r.status !== 'Absent');
+        const attended     = records.filter(r => r.status !== 'Absent' && r.status !== 'Partial');
         const ROWS_PER_COL = 30;
         const totalRows    = Math.max(attended.length, ROWS_PER_COL);
 
@@ -1111,9 +1113,12 @@ async function viewAndPrintPDF(class_code, date, session_time) {
                 if (!student) return '';
                 const p   = student.sig_path || '';
                 const col = statusColor(student.status);
-                // "SIGNED" marker — plain text for present/late, blank for absent
+                // "SIGNED" marker — plain text for attended, blank otherwise.
+                // Excused counts as attended (student was physically in class,
+                // same as a manual paper sheet); Partial never reaches here —
+                // it's already excluded from the roster above, same as Absent.
                 if (p === 'SIGNED') {
-                    const attended = ['Present', 'Late'].includes(student.status);
+                    const attended = ['Present', 'Late', 'Excused'].includes(student.status);
                     return attended ? 'SIGNED' : '';
                 }
                 // Legacy: still render stored signature images for old records
