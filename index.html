@@ -14,15 +14,16 @@
         /* ── History 3-column layout ────────────────────────────────────────── */
         .history-layout {
             display: grid;
-            grid-template-columns: 240px 260px 1fr;
+            grid-template-columns: 210px 230px 1fr;
             gap: 20px;
             height: calc(100vh - 210px);
             min-height: 400px;
+            width: 100%;
             transition: grid-template-columns 0.25s ease;
         }
         /* Collapsed: folders slide away, files + detail expand */
         .history-layout.folders-hidden {
-            grid-template-columns: 0px 280px 1fr;
+            grid-template-columns: 0px 250px 1fr;
         }
         .history-layout.folders-hidden .history-col-folders {
             overflow: hidden;

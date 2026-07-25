@@ -956,9 +956,12 @@ async function historyLoadDetail(class_code, date, session_time) {
         const records = await res.json();
         const present = records.filter(r => r.status === 'Present');
         const late    = records.filter(r => r.status === 'Late');
+        const excused = records.filter(r => r.status === 'Excused');
         // Partial counts as Absent here — same policy as the attendance
         // sheet: falling below the duration threshold means they didn't
-        // really attend enough to count.
+        // really attend enough to count. Excused gets its own bucket —
+        // it's the opposite of a truancy, so it shouldn't disappear into
+        // either Present or Absent.
         const absent  = records.filter(r => r.status === 'Absent' || r.status === 'Partial');
         const cls     = classFolders.find(f => f.id === class_code) || {};
         // Parse date safely — PostgreSQL returns "YYYY-MM-DD" plain string
@@ -971,16 +974,18 @@ async function historyLoadDetail(class_code, date, session_time) {
         const statusBadge = (lbl) => {
             if (lbl === 'Present') return 'bg-green-100 text-green-700';
             if (lbl === 'Late')    return 'bg-yellow-100 text-yellow-700';
+            if (lbl === 'Excused') return 'bg-violet-100 text-violet-700';
             return 'bg-red-100 text-red-700';
         };
-        const renderRows = (list, color, label) => list.length === 0
+        const renderRows = (list, label) => list.length === 0
             ? '<p class="text-[10px] text-gray-300 font-bold py-2 pl-2">None</p>'
             : list.map(r => {
                 return `
-                <div class="flex items-center justify-between p-3 bg-white rounded-2xl border border-gray-100 mb-2">
+                <div class="flex items-center justify-between p-4 bg-white rounded-2xl border border-gray-100 mb-2">
                     <div>
                         <p class="text-sm font-black text-gray-900">${r.name}</p>
                         <p class="text-[9px] text-gray-400 font-bold">${r.sr_code || ''}</p>
+                        ${r.note ? `<p class="text-[10px] text-gray-400 mt-1">${r.note}</p>` : ''}
                     </div>
                     <div class="text-right">
                         <span class="text-[9px] font-black px-2 py-0.5 rounded-lg uppercase ${statusBadge(label)}">${label}</span>
@@ -989,36 +994,50 @@ async function historyLoadDetail(class_code, date, session_time) {
             }).join('');
 
         panel.innerHTML = `
-            <div class="flex justify-between items-start mb-6">
-                <div>
-                    <h3 class="font-black text-gray-900 text-lg">${cls.subject || class_code}</h3>
-                    <p class="text-[10px] text-gray-400 font-bold uppercase">${cls.section || ''} · ${dispDate}</p>
+            <div class="w-full bg-white rounded-[2rem] border border-gray-100 shadow-sm p-8 box-border">
+                <div class="flex justify-between items-start mb-6">
+                    <div>
+                        <h3 class="font-black text-gray-900 text-xl">${cls.subject || class_code}</h3>
+                        <p class="text-[10px] text-gray-400 font-bold uppercase">${cls.section || ''} · ${dispDate}</p>
+                    </div>
+                    <button onclick="viewAndPrintPDF('${class_code}','${date}','${session_time || ''}')"
+                        class="flex items-center space-x-2 px-5 py-3 bg-[#D32F2F] text-white rounded-2xl font-bold text-xs hover:bg-[#B71C1C] transition shadow-lg flex-shrink-0">
+                        <i data-lucide="printer" class="w-4 h-4"></i> <span>View &amp; Print</span>
+                    </button>
                 </div>
-                <button onclick="viewAndPrintPDF('${class_code}','${date}','${session_time || ''}')"
-                    class="flex items-center space-x-2 px-5 py-3 bg-[#D32F2F] text-white rounded-2xl font-bold text-xs hover:bg-[#B71C1C] transition shadow-lg">
-                    <i data-lucide="printer" class="w-4 h-4"></i> <span>View &amp; Print</span>
-                </button>
-            </div>
-            <div class="grid grid-cols-3 gap-4 mb-6">
-                <div class="bg-green-50 rounded-2xl p-4 text-center">
-                    <p class="text-2xl font-black text-green-600">${present.length}</p>
-                    <p class="text-[9px] font-black text-green-400 uppercase">Present</p>
+                <div class="grid grid-cols-4 gap-4 mb-6">
+                    <div class="bg-green-50 rounded-2xl p-5 text-center">
+                        <p class="text-3xl font-black text-green-600">${present.length}</p>
+                        <p class="text-[9px] font-black text-green-400 uppercase mt-1">Present</p>
+                    </div>
+                    <div class="bg-yellow-50 rounded-2xl p-5 text-center">
+                        <p class="text-3xl font-black text-yellow-600">${late.length}</p>
+                        <p class="text-[9px] font-black text-yellow-400 uppercase mt-1">Late</p>
+                    </div>
+                    <div class="bg-violet-50 rounded-2xl p-5 text-center">
+                        <p class="text-3xl font-black text-violet-600">${excused.length}</p>
+                        <p class="text-[9px] font-black text-violet-400 uppercase mt-1">Excused</p>
+                    </div>
+                    <div class="bg-red-50 rounded-2xl p-5 text-center">
+                        <p class="text-3xl font-black text-red-600">${absent.length}</p>
+                        <p class="text-[9px] font-black text-red-400 uppercase mt-1">Absent</p>
+                    </div>
                 </div>
-                <div class="bg-yellow-50 rounded-2xl p-4 text-center">
-                    <p class="text-2xl font-black text-yellow-600">${late.length}</p>
-                    <p class="text-[9px] font-black text-yellow-400 uppercase">Late</p>
+                <div class="grid grid-cols-2 gap-x-8">
+                    <div>
+                        <p class="text-[10px] font-black text-gray-400 uppercase tracking-widest">Present (${present.length})</p>
+                        ${renderRows(present,'Present')}
+                        <p class="text-[10px] font-black text-gray-400 uppercase tracking-widest mt-4">Late (${late.length})</p>
+                        ${renderRows(late,'Late')}
+                    </div>
+                    <div>
+                        <p class="text-[10px] font-black text-gray-400 uppercase tracking-widest">Excused (${excused.length})</p>
+                        ${renderRows(excused,'Excused')}
+                        <p class="text-[10px] font-black text-gray-400 uppercase tracking-widest mt-4">Absent (${absent.length})</p>
+                        ${renderRows(absent,'Absent')}
+                    </div>
                 </div>
-                <div class="bg-red-50 rounded-2xl p-4 text-center">
-                    <p class="text-2xl font-black text-red-600">${absent.length}</p>
-                    <p class="text-[9px] font-black text-red-400 uppercase">Absent</p>
-                </div>
-            </div>
-            <p class="text-[10px] font-black text-gray-400 uppercase tracking-widest">Present (${present.length})</p>
-            ${renderRows(present,'text-green-500','Present')}
-            <p class="text-[10px] font-black text-gray-400 uppercase tracking-widest mt-4">Late (${late.length})</p>
-            ${renderRows(late,'text-yellow-500','Late')}
-            <p class="text-[10px] font-black text-gray-400 uppercase tracking-widest mt-4">Absent (${absent.length})</p>
-            ${renderRows(absent,'text-red-500','Absent')}`;
+            </div>`;
         lucide.createIcons();
     } catch(e) {
         panel.innerHTML = '<p class="text-center text-gray-300 font-bold py-8 text-xs">Could not load records.</p>';
@@ -1325,37 +1344,23 @@ async function viewAndPrintPDF(class_code, date, session_time) {
             };
         }
 
-        // ── Download Excel — duration-comparison report (openpyxl backend) ───
+        // ── Duration Report — shows an in-app preview (matching the review
+        // mockup) instead of blindly downloading; the actual .xlsx download
+        // happens from the "Export to Excel" button inside that preview ──
         const dlExcelBtn = document.getElementById('downloadExcelBtn');
         if (dlExcelBtn) {
-            dlExcelBtn.onclick = async () => {
-                const origHTML = dlExcelBtn.innerHTML;
-                dlExcelBtn.innerHTML = '<span>Downloading...</span>';
-                dlExcelBtn.disabled  = true;
-
-                try {
-                    const sp  = session_time ? `?session_time=${encodeURIComponent(session_time)}` : '';
-                    const res = await authFetch(`/api/download_excel/${class_code}/${date}${sp}`);
-
-                    if (!res.ok) throw new Error(`Server error ${res.status}`);
-
-                    const blob = await res.blob();
-                    const url  = URL.createObjectURL(blob);
-                    const a    = document.createElement('a');
-                    a.href     = url;
-                    a.download = `Duration_${cls.subject || class_code}_${shortDate}.xlsx`;
-                    document.body.appendChild(a);
-                    a.click();
-                    document.body.removeChild(a);
-                    URL.revokeObjectURL(url);
-                } catch (err) {
-                    console.error('Excel download failed:', err);
-                    alert('Duration report download failed: ' + err.message);
-                } finally {
-                    dlExcelBtn.innerHTML = origHTML;
-                    dlExcelBtn.disabled  = false;
-                    if (window.lucide) lucide.createIcons();
-                }
+            dlExcelBtn.onclick = () => {
+                const previewHtml = buildDurationPreviewHtml(records, {
+                    subject: cls.subject, section: cls.section, room: roomVal,
+                    dispDate, rawDate: date, timeVal, faculty,
+                    class_code, session_time: session_time || '',
+                });
+                const pfdoc = frame.contentDocument || frame.contentWindow.document;
+                pfdoc.open();
+                pfdoc.write(previewHtml);
+                pfdoc.close();
+                document.getElementById('docTitle').innerText =
+                    `Duration Report — ${cls.subject || class_code} | ${shortDate}`;
             };
         }
 
@@ -1366,6 +1371,152 @@ async function viewAndPrintPDF(class_code, date, session_time) {
 
     } catch(e) {
         alert('Could not load record: ' + e.message);
+    }
+}
+
+// ── Duration Report preview — same data the .xlsx export uses, rendered
+// in-app so the instructor can review it before deciding to download ──────
+function buildDurationPreviewHtml(records, meta) {
+    // dispDate is for the header ("7/24/2026"); rawDate is the ISO date
+    // ("2026-07-24") the download API route actually needs — don't mix them.
+    const { subject, section, room, dispDate, rawDate, timeVal, faculty, class_code, session_time } = meta;
+
+    const STATUS = {
+        Present: { bg: '#E8F5E9', fg: '#2E7D32' },
+        Late:    { bg: '#FFF8E1', fg: '#F57F17' },
+        Partial: { bg: '#FFF8E1', fg: '#F57F17' },
+        Excused: { bg: '#EEECFB', fg: '#5B4FC4' },
+        Absent:  { bg: '#FFEBEE', fg: '#D32F2F' },
+    };
+    const BAR_COLOR = { Present: '#2E7D32', Late: '#F57F17', Partial: '#F57F17', Absent: '#D32F2F' };
+
+    const counts = { Present: 0, Late: 0, Partial: 0, Excused: 0, Absent: 0 };
+    records.forEach(r => { if (counts[r.status] !== undefined) counts[r.status]++; });
+
+    const classDurMin = Math.max(0, ...records.map(r => r.class_duration_min || 0), 0);
+    const classDurSec = classDurMin * 60;
+
+    const fmtDur = (sec) => {
+        sec = Math.round(sec || 0);
+        const m = Math.floor(sec / 60), s = sec % 60;
+        return `${m}m ${s}s`;
+    };
+
+    const statTile = (label, n, c) => `
+      <div style="background:${c.bg};border-radius:14px;padding:14px;text-align:center">
+        <div style="font-size:22px;font-weight:800;color:${c.fg}">${n}</div>
+        <div style="font-size:10px;font-weight:700;color:${c.fg};text-transform:uppercase;
+                    letter-spacing:.05em;margin-top:2px;opacity:.8">${label}</div>
+      </div>`;
+
+    const th = (label) => `<th style="text-align:left;padding:10px 12px;font-size:10.5px;font-weight:800;
+      text-transform:uppercase;letter-spacing:.05em;color:#9CA3AF;border-bottom:1px solid #E8EAED;
+      white-space:nowrap">${label}</th>`;
+
+    const rows = records.map(r => {
+        const st      = STATUS[r.status] || STATUS.Absent;
+        const excused = r.status === 'Excused';
+        const dur     = r.presence_duration_sec || 0;
+        const pct     = (excused || classDurSec === 0) ? null : Math.min(100, Math.round((dur / classDurSec) * 100));
+        const barHtml = excused
+          ? `<div style="height:8px;border-radius:4px;
+                 background:repeating-linear-gradient(135deg,#EEECFB 0 5px,transparent 5px 10px);
+                 border:1px dashed #5B4FC4"></div>
+             <div style="font-size:10px;color:#9CA3AF;margin-top:3px">Excused</div>`
+          : `<div style="position:relative;height:8px;border-radius:4px;background:#F3F4F6">
+               <div style="position:absolute;left:0;top:0;height:100%;width:${pct||0}%;
+                    border-radius:4px;background:${BAR_COLOR[r.status] || '#9CA3AF'}"></div>
+             </div>
+             <div style="font-size:10px;color:#9CA3AF;margin-top:3px">${pct===null ? '—' : pct+'%'}</div>`;
+
+        return `<tr>
+          <td style="padding:10px 12px;border-bottom:1px solid #F3F4F6;font-weight:600;color:#111827">${r.name}</td>
+          <td style="padding:10px 12px;border-bottom:1px solid #F3F4F6;color:#6B7280;font-size:12px">${r.sr_code||''}</td>
+          <td style="padding:10px 12px;border-bottom:1px solid #F3F4F6">
+            <span style="display:inline-block;padding:3px 9px;border-radius:99px;font-size:11px;
+                  font-weight:700;background:${st.bg};color:${st.fg}">${r.status}</span>
+          </td>
+          <td style="padding:10px 12px;border-bottom:1px solid #F3F4F6;font-size:12.5px;white-space:nowrap">${excused ? '—' : fmtDur(dur)}</td>
+          <td style="padding:10px 12px;border-bottom:1px solid #F3F4F6;font-size:12.5px;white-space:nowrap">${fmtDur(classDurSec)}</td>
+          <td style="padding:10px 12px;border-bottom:1px solid #F3F4F6;min-width:130px">${barHtml}</td>
+          <td style="padding:10px 12px;border-bottom:1px solid #F3F4F6;font-size:12px;color:#6B7280;max-width:220px">${r.note || ''}</td>
+        </tr>`;
+    }).join('');
+
+    return `<!DOCTYPE html><html><head><meta charset="UTF-8">
+      <style>
+        * { box-sizing:border-box; margin:0; padding:0;
+            font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif; }
+        body { background:#F7F8FA; padding:28px; }
+        table { border-collapse:collapse; width:100%; }
+      </style></head>
+      <body>
+        <div style="max-width:1100px;margin:0 auto">
+          <div style="font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;
+               color:#D32F2F;margin-bottom:6px">Duration Report</div>
+          <h1 style="font-size:22px;font-weight:800;color:#111827;margin-bottom:6px">${subject || ''} — ${section || ''}</h1>
+          <p style="font-size:12.5px;color:#6B7280;margin-bottom:20px">
+            Room: ${room || 'TBA'} &nbsp;|&nbsp; Date: ${dispDate} &nbsp;|&nbsp;
+            Time: ${timeVal || ''} &nbsp;|&nbsp; Faculty: ${faculty || ''}
+          </p>
+          <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:20px">
+            ${statTile('Present', counts.Present, STATUS.Present)}
+            ${statTile('Late',    counts.Late,    STATUS.Late)}
+            ${statTile('Partial', counts.Partial, STATUS.Partial)}
+            ${statTile('Excused', counts.Excused, STATUS.Excused)}
+            ${statTile('Absent',  counts.Absent,  STATUS.Absent)}
+          </div>
+          <div style="background:white;border:1px solid #E8EAED;border-radius:14px;overflow:hidden">
+            <table>
+              <thead><tr style="background:#FAFAFA">
+                ${th('Student')}${th('SR Code')}${th('Status')}${th('Time Present')}
+                ${th('Class Duration')}${th('% Attended')}${th('Note')}
+              </tr></thead>
+              <tbody>${rows}</tbody>
+            </table>
+          </div>
+          <div style="display:flex;justify-content:flex-end;margin-top:18px">
+            <button id="exportXlsxBtn" style="display:inline-flex;align-items:center;gap:8px;
+                background:#D32F2F;color:white;border:none;padding:12px 22px;border-radius:12px;
+                font-weight:700;font-size:13px;cursor:pointer;font-family:inherit">
+              <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                <path d="M12 3v12m0 0l-4-4m4 4l4-4M4 19h16" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              Export to Excel
+            </button>
+          </div>
+        </div>
+        <script>
+          document.getElementById('exportXlsxBtn').addEventListener('click', function () {
+            window.parent.downloadDurationExcel(
+              ${JSON.stringify(class_code)}, ${JSON.stringify(rawDate)},
+              ${JSON.stringify(session_time || '')}, ${JSON.stringify(subject || '')}
+            );
+          });
+        <\/script>
+      </body></html>`;
+}
+
+async function downloadDurationExcel(class_code, date, session_time, subject) {
+    try {
+        const sp  = session_time ? `?session_time=${encodeURIComponent(session_time)}` : '';
+        const res = await authFetch(`/api/download_excel/${class_code}/${date}${sp}`);
+        if (!res.ok) throw new Error(`Server error ${res.status}`);
+
+        const blob = await res.blob();
+        const url  = URL.createObjectURL(blob);
+        const a    = document.createElement('a');
+        const [yr, mo, dy] = (date || '').split('-');
+        const shortDate = (mo && dy && yr) ? `${mo}-${dy}-${String(yr).slice(-2)}` : date;
+        a.href     = url;
+        a.download = `Duration_${subject || class_code}_${shortDate}.xlsx`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    } catch (err) {
+        console.error('Excel download failed:', err);
+        alert('Duration report download failed: ' + err.message);
     }
 }
 

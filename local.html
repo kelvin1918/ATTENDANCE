@@ -470,7 +470,7 @@ label.field-label{display:block;font-size:12px;font-weight:600;
 /* ══════════════════════════════════════════════════════════════════════
    SESSION SUMMARY MODAL
    ══════════════════════════════════════════════════════════════════════ */
-#modal-summary .modal{max-width:840px}
+#modal-summary .modal{max-width:1200px;width:94vw}
 .summary-stats{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;
                margin:16px 0}
 .summary-stat{text-align:center;padding:16px;border-radius:var(--r-sm);
@@ -485,14 +485,14 @@ label.field-label{display:block;font-size:12px;font-weight:600;
 .stat-excused .summary-stat-num{color:var(--excused)}
 
 /* Review table — per-student manual override */
-#sum-table-wrap{max-height:320px;overflow-y:auto;border:1px solid var(--border);
+#sum-table-wrap{max-height:420px;overflow-y:auto;border:1px solid var(--border);
                 border-radius:var(--r-sm)}
 #sum-table{width:100%;border-collapse:collapse;font-size:13px}
 #sum-table thead th{position:sticky;top:0;background:var(--bg);text-align:left;
                     font-size:10.5px;font-weight:700;text-transform:uppercase;
                     letter-spacing:.4px;color:var(--subtle);padding:8px 10px;
                     border-bottom:1px solid var(--border)}
-#sum-table tbody td{padding:7px 10px;border-bottom:1px solid var(--border);
+#sum-table tbody td{padding:11px 14px;border-bottom:1px solid var(--border);
                     vertical-align:middle}
 #sum-table tbody tr:last-child td{border-bottom:none}
 .sum-name{font-weight:600}
@@ -512,9 +512,9 @@ label.field-label{display:block;font-size:12px;font-weight:600;
               background-repeat:no-repeat;background-position:right 8px center}
 .sum-override:hover{border-color:var(--red)}
 .sum-override.is-overridden{border-color:var(--excused);color:var(--excused)}
-.sum-note{width:160px;font-family:var(--font);font-size:12px;color:var(--text);
+.sum-note{width:220px;font-family:var(--font);font-size:12px;color:var(--text);
           background:var(--surface);border:1.5px solid var(--border);
-          border-radius:var(--r-sm);padding:5px 8px;resize:vertical;min-height:30px}
+          border-radius:var(--r-sm);padding:6px 9px;resize:vertical;min-height:34px}
 .sum-note::placeholder{color:var(--subtle)}
 
 /* ══════════════════════════════════════════════════════════════════════
@@ -1002,7 +1002,7 @@ label.field-label{display:block;font-size:12px;font-weight:600;
 
 <!-- ═══ MODAL: SESSION SUMMARY ════════════════════════════════════════════ -->
 <div id="modal-summary" class="modal-backdrop">
-  <div class="modal" style="max-width:440px">
+  <div class="modal">
     <div class="modal-header">
       <span class="modal-title">Session Summary</span>
     </div>
@@ -1040,6 +1040,7 @@ label.field-label{display:block;font-size:12px;font-weight:600;
             <tr>
               <th>Student</th>
               <th>Auto-detected</th>
+              <th>Camera Time</th>
               <th>Override</th>
               <th>Note (optional)</th>
             </tr>
@@ -2515,15 +2516,19 @@ document.getElementById('btn-save-attendance').addEventListener('click', async (
   function renderSummaryTable() {
     document.getElementById('sum-detail').innerHTML = records.map(r => {
       const durStr = durationLabel(r.duration_sec);
-      let durTag = (r.status !== 'Absent' && durStr) ? `<span class="sum-dur">${durStr} on camera</span>` : '';
-      if (r.status === 'Partial' && classDurationMin > 0) {
-        const pct = Math.round((r.duration_sec / (classDurationMin * 60)) * 100);
-        durTag = `<span class="sum-dur">${durStr} on camera — ${pct}% of class</span>`;
+      let camTime = '<span class="sum-dur">—</span>';
+      if (r.status !== 'Absent' && durStr) {
+        camTime = durStr;
+        if (classDurationMin > 0) {
+          const pct = Math.round((r.duration_sec / (classDurationMin * 60)) * 100);
+          camTime += `<span class="sum-dur">${pct}% of session</span>`;
+        }
       }
       const ov = window._overrides[r.name];
       return `<tr>
         <td><span class="sum-name">${r.name}</span></td>
-        <td>${badgeHtml(r.status)}${durTag}</td>
+        <td>${badgeHtml(r.status)}</td>
+        <td>${camTime}</td>
         <td>
           <select class="sum-override ${ov.status!=='auto'?'is-overridden':''}" data-name="${r.name}">
             <option value="auto"    ${ov.status==='auto'?'selected':''}>Auto (camera)</option>
