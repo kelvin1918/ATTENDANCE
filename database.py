@@ -934,12 +934,12 @@ def save_attendance(class_code, section, subject, records,
     conn = get_db()
     cur  = get_cursor(conn)
 
-    # Delete existing records for this exact session (camera-open time HH:MM).
+    # Delete existing records for this exact session (camera-open time HH:MM:SS).
     # This allows re-saving without duplicates while keeping other sessions intact.
     cur.execute(
         """DELETE FROM attendance
            WHERE class_code = %s AND date = %s AND session_time = %s""",
-        (class_code, date, session_time[:5])
+        (class_code, date, session_time)
     )
 
     for r in records:
@@ -964,7 +964,7 @@ def save_attendance(class_code, section, subject, records,
                 r["status"],
                 full_timestamp,
                 date,
-                session_time[:5],
+                session_time,
                 duration_sec,
                 note,
                 class_duration_min,
@@ -997,7 +997,7 @@ def get_attendance_session(class_code, date, session_time=None):
                    WHEN 'Excused' THEN 4
                    WHEN 'Absent'  THEN 5
                  END, name""",
-            (class_code, date, session_time[:5])
+            (class_code, date, session_time)
         )
     else:
         cur.execute(
@@ -1170,16 +1170,16 @@ def get_absence_counts(instructor_id=None):
                    c.subject                                        AS name,
                    c.course_code,
                    c.section,
-                   COUNT(*) FILTER (WHERE a.status = 'Absent')     AS total_absent,
+                   COUNT(*) FILTER (WHERE a.status IN ('Absent', 'Partial'))     AS total_absent,
                    COUNT(*)                                         AS total_records,
                    COUNT(DISTINCT (a.date || '_' || COALESCE(a.session_time, '')))
                                                                     AS total_sessions,
                    ROUND(
-                       COUNT(*) FILTER (WHERE a.status = 'Absent')::numeric
+                       COUNT(*) FILTER (WHERE a.status IN ('Absent', 'Partial'))::numeric
                        / NULLIF(COUNT(DISTINCT (a.date || '_' || COALESCE(a.session_time, ''))), 0)
                    , 2)                                             AS avg_absent,
                    ROUND(
-                       COUNT(*) FILTER (WHERE a.status = 'Absent')::numeric
+                       COUNT(*) FILTER (WHERE a.status IN ('Absent', 'Partial'))::numeric
                        / NULLIF(COUNT(*), 0) * 100
                    , 1)                                             AS pct_absent,
                    MAX(a.date)                                      AS last_session_date,
