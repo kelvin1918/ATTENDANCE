@@ -941,6 +941,9 @@ async function historyLoadFiles(class_code) {
 
 async function historySelectSession(class_code, date, session_time) {
     historySelectedSession = { class_code, date, session_time };
+    // Auto-collapse the Class Folders column to give the detail panel more
+    // room, same as clicking the manual chevrons-left toggle.
+    if (!_historyFoldersHidden) toggleHistoryFolders();
     await historyLoadFiles(class_code);
     await historyLoadDetail(class_code, date, session_time);
 }
@@ -1626,7 +1629,7 @@ function renderFolderView(cls, class_code, students) {
         <!-- Student Search -->
         <div class="relative mb-4">
             <i data-lucide="search" class="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-300"></i>
-            <input type="text"
+            <input type="text" id="studentSearchInput"
                    oninput="studentSearchVal = this.value; applyStudentSearch();"
                    value="${studentSearchVal.replace(/"/g, '&quot;')}"
                    placeholder="Search student by name or SR code..."
@@ -1689,6 +1692,14 @@ function applyStudentFilter(filter) {
 function applyStudentSearch() {
     const cls = classFolders.find(f => f.id === currentOpenedFolder) || {};
     renderFolderView(cls, currentOpenedFolder, window._cachedStudents || []);
+    // Re-rendering content-area replaces the input node, which drops focus —
+    // restore it so typing isn't interrupted after every keystroke.
+    const input = document.getElementById('studentSearchInput');
+    if (input) {
+        input.focus();
+        const pos = studentSearchVal.length;
+        input.setSelectionRange(pos, pos);
+    }
 }
 
 async function updateStudentStatus(studentId, newStatus) {
@@ -2251,7 +2262,7 @@ async function shareRegistrationLink(classCode) {
                   width:100%;box-shadow:0 20px 60px rgba(0,0,0,.2)">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
           <h3 style="font-size:1.1rem;font-weight:800;color:#1a1a1a">Student Registration Link</h3>
-          <button onclick="this.closest('[style]').remove()"
+          <button onclick="this.closest('[style*=fixed]').remove()"
             style="background:none;border:none;font-size:1.2rem;cursor:pointer;color:#999">✕</button>
         </div>
         <p style="font-size:.85rem;color:#555;margin-bottom:16px">
