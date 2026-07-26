@@ -563,6 +563,11 @@ function renderRecentActivityList(records, totalCount = null) {
                             ${r.subject}
                         </span>
                         <span class="text-[9px] text-gray-400 font-bold uppercase">${r.section}</span>
+                        ${r.is_makeup ? `
+                        <span class="inline-flex items-center gap-1 bg-amber-50 text-amber-700 text-[9px] font-black px-2 py-0.5 rounded-lg uppercase tracking-wide">
+                            <i data-lucide="alert-triangle" class="w-2.5 h-2.5"></i>
+                            Rescheduled
+                        </span>` : ''}
                     </div>
                 </div>
             </div>
@@ -785,6 +790,10 @@ let historyClassSessions   = [];
 
 async function renderHistoryPage() {
     currentType = 'history';
+    // Every call rebuilds #historyLayout from scratch, always starting expanded —
+    // keep this flag in sync so the auto-collapse-on-file-click check below
+    // doesn't skip itself based on a stale value from a previous render.
+    _historyFoldersHidden = false;
 
     try {
         const res = await authFetch('/api/classes');
@@ -931,7 +940,7 @@ async function historyLoadFiles(class_code) {
                     </div>
                     <div class="min-w-0">
                         <p class="font-black text-gray-900 text-xs truncate">${fileLabel}</p>
-                        <p class="text-[9px] text-gray-400 font-bold">${dispTime} · P:${s.present} L:${s.late} A:${s.absent}</p>
+                        <p class="text-[9px] text-gray-400 font-bold">${dispTime} · P:${s.present} L:${s.late} A:${s.absent}${s.is_makeup ? ' · <span class="text-amber-600">Rescheduled</span>' : ''}</p>
                     </div>
                 </div>
             </div>`;
@@ -1002,6 +1011,11 @@ async function historyLoadDetail(class_code, date, session_time) {
                     <div>
                         <h3 class="font-black text-gray-900 text-xl">${cls.subject || class_code}</h3>
                         <p class="text-[10px] text-gray-400 font-bold uppercase">${cls.section || ''} · ${dispDate}</p>
+                        ${records[0] && records[0].is_makeup ? `
+                        <div class="mt-2 inline-flex items-center gap-1.5 px-3 py-1 bg-amber-50 text-amber-700 rounded-lg text-[9px] font-black uppercase tracking-wide">
+                            <i data-lucide="alert-triangle" class="w-3 h-3"></i>
+                            <span>Rescheduled${records[0].scheduled_time ? ` — originally ${records[0].scheduled_time}` : ''}</span>
+                        </div>` : ''}
                     </div>
                     <button onclick="viewAndPrintPDF('${class_code}','${date}','${session_time || ''}')"
                         class="flex items-center space-x-2 px-5 py-3 bg-[#D32F2F] text-white rounded-2xl font-bold text-xs hover:bg-[#B71C1C] transition shadow-lg flex-shrink-0">
@@ -1189,6 +1203,10 @@ async function viewAndPrintPDF(class_code, date, session_time) {
         const [yr, mo, dy] = (date || '').split('-');
         const shortDate = (mo && dy && yr) ? `${mo}-${dy}-${String(yr).slice(-2)}` : date;
 
+        // ── Make-up/rescheduled session note ─────────────────────────────────
+        const isMakeupSession  = !!(records[0] && records[0].is_makeup);
+        const scheduledTimeOrig = (records[0] && records[0].scheduled_time) || '';
+
         // ── Full HTML matching BatStateU-REC-ATT-11 Rev.01 exactly ───────────
         const html = `
             <div style="font-family:'Times New Roman',Times,serif;color:black;background:white;
@@ -1233,6 +1251,12 @@ async function viewAndPrintPDF(class_code, date, session_time) {
                             Name of Faculty:&nbsp;&nbsp;${faculty}
                         </td>
                     </tr>
+                    ${isMakeupSession ? `
+                    <tr>
+                        <td style="border:1px solid black;border-top:none;padding:6px 10px;font-style:italic;">
+                            Remarks:&nbsp;&nbsp;Make-up / Rescheduled Session${scheduledTimeOrig ? ` — originally scheduled ${scheduledTimeOrig}` : ''}
+                        </td>
+                    </tr>` : ''}
                 </table>
                 <table style="width:100%;border-collapse:collapse;font-size:11px;table-layout:fixed;">
                     <tr>
@@ -3146,20 +3170,24 @@ async function saveAttendanceFromCamera() {
         });
 
         // Use custom schedule info if makeup class
-        const activeSchedule = _customSchedule || schedules.find(s =>
+        const originalSchedule = schedules.find(s =>
             s.subject && cls.subject &&
             s.subject.trim().toLowerCase() === cls.subject.trim().toLowerCase()
         );
+        const activeSchedule = _customSchedule || originalSchedule;
+        const isMakeup = !!(_customSchedule && _customSchedule.isMakeup);
 
         const saveRes = await authFetch('/api/save_attendance', {
             method:  'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                class_code:   currentOpenedFolder,
-                section:      cls.section  || '',
-                subject:      cls.subject  || '',
-                room:         activeSchedule ? activeSchedule.room || '' : '',
-                session_time: sessionTime,
+                class_code:     currentOpenedFolder,
+                section:        cls.section  || '',
+                subject:        cls.subject  || '',
+                room:           activeSchedule ? activeSchedule.room || '' : '',
+                session_time:   sessionTime,
+                is_makeup:      isMakeup,
+                scheduled_time: isMakeup && originalSchedule ? originalSchedule.time || '' : '',
                 records
             })
         });

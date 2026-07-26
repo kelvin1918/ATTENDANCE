@@ -701,6 +701,8 @@ def api_save_attendance():
     section      = data.get("section", "")
     subject      = data.get("subject", "")
     session_time = data.get("session_time", _dt.now().strftime("%H:%M:%S"))
+    is_makeup      = bool(data.get("is_makeup", False))
+    scheduled_time = data.get("scheduled_time", "") or ""
 
     # ── Step 1: purge LIVE staging rows for this class today ─────────────────
     try:
@@ -725,11 +727,13 @@ def api_save_attendance():
     absent_cnt   = sum(1 for r in records if r.get("status") == "Absent")
 
     db.save_attendance(
-        class_code   = class_code,
-        section      = section,
-        subject      = subject,
-        records      = records,
-        session_time = session_time,
+        class_code     = class_code,
+        section        = section,
+        subject        = subject,
+        records        = records,
+        session_time   = session_time,
+        is_makeup      = is_makeup,
+        scheduled_time = scheduled_time,
     )
 
     # Notify instructor that attendance was recorded
@@ -870,6 +874,10 @@ def api_download_pdf(class_code, date):
     # Filter to only Present and Late (university format excludes absences)
     attended = [r for r in records if r["status"] != "Absent"]
 
+    # Make-up/rescheduled session info — same value on every row of the session
+    is_makeup      = bool(records[0].get("is_makeup")) if records else False
+    scheduled_time = (records[0].get("scheduled_time") or "") if records else ""
+
     # ── Enrich each record with the student's e-signature path ───────────────
     # Look up the student by sr_code (preferred) then by name within the class.
     # The signature column in the students table stores the relative file path
@@ -925,6 +933,8 @@ def api_download_pdf(class_code, date):
             faculty_name = faculty_name,
             records      = attended,
             session_time = session_time or "",
+            is_makeup      = is_makeup,
+            scheduled_time = scheduled_time,
         )
     except Exception as pdf_err:
         print(f"[PDF] Generation error: {pdf_err}")

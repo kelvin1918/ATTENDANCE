@@ -204,6 +204,11 @@ def init_db():
     # session for the exact scheduled duration, so % Attended must be measured
     # against what actually happened, not what was planned.
     cur.execute("ALTER TABLE attendance ADD COLUMN IF NOT EXISTS class_duration_min REAL DEFAULT 0;")
+    # Set when the instructor opened the camera outside the class's official
+    # schedule window and confirmed a make-up/custom time instead — lets the
+    # dean/admin tell a rescheduled session apart from one held on time.
+    cur.execute("ALTER TABLE attendance ADD COLUMN IF NOT EXISTS is_makeup BOOLEAN DEFAULT FALSE;")
+    cur.execute("ALTER TABLE attendance ADD COLUMN IF NOT EXISTS scheduled_time VARCHAR(50) DEFAULT '';")
 
     # ── 6. schedules — references classes + instructors ───────────────────────
     cur.execute("""
@@ -910,7 +915,8 @@ def get_removed_students(instructor_id):
 # ── ATTENDANCE ────────────────────────────────────────────────────────────────
 
 def save_attendance(class_code, section, subject, records,
-                    date=None, session_time=None):
+                    date=None, session_time=None,
+                    is_makeup=False, scheduled_time=""):
     """
     records = list of dicts:
         [
@@ -925,6 +931,10 @@ def save_attendance(class_code, section, subject, records,
     session_time = "HH:MM:SS" string — the camera-open time, used to group all
     students from one scanning session. Stored on every row so sessions are never
     mixed up even when students scan across different minutes.
+    is_makeup / scheduled_time = set when the instructor opened the camera
+    outside the class's official schedule window and confirmed a make-up
+    time instead; scheduled_time keeps the ORIGINAL official time string
+    (e.g. "7:00 AM - 10:00 AM") so reports can show what was rescheduled.
     """
     if date is None:
         date = datetime.now().strftime("%Y-%m-%d")
@@ -953,8 +963,8 @@ def save_attendance(class_code, section, subject, records,
             """INSERT INTO attendance
                (class_code, sr_code, name, section, subject, status,
                 timestamp, date, session_time, presence_duration_sec, note,
-                class_duration_min)
-               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                class_duration_min, is_makeup, scheduled_time)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
             (
                 class_code,
                 r.get("sr_code", ""),
@@ -968,6 +978,8 @@ def save_attendance(class_code, section, subject, records,
                 duration_sec,
                 note,
                 class_duration_min,
+                is_makeup,
+                scheduled_time,
             )
         )
 
@@ -986,7 +998,8 @@ def get_attendance_session(class_code, date, session_time=None):
                    id, class_code, sr_code, name, section, subject, status,
                    TO_CHAR(timestamp, 'YYYY-MM-DD HH24:MI:SS') AS timestamp,
                    TO_CHAR(date, 'YYYY-MM-DD')                 AS date,
-                   session_time, presence_duration_sec, note, class_duration_min
+                   session_time, presence_duration_sec, note, class_duration_min,
+                   is_makeup, scheduled_time
                FROM attendance
                WHERE class_code = %s AND date = %s AND session_time = %s
                ORDER BY
@@ -1005,7 +1018,8 @@ def get_attendance_session(class_code, date, session_time=None):
                    id, class_code, sr_code, name, section, subject, status,
                    TO_CHAR(timestamp, 'YYYY-MM-DD HH24:MI:SS') AS timestamp,
                    TO_CHAR(date, 'YYYY-MM-DD')                 AS date,
-                   session_time, presence_duration_sec, note, class_duration_min
+                   session_time, presence_duration_sec, note, class_duration_min,
+                   is_makeup, scheduled_time
                FROM attendance
                WHERE class_code = %s AND date = %s
                ORDER BY
@@ -1090,7 +1104,9 @@ def get_sessions_by_class(class_code):
                SUM(CASE WHEN a.status='Late'    THEN 1 ELSE 0 END)         AS late,
                -- Partial counts as Absent here too — fell below the
                -- attendance-duration threshold, same policy as the sheet.
-               SUM(CASE WHEN a.status IN ('Absent','Partial') THEN 1 ELSE 0 END) AS absent
+               SUM(CASE WHEN a.status IN ('Absent','Partial') THEN 1 ELSE 0 END) AS absent,
+               BOOL_OR(a.is_makeup)                                         AS is_makeup,
+               MAX(a.scheduled_time)                                        AS scheduled_time
            FROM attendance a
            WHERE a.class_code = %s AND a.session_time != 'LIVE'
            GROUP BY a.class_code, a.date, a.section, a.subject, a.session_time
@@ -1119,7 +1135,9 @@ def get_recent_activity(limit=10, instructor_id=None):
                        CASE WHEN a.session_time ~ '^[0-9]{2}:[0-9]{2}' THEN a.session_time ELSE NULL END,
                        TO_CHAR(MIN(a.timestamp), 'HH24:MI:SS')
                    )                                                         AS session_time,
-                   TO_CHAR(MIN(a.timestamp), 'HH24:MI:SS')                  AS time
+                   TO_CHAR(MIN(a.timestamp), 'HH24:MI:SS')                  AS time,
+                   BOOL_OR(a.is_makeup)                                     AS is_makeup,
+                   MAX(a.scheduled_time)                                    AS scheduled_time
                FROM attendance a
                JOIN classes c ON c.id = a.class_code
                WHERE c.instructor_id = %s AND a.session_time != 'LIVE'
@@ -1139,7 +1157,9 @@ def get_recent_activity(limit=10, instructor_id=None):
                        CASE WHEN session_time ~ '^[0-9]{2}:[0-9]{2}' THEN session_time ELSE NULL END,
                        TO_CHAR(MIN(timestamp), 'HH24:MI:SS')
                    )                                                         AS session_time,
-                   TO_CHAR(MIN(timestamp), 'HH24:MI:SS')                    AS time
+                   TO_CHAR(MIN(timestamp), 'HH24:MI:SS')                    AS time,
+                   BOOL_OR(is_makeup)                                       AS is_makeup,
+                   MAX(scheduled_time)                                      AS scheduled_time
                FROM attendance
                WHERE session_time != 'LIVE'
                GROUP BY class_code, date, section, subject, session_time
