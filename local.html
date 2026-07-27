@@ -57,6 +57,9 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);
           cursor:pointer;display:flex;align-items:center;justify-content:center;
           transition:all .18s}
 .btn-icon:hover{border-color:var(--red);color:var(--red)}
+.btn-icon:disabled{opacity:.5;cursor:not-allowed}
+@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
+.btn-icon.spinning svg{animation:spin 1s linear infinite}
 
 /* ── FORM INPUTS ─────────────────────────────────────────────────────── */
 .input{width:100%;padding:11px 14px;border:1.5px solid var(--border);
@@ -668,6 +671,12 @@ label.field-label{display:block;font-size:12px;font-weight:600;
         <div class="instructor-avatar" id="topbar-avatar">K</div>
         <span class="instructor-name" id="topbar-name">Instructor</span>
       </div>
+      <button class="btn-icon" id="btn-sync-now" title="Sync new student photos from cloud">
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path d="M23 4v6h-6M1 20v-6h6" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </button>
       <button class="btn btn-ghost btn-sm" id="btn-logout">
         <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
           <path d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/>
@@ -995,6 +1004,59 @@ label.field-label{display:block;font-size:12px;font-weight:600;
       <div class="modal-actions">
         <button class="btn btn-ghost" onclick="closeModal('modal-register')">Cancel</button>
         <button class="btn btn-primary" id="btn-submit-reg">Register Student</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ MODAL: WRONG SCHEDULE WARNING ═══════════════════════════════════════ -->
+<div id="modal-schedule-warning" class="modal-backdrop">
+  <div class="modal" style="max-width:440px">
+    <div class="modal-header">
+      <span class="modal-title" style="color:#D32F2F">Wrong Schedule!</span>
+    </div>
+    <div class="modal-body">
+      <p id="sched-warn-info" style="font-size:13px;color:var(--muted);margin-bottom:12px"></p>
+      <p style="font-size:14px">
+        This class is not currently scheduled. Do you want to set a
+        <b>make-up / customized schedule</b> and continue, or cancel?
+      </p>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" onclick="closeModal('modal-schedule-warning')">Cancel</button>
+        <button class="btn btn-primary" onclick="_openMakeupModal()">Set Make-Up Schedule</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ MODAL: MAKE-UP / CUSTOM SCHEDULE ═════════════════════════════════════ -->
+<div id="modal-makeup" class="modal-backdrop">
+  <div class="modal" style="max-width:440px">
+    <div class="modal-header">
+      <span class="modal-title">Make-Up / Custom Schedule</span>
+    </div>
+    <div class="modal-body">
+      <div class="field">
+        <label class="field-label">Day</label>
+        <div class="input" style="background:#F3F4F6;color:#888;cursor:not-allowed" id="mk-day-display"></div>
+      </div>
+      <div class="field">
+        <label class="field-label">Room</label>
+        <input class="input" id="mk-room" placeholder="Room (e.g. VMB 401)">
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div class="field">
+          <label class="field-label">Start Time</label>
+          <select class="input" id="mk-from"></select>
+        </div>
+        <div class="field">
+          <label class="field-label">End Time</label>
+          <select class="input" id="mk-to"></select>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" onclick="closeModal('modal-makeup')">Cancel</button>
+        <button class="btn btn-primary" onclick="_confirmMakeupSchedule()">Start Scanning</button>
       </div>
     </div>
   </div>
@@ -1421,6 +1483,71 @@ async function _advanceToClasses() {
   await loadClasses();
   showScreen('screen-classes');
   initClassesScreen();
+  startAutoSync();
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   MANUAL / PERIODIC FACE SYNC (post-login)
+   ═══════════════════════════════════════════════════════════════════════ */
+let _autoSyncInterval = null;
+
+async function runFaceSync(opts = {}) {
+  const silent = !!opts.silent;
+  const btn = document.getElementById('btn-sync-now');
+
+  if (!silent) {
+    if (btn.classList.contains('spinning')) return;   // already syncing
+    btn.disabled = true;
+    btn.classList.add('spinning');
+  }
+
+  try {
+    const res = await fetch('/api/local/sync_faces', {
+      method: 'POST',
+      headers: {'X-Instructor-Email': STATE.email}
+    });
+    if (!res.ok) {
+      if (!silent) toast('Sync failed — check connection.', 'error');
+      return;
+    }
+
+    // Poll the shared progress endpoint until the background sync finishes
+    let data = {done: false};
+    while (!data.done) {
+      await new Promise(r => setTimeout(r, 400));
+      const pRes = await fetch('/api/local/sync_progress');
+      data = await pRes.json();
+    }
+
+    if (data.error) {
+      if (!silent) toast('Sync error: ' + data.error, 'error');
+    } else if (data.synced > 0) {
+      toast(`${data.synced} new face${data.synced !== 1 ? 's' : ''} synced ✓`, 'success');
+    } else if (!silent) {
+      toast('Already up to date', 'info');
+    }
+  } catch {
+    if (!silent) toast('Cannot reach the server.', 'error');
+  } finally {
+    if (!silent) {
+      btn.disabled = false;
+      btn.classList.remove('spinning');
+    }
+  }
+}
+
+document.getElementById('btn-sync-now').addEventListener('click', () => runFaceSync());
+
+function startAutoSync() {
+  stopAutoSync();
+  _autoSyncInterval = setInterval(() => runFaceSync({silent: true}), 5 * 60 * 1000);
+}
+
+function stopAutoSync() {
+  if (_autoSyncInterval) {
+    clearInterval(_autoSyncInterval);
+    _autoSyncInterval = null;
+  }
 }
 
 // Skip button — go to classes immediately without waiting for sync to finish
@@ -1572,6 +1699,7 @@ function renderClassGrid(dayFilter) {
 
 // Logout
 document.getElementById('btn-logout').addEventListener('click', () => {
+  stopAutoSync();
   STATE.email = ''; STATE.name = ''; STATE.classes = [];
   showScreen('screen-login');
   document.getElementById('inp-email').value = '';
@@ -1585,6 +1713,7 @@ async function openCameraScreen(classCode) {
   const cls = STATE.classes.find(c => c.class_code === classCode);
   if (!cls) return;
   STATE.currentClass = cls;
+  _customSchedule = null;   // reset make-up state — this class hasn't been checked yet
 
   // Show friendly short code (e.g. CPET-3201) instead of full long class_code
   document.getElementById('cam-class-code').textContent = cls.course_code || cls.class_code;
@@ -1752,7 +1881,95 @@ function _startLoadPoll(total) {
   }, 300);
 }
 
-async function startCamera() {
+/* ═══════════════════════════════════════════════════════════════════════
+   SCHEDULE CHECK — mirrors the cloud dashboard's make-up flow: opening the
+   camera outside the class's official schedule window (±30 min buffer)
+   prompts for a make-up/custom time instead of silently starting on time
+   that was never scheduled.
+   ═══════════════════════════════════════════════════════════════════════ */
+let _customSchedule = null;   // set when instructor confirms a make-up time
+
+function _parseTimeStrLocal(timeStr) {
+  try {
+    const [time, ampm] = timeStr.trim().split(' ');
+    let [h, m] = time.split(':').map(Number);
+    if (ampm === 'PM' && h !== 12) h += 12;
+    if (ampm === 'AM' && h === 12) h = 0;
+    const d = new Date();
+    d.setHours(h, m, 0, 0);
+    return d;
+  } catch { return null; }
+}
+
+function _isWithinSchedule(sched) {
+  const parts = (sched.time || '').split(' - ');
+  if (parts.length !== 2) return false;
+  const start = _parseTimeStrLocal(parts[0].trim());
+  const end   = _parseTimeStrLocal(parts[1].trim());
+  if (!start || !end) return false;
+  const buffer = 30 * 60000;
+  const now = new Date();
+  return now >= new Date(start.getTime() - buffer) && now <= new Date(end.getTime() + buffer);
+}
+
+function _todaySlotsFor(classCode) {
+  return STATE.allSchedules.filter(s =>
+    s.class_code === classCode && (s.day || '').toUpperCase() === STATE.today
+  );
+}
+
+function startCamera() {
+  const cls = STATE.currentClass;
+  if (!cls) return;
+
+  const todaySlots = _todaySlotsFor(cls.class_code);
+  const onSchedule = todaySlots.some(_isWithinSchedule);
+
+  if (onSchedule) {
+    _customSchedule = null;
+    _startCameraSession();
+    return;
+  }
+
+  // Wrong day/time (or no schedule at all) — warn, then offer a make-up slot
+  window._warnTodaySlots = todaySlots;
+  const info = document.getElementById('sched-warn-info');
+  info.innerHTML = todaySlots.length
+    ? `Scheduled: <b>${todaySlots.map(s => `${s.day} ${s.time} · Room ${s.room || 'N/A'}`).join('; ')}</b><br>Current time: <b>${new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</b>`
+    : `No schedule found for this class today.<br>Current time: <b>${new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</b>`;
+  openModal('modal-schedule-warning');
+}
+
+function _openMakeupModal() {
+  closeModal('modal-schedule-warning');
+
+  document.getElementById('mk-day-display').textContent = STATE.today + ' (Today — auto-set)';
+  document.getElementById('mk-room').value = (window._warnTodaySlots && window._warnTodaySlots[0]?.room) || '';
+
+  let opts = '';
+  for (let i = 7; i <= 21; i++) {
+    const h  = i > 12 ? i - 12 : i;
+    const ap = i >= 12 ? 'PM' : 'AM';
+    opts += `<option value="${h}:00 ${ap}">${h}:00 ${ap}</option>`;
+    opts += `<option value="${h}:30 ${ap}">${h}:30 ${ap}</option>`;
+  }
+  document.getElementById('mk-from').innerHTML = opts;
+  document.getElementById('mk-to').innerHTML   = opts;
+
+  openModal('modal-makeup');
+}
+
+function _confirmMakeupSchedule() {
+  const room = document.getElementById('mk-room').value;
+  const from = document.getElementById('mk-from').value;
+  const to   = document.getElementById('mk-to').value;
+
+  _customSchedule = { day: STATE.today, room, time: `${from} - ${to}`, isMakeup: true };
+  closeModal('modal-makeup');
+  _startCameraSession();
+}
+
+async function _startCameraSession() {
   const sel    = document.getElementById('cam-source-select');
   const source = sel.value === 'rtsp'
     ? document.getElementById('cam-rtsp-input').value.trim()
@@ -1818,6 +2035,7 @@ async function stopCamera() {
       <path d="M6 6h12v12H6z"/>
     </svg> Stop`;
   setCameraUI(false);
+  _customSchedule = null;   // session ended — next start re-checks the schedule fresh
 }
 
 function setCameraUI(on) {
@@ -2465,7 +2683,7 @@ document.getElementById('btn-save-attendance').addEventListener('click', async (
   }
 
   // Real elapsed camera-session length — from the moment "Start Camera" was
-  // clicked (STATE.sessionStart, set in startCamera()) to right now. This is
+  // clicked (STATE.sessionStart, set in _startCameraSession()) to right now. This is
   // used instead of the scheduled class block because instructors don't
   // always run a session for the exact scheduled duration — the % Attended
   // math must be measured against what actually happened this session, not
@@ -2610,6 +2828,9 @@ document.getElementById('btn-confirm-save').addEventListener('click', async () =
   // than the session_time column allows and caused save failures.
   const sessionTime = new Date(STATE.sessionStart || Date.now()).toTimeString().substring(0, 8);
 
+  const isMakeup = !!(_customSchedule && _customSchedule.isMakeup);
+  const originalSlot = _todaySlotsFor(cls.class_code)[0];
+
   const btn = document.getElementById('btn-confirm-save');
   btn.disabled = true;
   btn.textContent = 'Saving…';
@@ -2623,10 +2844,12 @@ document.getElementById('btn-confirm-save').addEventListener('click', async () =
         'X-Instructor-Email': STATE.email
       },
       body: JSON.stringify({
-        class_code:   cls.class_code,
-        section:      cls.section   || '',
-        subject:      cls.subject   || '',
-        session_time: sessionTime,
+        class_code:     cls.class_code,
+        section:        cls.section   || '',
+        subject:        cls.subject   || '',
+        session_time:   sessionTime,
+        is_makeup:      isMakeup,
+        scheduled_time: isMakeup && originalSlot ? originalSlot.time || '' : '',
         records: finalRecords,
       })
     });

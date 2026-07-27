@@ -1396,6 +1396,8 @@ def api_local_save_attendance():
     subject      = data.get("subject", "")
     session_time = data.get("session_time", datetime.now().strftime("%H:%M:%S"))
     records      = data.get("records", [])
+    is_makeup      = bool(data.get("is_makeup", False))
+    scheduled_time = data.get("scheduled_time", "") or ""
 
     if not class_code:
         return jsonify({"error": "class_code required"}), 400
@@ -1418,11 +1420,13 @@ def api_local_save_attendance():
     # 2 — Write permanent records
     try:
         db.save_attendance(
-            class_code   = class_code,
-            section      = section,
-            subject      = subject,
-            records      = records,
-            session_time = session_time,
+            class_code     = class_code,
+            section        = section,
+            subject        = subject,
+            records        = records,
+            session_time   = session_time,
+            is_makeup      = is_makeup,
+            scheduled_time = scheduled_time,
         )
     except Exception as e:
         return jsonify({"error": f"Save failed: {e}"}), 500
