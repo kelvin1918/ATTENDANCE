@@ -874,10 +874,6 @@ def api_download_pdf(class_code, date):
     # Filter to only Present and Late (university format excludes absences)
     attended = [r for r in records if r["status"] != "Absent"]
 
-    # Make-up/rescheduled session info — same value on every row of the session
-    is_makeup      = bool(records[0].get("is_makeup")) if records else False
-    scheduled_time = (records[0].get("scheduled_time") or "") if records else ""
-
     # ── Enrich each record with the student's e-signature path ───────────────
     # Look up the student by sr_code (preferred) then by name within the class.
     # The signature column in the students table stores the relative file path
@@ -933,8 +929,6 @@ def api_download_pdf(class_code, date):
             faculty_name = faculty_name,
             records      = attended,
             session_time = session_time or "",
-            is_makeup      = is_makeup,
-            scheduled_time = scheduled_time,
         )
     except Exception as pdf_err:
         print(f"[PDF] Generation error: {pdf_err}")

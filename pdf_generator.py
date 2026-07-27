@@ -171,8 +171,7 @@ def _sig_cell(sig_path, status, norm9c_style):
 
 def generate_attendance_pdf(class_id, subject, section, room, date,
                              time_str="", faculty_name="Instructor",
-                             records=None, session_time="",
-                             is_makeup=False, scheduled_time=""):
+                             records=None, session_time=""):
     if records is None:
         records = []
 
@@ -254,41 +253,34 @@ def generate_attendance_pdf(class_id, subject, section, room, date,
                    ps("cc", fontSize=10, fontName=TNR)), "", ""],
         [Paragraph(f"Name of Faculty:  {faculty_name}",
                    ps("af", fontSize=10, fontName=TNR)), "", ""],
+        [
+            Paragraph(f"Date: {disp_date}",     ps("dt", fontSize=10, fontName=TNR)),
+            Paragraph(f"Time: {time_str}",      ps("tm", fontSize=10, fontName=TNR)),
+            Paragraph(f"Room/Venue: {room}",    ps("rm", fontSize=10, fontName=TNR)),
+        ],
+        ["", "", ""],   # gray divider row
     ]
-    if is_makeup:
-        remarks = "Remarks:  Make-up / Rescheduled Session"
-        if scheduled_time:
-            remarks += f" — originally scheduled {scheduled_time}"
-        info_data.append([Paragraph(remarks, ps("rk", fontSize=9, fontName=TNR)), "", ""])
-    date_row_idx = len(info_data)
-    divider_row_idx = date_row_idx + 1
-    info_data.append([
-        Paragraph(f"Date: {disp_date}",     ps("dt", fontSize=10, fontName=TNR)),
-        Paragraph(f"Time: {time_str}",      ps("tm", fontSize=10, fontName=TNR)),
-        Paragraph(f"Room/Venue: {room}",    ps("rm", fontSize=10, fontName=TNR)),
-    ])
-    info_data.append(["", "", ""])   # gray divider row
 
     info_tbl = Table(
         info_data,
         colWidths=[I_DATE, I_TIME, I_ROOM],
-        rowHeights=[None] * divider_row_idx + [8],
+        rowHeights=[None, None, None, 8],
     )
-    span_cmds = [("SPAN", (0, i), (-1, i)) for i in range(date_row_idx)]
-    span_cmds.append(("SPAN", (0, divider_row_idx), (-1, divider_row_idx)))
     info_tbl.setStyle(TableStyle(_no_top([
-        *span_cmds,
-        ("BACKGROUND",    (0, divider_row_idx), (-1, divider_row_idx), GRAY_LIGHT),
+        ("SPAN",          (0, 0), (-1,  0)),
+        ("SPAN",          (0, 1), (-1,  1)),
+        ("SPAN",          (0, 3), (-1,  3)),
+        ("BACKGROUND",    (0, 3), (-1,  3), GRAY_LIGHT),
         ("VALIGN",        (0, 0), (-1, -1), "MIDDLE"),
-        ("ALIGN",         (0, 0), (-1, date_row_idx), "LEFT"),
-        ("TOPPADDING",    (0, 0), (-1, date_row_idx), 5),
-        ("BOTTOMPADDING", (0, 0), (-1, date_row_idx), 5),
-        ("LEFTPADDING",   (0, 0), (-1, date_row_idx), 8),
-        ("RIGHTPADDING",  (0, 0), (-1, date_row_idx), 4),
-        ("TOPPADDING",    (0, divider_row_idx), (-1, divider_row_idx), 0),
-        ("BOTTOMPADDING", (0, divider_row_idx), (-1, divider_row_idx), 0),
-        ("LEFTPADDING",   (0, divider_row_idx), (-1, divider_row_idx), 0),
-        ("RIGHTPADDING",  (0, divider_row_idx), (-1, divider_row_idx), 0),
+        ("ALIGN",         (0, 0), (-1,  2), "LEFT"),
+        ("TOPPADDING",    (0, 0), (-1,  2), 5),
+        ("BOTTOMPADDING", (0, 0), (-1,  2), 5),
+        ("LEFTPADDING",   (0, 0), (-1,  2), 8),
+        ("RIGHTPADDING",  (0, 0), (-1,  2), 4),
+        ("TOPPADDING",    (0, 3), (-1,  3), 0),
+        ("BOTTOMPADDING", (0, 3), (-1,  3), 0),
+        ("LEFTPADDING",   (0, 3), (-1,  3), 0),
+        ("RIGHTPADDING",  (0, 3), (-1,  3), 0),
     ])))
     story.append(info_tbl)
 

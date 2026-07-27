@@ -2605,8 +2605,10 @@ document.getElementById('btn-confirm-save').addEventListener('click', async () =
   });
 
   const cls         = STATE.currentClass;
-  const sessionTime = new Date().toLocaleTimeString('en-PH', {hour12: false});
-  const sched       = (STATE.allSchedules || []).find(s => s.class_code === cls.class_code);
+  // Session identity is the camera-open time (HH:MM:SS), not "now" at save-click
+  // and never the schedule's display time-range — that string is far longer
+  // than the session_time column allows and caused save failures.
+  const sessionTime = new Date(STATE.sessionStart || Date.now()).toTimeString().substring(0, 8);
 
   const btn = document.getElementById('btn-confirm-save');
   btn.disabled = true;
@@ -2624,7 +2626,7 @@ document.getElementById('btn-confirm-save').addEventListener('click', async () =
         class_code:   cls.class_code,
         section:      cls.section   || '',
         subject:      cls.subject   || '',
-        session_time: sched?.time   || sessionTime,
+        session_time: sessionTime,
         records: finalRecords,
       })
     });

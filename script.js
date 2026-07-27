@@ -1203,10 +1203,6 @@ async function viewAndPrintPDF(class_code, date, session_time) {
         const [yr, mo, dy] = (date || '').split('-');
         const shortDate = (mo && dy && yr) ? `${mo}-${dy}-${String(yr).slice(-2)}` : date;
 
-        // ── Make-up/rescheduled session note ─────────────────────────────────
-        const isMakeupSession  = !!(records[0] && records[0].is_makeup);
-        const scheduledTimeOrig = (records[0] && records[0].scheduled_time) || '';
-
         // ── Full HTML matching BatStateU-REC-ATT-11 Rev.01 exactly ───────────
         const html = `
             <div style="font-family:'Times New Roman',Times,serif;color:black;background:white;
@@ -1251,12 +1247,6 @@ async function viewAndPrintPDF(class_code, date, session_time) {
                             Name of Faculty:&nbsp;&nbsp;${faculty}
                         </td>
                     </tr>
-                    ${isMakeupSession ? `
-                    <tr>
-                        <td style="border:1px solid black;border-top:none;padding:6px 10px;font-style:italic;">
-                            Remarks:&nbsp;&nbsp;Make-up / Rescheduled Session${scheduledTimeOrig ? ` — originally scheduled ${scheduledTimeOrig}` : ''}
-                        </td>
-                    </tr>` : ''}
                 </table>
                 <table style="width:100%;border-collapse:collapse;font-size:11px;table-layout:fixed;">
                     <tr>
