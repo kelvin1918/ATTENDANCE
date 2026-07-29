@@ -1241,6 +1241,8 @@
     });
 
     // ── VERIFY SESSION ON LOAD ────────────────────────────────────────────────
+    // No valid admin session here — send to the single combined login panel
+    // rather than showing this page's own (now-legacy) credentials form.
     (async () => {
         try {
             const res = await _admFetch('/api/admin/verify_session');
@@ -1249,10 +1251,8 @@
                 return;
             }
         } catch {}
-        // Clear any stale token
         sessionStorage.removeItem('admin_token');
-        showAdmStep('credentials');
-        lucide.createIcons();
+        window.location.replace('/login');
     })();
 
     function _showAdminDashboard() {
@@ -1331,7 +1331,7 @@
         openModal("Sign Out", "Are you sure you want to end your session?", async () => {
             await _admFetch('/api/admin/logout', { method: 'POST' });
             sessionStorage.removeItem('admin_token');
-            location.reload();
+            window.location.replace('/login');
         });
     }
 
