@@ -688,7 +688,7 @@ def api_local_login():
     user = db.get_instructor_by_email(email)
     if not user:
         return jsonify({"error": "Invalid email or password."}), 401
-    if user["password"] != pwd:
+    if not db.verify_instructor_password(user, pwd):
         return jsonify({"error": "Invalid email or password."}), 401
     if user["status"] == "pending":
         return jsonify({"error": "Account pending approval. See administrator."}), 403

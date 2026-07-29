@@ -157,13 +157,13 @@
         <!-- LOGIN VIEW -->
         <div id="view-login">
             <div class="logo">LOG IN</div>
-            <h2>Instructor</h2>
-            <input type="email" id="ins-email" placeholder="Email Address" autocomplete="off" spellcheck="false">
+            <h2>Sign In</h2>
+            <input type="text" id="ins-email" placeholder="Email or Username" autocomplete="off" spellcheck="false">
             <input type="password" id="ins-pass" placeholder="Password" autocomplete="new-password">
             <button class="btn-red" id="btn-signin" onclick="handleLogin()">Sign In</button>
             <a class="forgot-link" onclick="toggleMainView('forgot-email')">Forgot Password?</a>
             <p style="font-size:0.75rem;color:#bbb;margin-top:18px;text-align:center;">
-                Contact your administrator to request an account.
+                Instructors: contact your administrator to request an account.
             </p>
         </div>
 
@@ -172,9 +172,9 @@
             <div class="logo" style="font-size:1.4rem;">FORGOT?</div>
             <h2 style="margin-bottom:10px;">Reset Password</h2>
             <p style="font-size:0.8rem;color:#888;margin-bottom:10px;">
-                Enter your registered email address.<br>We'll send a one-time code to verify it's you.
+                Enter your registered email or admin username.<br>We'll send a one-time code to verify it's you.
             </p>
-            <input type="email" id="reset-email-input" placeholder="Enter Email Address">
+            <input type="text" id="reset-email-input" placeholder="Email or Username">
             <button class="btn-red" id="btn-send-otp" style="margin-top:10px;" onclick="sendOTP()">SEND OTP</button>
             <div style="display:flex;justify-content:space-between;margin-top:20px;">
                 <a onclick="toggleMainView('login')" style="cursor:pointer;font-size:0.8rem;color:#888;">⬅ Back to Login</a>
@@ -251,7 +251,9 @@
         }
 
         // ── OTP STATE ────────────────────────────────────────────────────────
-        let _resetEmail    = '';
+        let _resetEmail    = '';   // actual OTP-recipient email (may differ from what the user typed, e.g. admin recovery email)
+        let _resetRole     = 'instructor';
+        let _resetIdentifierInput = '';
         let _otpVerified   = false;
         let _countdownInt  = null;
         let _resendInt     = null;
@@ -312,9 +314,8 @@
 
         // ── SEND OTP (calls server — OTP never shown in browser) ─────────────
         async function sendOTP() {
-            const email = document.getElementById('reset-email-input').value.trim();
-            if (!email) return showAlert('Please enter your email address.', 'error');
-            if (!email.includes('@')) return showAlert('Invalid email format.', 'error');
+            const identifier = document.getElementById('reset-email-input').value.trim();
+            if (!identifier) return showAlert('Please enter your email or username.', 'error');
 
             const btn = document.getElementById('btn-send-otp');
             btn.disabled    = true;
@@ -329,7 +330,7 @@
                     res = await fetch('/api/send_otp', {
                         method:  'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body:    JSON.stringify({ email }),
+                        body:    JSON.stringify({ identifier }),
                         signal:  ctrl.signal
                     });
                 } finally {
@@ -344,8 +345,10 @@
                     return;
                 }
 
-                _resetEmail = email;
-                document.getElementById('target-display').textContent = email;
+                _resetIdentifierInput = identifier;
+                _resetEmail = data.target_email || identifier;
+                _resetRole  = data.role || 'instructor';
+                document.getElementById('target-display').textContent = data.masked_email || _resetEmail;
 
                 // Show OTP screen — clear boxes
                 document.querySelectorAll('.otp-in').forEach(i => i.value = '');
@@ -377,7 +380,7 @@
         }
 
         async function resendOTP() {
-            if (!_resetEmail) return;
+            if (!_resetIdentifierInput) return;
             startResendCooldown();
             document.querySelectorAll('.otp-in').forEach(i => i.value = '');
             document.getElementById('btn-verify-otp').disabled = false;
@@ -386,7 +389,7 @@
                 const res  = await fetch('/api/send_otp', {
                     method:  'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body:    JSON.stringify({ email: _resetEmail })
+                    body:    JSON.stringify({ identifier: _resetIdentifierInput })
                 });
                 const data = await res.json();
                 startOTPCountdown(600);
@@ -453,13 +456,15 @@
                 const res  = await fetch('/api/reset_password', {
                     method:  'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body:    JSON.stringify({ email: _resetEmail, password: p1 })
+                    body:    JSON.stringify({ email: _resetEmail, role: _resetRole, password: p1 })
                 });
                 const data = await res.json();
                 if (!res.ok) return showAlert(data.error || 'Reset failed.', 'error');
 
                 _otpVerified = false;
                 _resetEmail  = '';
+                _resetIdentifierInput = '';
+                _resetRole   = 'instructor';
                 showAlert('Password updated! Please log in.', 'success');
                 setTimeout(() => toggleMainView('login'), 2000);
             } catch {
@@ -476,7 +481,7 @@
         });
 
         async function handleLogin() {
-            const e   = document.getElementById('ins-email').value;
+            const identifier = document.getElementById('ins-email').value;
             const p   = document.getElementById('ins-pass').value;
             const btn = document.getElementById('btn-signin');
             btn.disabled = true; btn.textContent = 'Signing in...';
@@ -487,7 +492,7 @@
                     method:      'POST',
                     credentials: 'include',
                     headers:     { 'Content-Type': 'application/json' },
-                    body:        JSON.stringify({ email: e, password: p })
+                    body:        JSON.stringify({ identifier, password: p })
                 });
                 _netStop();
                 const data = await res.json();
@@ -498,6 +503,13 @@
                 } else if (!res.ok) {
                     showAlert(data.error || 'Invalid email or password.', 'error');
                     btn.disabled = false; btn.textContent = 'Sign In';
+                } else if (data.role === 'admin') {
+                    // Admin session token is read from sessionStorage by the admin
+                    // panel (X-Admin-Token header) — persists across this redirect
+                    // since sessionStorage survives same-tab navigation.
+                    if (data.token) sessionStorage.setItem('admin_token', data.token);
+                    document.getElementById('login-loading-overlay').classList.remove('hidden');
+                    setTimeout(() => { window.location.href = '/sys/sntl-panel'; }, 900);
                 } else {
                     localStorage.setItem('active_session', JSON.stringify({
                         email: data.email,

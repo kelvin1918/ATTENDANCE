@@ -1092,27 +1092,50 @@ def api_get_students(class_code):
 
 @app.route("/api/login", methods=["POST"])
 def api_login():
-    data  = request.json
-    email = data.get("email", "").strip()
-    pwd   = data.get("password", "").strip()
-    user  = db.get_instructor_by_email(email)
-    if not user:
-        return jsonify({"error": "Invalid email or password."}), 401
-    if user["password"] != pwd:
-        return jsonify({"error": "Invalid email or password."}), 401
-    if user["status"] == "pending":
-        return jsonify({"error": "pending"}), 403
-    # Issue a secure server-side session token
-    token = db.create_session_token(email)
-    resp  = make_response(jsonify({"status": "ok", "email": user["email"], "name": user["name"]}))
-    resp.set_cookie(
-        "session_token", token,
-        httponly = True,      # JS cannot read it — prevents XSS theft
-        secure   = False,     # set True in production with HTTPS
-        samesite = "Lax",
-        max_age  = 43200      # 12 hours
-    )
-    return resp
+    """
+    Unified sign-in for both roles. The identifier is checked against the
+    instructor table first (matched by email), then against the single
+    admin account (matched by username). Each role still gets its own
+    session token, cookie, and expiry — only the entry point is shared.
+    """
+    data       = request.json or {}
+    identifier = (data.get("identifier") or data.get("email") or "").strip()
+    pwd        = data.get("password", "").strip()
+
+    user = db.get_instructor_by_email(identifier)
+    if user:
+        if not db.verify_instructor_password(user, pwd):
+            return jsonify({"error": "Invalid email or password."}), 401
+        if user["status"] == "pending":
+            return jsonify({"error": "pending"}), 403
+        token = db.create_session_token(identifier)
+        resp  = make_response(jsonify({
+            "status": "ok", "role": "instructor",
+            "email": user["email"], "name": user["name"]
+        }))
+        resp.set_cookie(
+            "session_token", token,
+            httponly = True,      # JS cannot read it — prevents XSS theft
+            secure   = False,     # set True in production with HTTPS
+            samesite = "Lax",
+            max_age  = 43200      # 12 hours
+        )
+        return resp
+
+    admin = db.get_admin_account()
+    if admin and identifier and admin["username"] == identifier:
+        if not db.verify_admin_password(pwd):
+            return jsonify({"error": "Invalid email or password."}), 401
+        token = db.create_admin_session_token()
+        resp  = make_response(jsonify({"status": "ok", "role": "admin", "token": token}))
+        resp.set_cookie(
+            "admin_session_token", token,
+            httponly=False, samesite="Lax",
+            max_age=8 * 3600      # 8 hours
+        )
+        return resp
+
+    return jsonify({"error": "Invalid email or password."}), 401
 
 
 @app.route("/api/logout", methods=["POST"])
@@ -1272,26 +1295,39 @@ def _send_system_email(from_addr, smtp_pass, to_addr, subject, body_plain, body_
 @app.route("/api/send_otp", methods=["POST"])
 def api_send_otp():
     """
-    Generate OTP server-side, store hashed version in DB,
-    email it using system SMTP. OTP never sent to browser.
+    Generate OTP server-side, store hashed version in DB, email it using
+    system SMTP. Serves both roles: an instructor identified by their own
+    email, or the admin identified by username — the admin's OTP always
+    goes to their separate recovery email, never to the username itself.
     """
-    data  = request.json or {}
-    email = data.get("email", "").strip().lower()
-    if not email:
+    data       = request.json or {}
+    identifier = (data.get("identifier") or data.get("email") or "").strip()
+    if not identifier:
         return jsonify({"error": "Email is required."}), 400
 
-    instructor = db.get_instructor_by_email(email)
-    if not instructor:
-        return jsonify({"error": "No account found with that email address."}), 404
+    instructor = db.get_instructor_by_email(identifier.lower())
+    if instructor:
+        role            = "instructor"
+        target_email    = identifier.lower()
+        recipient_name  = instructor["name"] or "Instructor"
+    else:
+        admin = db.get_admin_account()
+        if not (admin and admin["username"] == identifier):
+            return jsonify({"error": "No account found with that email address."}), 404
+        if not admin.get("recovery_email"):
+            return jsonify({"error": "No recovery email configured for admin. "
+                                      "Contact your system administrator."}), 400
+        role           = "admin"
+        target_email   = admin["recovery_email"]
+        recipient_name = "Administrator"
 
     otp_code = str(random.randint(10000, 99999))
-    db.create_otp(email, otp_code)
+    db.create_otp(target_email, otp_code)
 
     # Send OTP via Brevo (primary) or SMTP fallback
     # Uses _send_system_email which checks BREVO_API_KEY first
-    instructor_name = instructor["name"] or "Instructor"
     body = (
-        f"Hello {instructor_name},\n\n"
+        f"Hello {recipient_name},\n\n"
         f"Your OTP for password reset is:\n\n"
         f"  {otp_code}\n\n"
         f"This code expires in 10 minutes. Do not share it with anyone.\n\n"
@@ -1301,16 +1337,18 @@ def api_send_otp():
     # Pass empty strings for smtp credentials — Brevo doesn't need them
     smtp_user = os.environ.get("SYSTEM_EMAIL", "").strip()
     smtp_pass = os.environ.get("SYSTEM_EMAIL_PASS", "").strip()
-    sent, err = _send_system_email(smtp_user, smtp_pass, email,
+    sent, err = _send_system_email(smtp_user, smtp_pass, target_email,
                                     "Password Reset OTP — BatStateU Attendance System",
                                     body)
+    masked = (target_email[0] + "***@" + target_email.split("@")[1]) if "@" in target_email else target_email
     if not sent:
         print(f"[OTP] Email send failed: {err}")
-        return jsonify({"status": "ok",
+        return jsonify({"status": "ok", "role": role, "target_email": target_email, "masked_email": masked,
                         "warn": f"OTP generated but email failed to send. "
                                  "Check BREVO_API_KEY in Render environment variables."})
 
-    return jsonify({"status": "ok", "msg": "OTP sent to your email."})
+    return jsonify({"status": "ok", "role": role, "target_email": target_email, "masked_email": masked,
+                    "msg": "OTP sent to your email."})
 
 
 @app.route("/api/verify_otp", methods=["POST"])
@@ -1337,13 +1375,29 @@ def api_reset_password():
     """
     Final step — updates password after OTP was verified.
     Requires the email and new password. OTP must have been verified first
-    (checked by looking for a recently used OTP record).
+    (checked by looking for a recently used OTP record). The role tells us
+    which account the OTP was actually issued for — the admin's OTP is
+    tied to their recovery email, not to any instructor row.
     """
     data     = request.json or {}
     email    = data.get("email", "").strip().lower()
     new_pass = data.get("password", "").strip()
-    if not email or not new_pass or len(new_pass) < 4:
+    role     = data.get("role", "instructor")
+    if not email or not new_pass:
         return jsonify({"error": "Invalid request."}), 400
+
+    if role == "admin":
+        if len(new_pass) < 6:
+            return jsonify({"error": "Password must be at least 6 characters."}), 400
+        admin = db.get_admin_account()
+        if not admin or admin.get("recovery_email") != email:
+            return jsonify({"error": "Account not found."}), 404
+        db.update_admin_password(new_pass)
+        return jsonify({"status": "ok"})
+
+    if len(new_pass) < 4:
+        return jsonify({"error": "Invalid request."}), 400
+
     instructor = db.get_instructor_by_email(email)
     if not instructor:
         return jsonify({"error": "Account not found."}), 404

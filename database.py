@@ -415,7 +415,7 @@ def verify_otp(email, otp_code):
 def update_password(email, new_password):
     """Update instructor password after successful OTP verification."""
     conn = get_db(); cur = conn.cursor()
-    cur.execute("UPDATE instructors SET password = %s WHERE email = %s", (new_password, email))
+    cur.execute("UPDATE instructors SET password = %s WHERE email = %s", (_hash_instructor_password(new_password), email))
     conn.commit(); cur.close(); conn.close()
 
 
@@ -1345,6 +1345,30 @@ def get_instructor_by_email(email):
     row = cur.fetchone(); cur.close(); conn.close()
     return row
 
+
+def _hash_instructor_password(password):
+    """Same hashing scheme as the admin account (sha256 hexdigest)."""
+    import hashlib
+    return hashlib.sha256(password.encode()).hexdigest()
+
+
+def verify_instructor_password(user, plain_password):
+    """
+    Verify a login attempt against the stored instructor password.
+    Accounts created before hashing was introduced still hold a plaintext
+    value — if that's what matches, the row is silently upgraded to a hash
+    so every account converges to hashed storage without a manual migration.
+    """
+    hashed_input = _hash_instructor_password(plain_password)
+    if user["password"] == hashed_input:
+        return True
+    if user["password"] == plain_password:
+        conn = get_db(); cur = conn.cursor()
+        cur.execute("UPDATE instructors SET password = %s WHERE id = %s", (hashed_input, user["id"]))
+        conn.commit(); cur.close(); conn.close()
+        return True
+    return False
+
 def get_instructor_by_id(instructor_id):
     conn = get_db(); cur = get_cursor(conn)
     cur.execute("SELECT * FROM instructors WHERE id = %s", (instructor_id,))
@@ -1355,7 +1379,7 @@ def register_instructor(email, password, name=''):
     conn = get_db(); cur = get_cursor(conn)
     cur.execute(
         "INSERT INTO instructors (name, email, password, status) VALUES (%s, %s, %s, %s)",
-        (name, email, password, 'pending')
+        (name, email, _hash_instructor_password(password), 'pending')
     )
     conn.commit(); cur.close(); conn.close()
 
@@ -1364,7 +1388,7 @@ def create_instructor_by_admin(name, email, password):
     conn = get_db(); cur = get_cursor(conn)
     cur.execute(
         "INSERT INTO instructors (name, email, password, status) VALUES (%s, %s, %s, 'approved')",
-        (name, email, password)
+        (name, email, _hash_instructor_password(password))
     )
     conn.commit(); cur.close(); conn.close()
 
