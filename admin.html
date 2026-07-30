@@ -345,14 +345,6 @@
         tr:last-child td { border-bottom: none; }
         tr:hover td { background: #FAFAFA; }
 
-        /* Pills */
-        .pill {
-            display: inline-block; padding: 4px 12px; border-radius: 20px;
-            font-size: 0.68rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em;
-        }
-        .pill-approved { background: var(--green-bg);  color: var(--green); }
-        .pill-pending  { background: #FFFBEB;           color: #D97706; }
-
         /* Action buttons */
         .btn-sm {
             padding: 6px 14px; border-radius: 8px; border: none;
@@ -770,7 +762,6 @@
                                 <tr>
                                     <th>Name</th>
                                     <th>Email</th>
-                                    <th>Status</th>
                                     <th style="text-align:right;">Action</th>
                                 </tr>
                             </thead>
@@ -1576,11 +1567,11 @@
         if (countEl) countEl.textContent = `${filtered.length} of ${allUsers.length} accounts`;
 
         if (!allUsers.length) {
-            tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:30px;color:#D1D5DB;">No instructors registered yet.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;padding:30px;color:#D1D5DB;">No instructors registered yet.</td></tr>';
             return;
         }
         if (!filtered.length) {
-            tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:30px;color:#D1D5DB;">No results match your search.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;padding:30px;color:#D1D5DB;">No results match your search.</td></tr>';
             return;
         }
 
@@ -1588,7 +1579,6 @@
             <tr>
                 <td><strong>${deriveName(u)}</strong></td>
                 <td style="color:#6B7280;">${u.email}</td>
-                <td><span class="pill ${u.status === 'approved' ? 'pill-approved' : 'pill-pending'}">${u.status}</span></td>
                 <td style="text-align:right;">
                     <button class="btn-sm btn-remove" onclick="handleAction(${u.id},'delete')">Remove</button>
                 </td>
