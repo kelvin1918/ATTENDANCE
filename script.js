@@ -65,6 +65,22 @@ document.addEventListener('DOMContentLoaded', async () => {
         return;
     }
 
+    // ── IDLE TIMEOUT — auto sign-out after inactivity ─────────────────────
+    if (typeof initIdleTimeout === 'function') {
+        initIdleTimeout({
+            idleMinutes: 15,
+            warnSeconds: 60,
+            onLogout: () => {
+                fetch('/api/logout', { method: 'POST', credentials: 'include' })
+                    .catch(() => {})
+                    .finally(() => {
+                        localStorage.removeItem('active_session');
+                        window.location.replace('/login?reason=idle');
+                    });
+            }
+        });
+    }
+
     updateTime();
     setInterval(updateTime, 1000);
     generateTimeOptions();

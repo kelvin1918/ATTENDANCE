@@ -1392,11 +1392,6 @@ def create_instructor_by_admin(name, email, password):
     )
     conn.commit(); cur.close(); conn.close()
 
-def approve_instructor(instructor_id):
-    conn = get_db(); cur = get_cursor(conn)
-    cur.execute("UPDATE instructors SET status='approved' WHERE id=%s", (instructor_id,))
-    conn.commit(); cur.close(); conn.close()
-
 def delete_instructor(instructor_id):
     conn = get_db(); cur = get_cursor(conn)
     cur.execute("DELETE FROM instructors WHERE id=%s", (instructor_id,))

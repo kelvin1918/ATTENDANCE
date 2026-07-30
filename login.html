@@ -526,6 +526,11 @@
             }
         }
 
+        // ── IDLE-LOGOUT NOTICE ───────────────────────────────────────────────
+        if (new URLSearchParams(window.location.search).get('reason') === 'idle') {
+            showAlert('You were signed out due to inactivity.', 'info', 6000);
+        }
+
     </script>
 </body>
 </html>

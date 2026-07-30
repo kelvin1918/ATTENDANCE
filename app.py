@@ -1487,20 +1487,6 @@ def api_admin_create_instructor():
     return jsonify({"status": "ok", "msg": f"Account created and credentials emailed to {email}."})
 
 
-@app.route("/api/instructors/<int:instructor_id>/approve", methods=["POST"])
-def api_approve_instructor(instructor_id):
-    if not db.verify_admin_session_token(_get_admin_token(request)):
-        return jsonify({"error": "Unauthorized"}), 401
-    db.approve_instructor(instructor_id)
-    db.add_notification(
-        instructor_id = instructor_id,
-        notif_type    = "approved",
-        title         = "Account Approved",
-        body          = "Your instructor account has been approved by the administrator. You can now create classes and record attendance."
-    )
-    return jsonify({"status": "ok"})
-
-
 @app.route("/api/instructors/<int:instructor_id>", methods=["DELETE"])
 def api_delete_instructor(instructor_id):
     if not db.verify_admin_session_token(_get_admin_token(request)):
