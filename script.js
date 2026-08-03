@@ -2191,7 +2191,7 @@ function _showScheduleConflictDialog(conflicting, day, time_in, time_out) {
     el.innerHTML = `
       <div style="background:#fff;border-radius:20px;width:100%;max-width:420px;padding:28px 24px;box-shadow:0 20px 60px rgba(0,0,0,.25)">
         <div style="text-align:center;margin-bottom:4px">
-          <div style="font-size:2.2rem;margin-bottom:10px">⏰</div>
+          <div style="margin-bottom:10px;display:flex;justify-content:center"><i data-lucide="alarm-clock" style="width:36px;height:36px;color:#D32F2F"></i></div>
           <h3 style="font-size:1.05rem;font-weight:800;color:#1a1a1a;margin:0 0 10px">Schedule Conflict</h3>
           <p style="color:#6B7280;font-size:.85rem;line-height:1.5;margin:0">
             The time slot <strong style="color:#D32F2F">${time_in} – ${time_out}</strong> on <strong style="color:#D32F2F">${day}</strong>
@@ -2210,6 +2210,7 @@ function _showScheduleConflictDialog(conflicting, day, time_in, time_out) {
         </div>
       </div>`;
     document.body.appendChild(el);
+    lucide.createIcons();
     el.addEventListener('click', e => { if (e.target === el) el.remove(); });
 }
 
@@ -2509,7 +2510,7 @@ function _showAlreadyRegisteredDialog(formEl, student) {
     el.innerHTML = `
       <div style="background:#fff;border-radius:20px;width:100%;max-width:420px;padding:28px 24px;box-shadow:0 20px 60px rgba(0,0,0,.25)">
         <div style="text-align:center;margin-bottom:4px">
-          <div style="font-size:2.2rem;margin-bottom:10px">🎓</div>
+          <div style="margin-bottom:10px;display:flex;justify-content:center"><i data-lucide="graduation-cap" style="width:36px;height:36px;color:#D32F2F"></i></div>
           <h3 style="font-size:1.05rem;font-weight:800;color:#1a1a1a;margin:0 0 10px">Already Registered</h3>
           <p style="color:#6B7280;font-size:.85rem;line-height:1.5;margin:0">
             <strong style="color:#1a1a1a">${student.name}</strong> with SR Code
@@ -2531,6 +2532,7 @@ function _showAlreadyRegisteredDialog(formEl, student) {
         </div>
       </div>`;
     document.body.appendChild(el);
+    lucide.createIcons();
     el.addEventListener('click', e => { if (e.target === el) el.remove(); });
     document.getElementById('alreadyRegUpdateBtn').addEventListener('click', async () => {
         el.remove();

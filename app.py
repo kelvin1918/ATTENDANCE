@@ -2334,7 +2334,7 @@ async function doSubmit() {{
       overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;z-index:9999;padding:16px';
       overlay.innerHTML = `
         <div style="background:#fff;border-radius:20px;width:100%;max-width:380px;padding:28px 24px;box-shadow:0 20px 60px rgba(0,0,0,.25);text-align:center">
-          <div style="font-size:2.2rem;margin-bottom:10px">🎓</div>
+          <div style="margin-bottom:10px;display:flex;justify-content:center"><svg width="40" height="40" fill="none" stroke="#D32F2F" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M21.42 10.922a1 1 0 0 0-.019-1.838L12.83 5.18a2 2 0 0 0-1.66 0L2.6 9.08a1 1 0 0 0 0 1.832l8.57 3.908a2 2 0 0 0 1.66 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M22 10v6"/><path stroke-linecap="round" stroke-linejoin="round" d="M6 12.5V16a6 3 0 0 0 12 0v-3.5"/></svg></div>
           <h3 style="font-size:1rem;font-weight:800;color:#1a1a1a;margin:0 0 10px">Already Registered</h3>
           <p style="color:#6B7280;font-size:.85rem;line-height:1.5;margin:0">
             <strong style="color:#1a1a1a">${{s.name}}</strong> with SR Code
