@@ -26,14 +26,30 @@ FONT      = "Times-Roman"
 FONT_BOLD = "Times-Bold"
 BLACK     = (0, 0, 0)
 
-# ── HEADER / INFO FIELD POSITIONS (baseline-left points) ────────────────────
+# ── TEXT BASELINE CALIBRATION ────────────────────────────────────────────────
+# PyMuPDF's insert_text(point, ...) does NOT place `point` on the visual
+# baseline — empirically (verified with an isolated round-trip test: insert
+# at y, read back the rendered bbox via get_text("words")) the actual ink
+# lands ~0.281 * fontsize BELOW the given point. Every y-coordinate below is
+# the *target* ink-bottom (matched to the template's own printed text), and
+# _call_y() converts it to the point insert_text actually needs.
+TEXT_Y_RATIO = 0.281
+
+
+def _call_y(target_y1, fontsize):
+    return target_y1 - TEXT_Y_RATIO * fontsize
+
+
+# ── HEADER / INFO FIELD POSITIONS ────────────────────────────────────────────
+# target_y1 = the y where inserted text's ink-bottom should land, matched to
+# the template's own label text bottom on the same line.
 # max_w is the remaining room to the cell's right border, used for
 # shrink-to-fit when a value is too long for the printed line.
-CC_TITLE = dict(x=148, y=135.7, size=10, max_w=576.6 - 8 - 148)
-FACULTY  = dict(x=123, y=154.1, size=10, max_w=576.6 - 8 - 123)
-DATE_F   = dict(x=70,  y=172.7, size=10, max_w=193.4 - 8 - 70)
-TIME_F   = dict(x=230, y=172.7, size=10, max_w=294.3 - 8 - 230)
-ROOM_F   = dict(x=367, y=172.7, size=10, max_w=576.6 - 8 - 367)
+CC_TITLE = dict(x=148, target_y1=136.2, size=10, max_w=576.6 - 8 - 148)
+FACULTY  = dict(x=123, target_y1=154.6, size=10, max_w=576.6 - 8 - 123)
+DATE_F   = dict(x=70,  target_y1=173.2, size=10, max_w=193.4 - 8 - 70)
+TIME_F   = dict(x=230, target_y1=173.2, size=10, max_w=294.3 - 8 - 230)
+ROOM_F   = dict(x=367, target_y1=173.2, size=10, max_w=576.6 - 8 - 367)
 
 # ── ROSTER GEOMETRY ──────────────────────────────────────────────────────────
 # y-boundaries of the 30 roster row bands (row i spans ROW_DIVIDERS[i]..[i+1]).
@@ -95,20 +111,23 @@ def _draw_field(page, spec, text, fontname=FONT):
     if not text:
         return
     text, size = _fit_text(text, fontname, spec["size"], spec["max_w"])
-    page.insert_text((spec["x"], spec["y"]), text, fontname=fontname, fontsize=size, color=BLACK)
+    y = _call_y(spec["target_y1"], size)
+    page.insert_text((spec["x"], y), text, fontname=fontname, fontsize=size, color=BLACK)
 
 
-def _draw_name(page, x, baseline, name, max_w):
+def _draw_name(page, x, target_y1, name, max_w):
     name = str(name or "").strip()
     if not name:
         return
     name, size = _fit_text(name, FONT, ROW_FONT_SIZE, max_w)
-    page.insert_text((x, baseline), name, fontname=FONT, fontsize=size, color=BLACK)
+    y = _call_y(target_y1, size)
+    page.insert_text((x, y), name, fontname=FONT, fontsize=size, color=BLACK)
 
 
-def _insert_centered(page, cx, baseline, text, fontname, size):
+def _insert_centered(page, cx, target_y1, text, fontname, size):
     w = fitz.get_text_length(text, fontname=fontname, fontsize=size)
-    page.insert_text((cx - w / 2, baseline), text, fontname=fontname, fontsize=size, color=BLACK)
+    y = _call_y(target_y1, size)
+    page.insert_text((cx - w / 2, y), text, fontname=fontname, fontsize=size, color=BLACK)
 
 
 # ── SIGNATURE IMAGE FETCHER ───────────────────────────────────────────────────
@@ -159,13 +178,13 @@ def _draw_sig(page, x0, x1, row_top, row_bottom, rec):
     """SIGNED counts as attended (Present/Late/Excused) — the mark represents
     physical attendance, same as a manual paper sheet. Legacy records that
     still carry a stored signature image are rendered as an image instead."""
-    status   = rec.get("status")
-    sig_path = rec.get("sig_path", "")
-    baseline = row_bottom - 3.5
+    status    = rec.get("status")
+    sig_path  = rec.get("sig_path", "")
+    target_y1 = row_bottom - 3.5
 
     if sig_path == "SIGNED":
         if status in ("Present", "Late", "Excused"):
-            _insert_centered(page, (x0 + x1) / 2, baseline, "SIGNED", FONT, ROW_FONT_SIZE)
+            _insert_centered(page, (x0 + x1) / 2, target_y1, "SIGNED", FONT, ROW_FONT_SIZE)
         return
 
     if sig_path:
@@ -211,16 +230,16 @@ def generate_attendance_pdf(class_id, subject, section, room, date,
     for i in range(ROWS_PER_COL):
         row_top    = ROW_DIVIDERS[i]
         row_bottom = ROW_DIVIDERS[i + 1]
-        baseline   = row_bottom - 3.5
+        target_y1  = row_bottom - 3.5
 
         left_r  = attended[i]                if i < len(attended) else None
         right_r = attended[i + ROWS_PER_COL] if i + ROWS_PER_COL < len(attended) else None
 
         if left_r:
-            _draw_name(page, NAME1_X, baseline, left_r["name"], NAME1_MAXW)
+            _draw_name(page, NAME1_X, target_y1, left_r["name"], NAME1_MAXW)
             _draw_sig(page, SIG1_X0, SIG1_X1, row_top, row_bottom, left_r)
         if right_r:
-            _draw_name(page, NAME2_X, baseline, right_r["name"], NAME2_MAXW)
+            _draw_name(page, NAME2_X, target_y1, right_r["name"], NAME2_MAXW)
             _draw_sig(page, SIG2_X0, SIG2_X1, row_top, row_bottom, right_r)
 
     # No appendix section — the official BatStateU-REC-ATT-11 sheet (and the

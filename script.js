@@ -1125,255 +1125,48 @@ async function viewAndPrintPDF(class_code, date, session_time) {
                         (session.email || '').split('@')[0]
                           .replace(/[._]/g,' ').replace(/\b\w/g, l => l.toUpperCase());
 
-        /// ── fixing part absent showing  ─────────────────────────────────
-
         // ── University format: only students who actually attended appear ──
         // Absent students are excluded. Partial is treated the same as
         // Absent — falling below the attendance-duration threshold means
-        // they didn't really attend enough to count, so they're left off
-        // the roster entirely. The roster is renumbered sequentially
-        // starting from 1 based on who actually attended.
-
-        // Layout: rows 1–30 in the LEFT column, rows 31–60 in the RIGHT column.
-        // The roster always has a minimum of 30 blank rows (one full left column).
-
-
-        const attended     = records.filter(r => r.status !== 'Absent' && r.status !== 'Partial');
-        const ROWS_PER_COL = 30;
-        const totalRows    = Math.max(attended.length, ROWS_PER_COL);
-
-        const paddedTotal  = totalRows <= ROWS_PER_COL
-            ? ROWS_PER_COL
-            : Math.ceil(totalRows / ROWS_PER_COL) * ROWS_PER_COL;
-
-
-        const statusColor = s =>
-            s === 'Present' ? 'green' : '#E65100';   // Present=green, Late=orange
-
-
-        // Build rows: slot i = left col (1–30), slot i+30 = right col (31–60)
-
-        const rosterRows = Array.from({ length: ROWS_PER_COL }).map((_, i) => {
-            const sL   = attended[i];
-            const sR   = attended[i + ROWS_PER_COL];
-
-            const numL = i + 1;
-            const numR = i + ROWS_PER_COL + 1;
-
-        // Show e-signature image if available, fall back to coloured status text
-        // sig_path is enriched by /api/download_pdf → stored in rec.sig_path
-        // For the web viewer we hit /api/signature/<filename> to serve the file.
-
-            const _sigHtml = (student) => {
-                if (!student) return '';
-                const p   = student.sig_path || '';
-                const col = statusColor(student.status);
-                // "SIGNED" marker — plain text for attended, blank otherwise.
-                // Excused counts as attended (student was physically in class,
-                // same as a manual paper sheet); Partial never reaches here —
-                // it's already excluded from the roster above, same as Absent.
-                if (p === 'SIGNED') {
-                    const attended = ['Present', 'Late', 'Excused'].includes(student.status);
-                    return attended ? 'SIGNED' : '';
-                }
-                // Legacy: still render stored signature images for old records
-                if (p) {
-                    let imgSrc;
-                    if (p.startsWith('http://') || p.startsWith('https://')) {
-                        imgSrc = p;
-                    } else {
-                        const fname = p.split(/[\\/]/).pop();
-                        imgSrc = `/api/signature/${encodeURIComponent(fname)}`;
-                    }
-                    return `<img src="${imgSrc}"
-                                 alt="${student.status}"
-                                 crossorigin="anonymous"
-                                 onerror="this.style.display='none';this.nextElementSibling.style.display='inline';"
-                                 style="max-height:20px;max-width:90%;object-fit:contain;display:block;margin:0 auto;">
-                            <span style="display:none;font-weight:bold;color:${col};font-size:10px;">${student.status}</span>`;
-                }
-                return `<span style="font-weight:bold;color:${col};">${student.status}</span>`;
-            };
-
-            const sigL = _sigHtml(sL);
-            const sigR = _sigHtml(sR);
-
-            return `
-            <tr>
-                <td style="border:1px solid black;padding:3px 8px;height:25px;font-size:11px;font-family:'Times New Roman',serif;">
-                    ${numL}. ${sL ? sL.name : ''}
-                </td>
-                <td style="border:1px solid black;text-align:center;font-size:11px;padding:3px;height:25px;overflow:hidden;max-width:0;">
-                    ${sigL}
-                </td>
-                <td style="border:1px solid black;padding:3px 8px;height:25px;font-size:11px;font-family:'Times New Roman',serif;">
-                    ${numR}.${sR ? ' ' + sR.name : ''}
-                </td>
-                <td style="border:1px solid black;text-align:center;font-size:11px;padding:3px;height:25px;overflow:hidden;max-width:0;">
-                    ${sigR}
-                </td>
-            </tr>`;
-        }).join('');
+        // they didn't really attend enough to count. This mirrors the
+        // filtering the backend PDF generator applies server-side.
 
         // ── Short date for title bar ─────────────────────────────────────────
         const [yr, mo, dy] = (date || '').split('-');
         const shortDate = (mo && dy && yr) ? `${mo}-${dy}-${String(yr).slice(-2)}` : date;
 
-        // ── Full HTML matching BatStateU-REC-ATT-11 Rev.01 exactly ───────────
-        const html = `
-            <div style="font-family:'Times New Roman',Times,serif;color:black;background:white;
-                        width:100%;max-width:820px;margin:0 auto;padding:0;">
+        // ── Preview: embed the exact same officially-formatted PDF the backend
+        // generates for download — so the on-screen preview, the Print button,
+        // and the Download PDF button are always byte-identical, never a
+        // separate HTML approximation that could drift from the real form.
+        const pdfRes = await authFetch(`/api/download_pdf/${class_code}/${date}${sp}`);
+        if (!pdfRes.ok) throw new Error(`Server error ${pdfRes.status}`);
+        const pdfBlob = await pdfRes.blob();
 
-                <!-- Header: Logo + Reference block -->
-                <table style="width:100%;border-collapse:collapse;font-size:10px;table-layout:fixed;">
-                    <tr>
-                        <td style="border:1px solid black;width:14%;text-align:center;padding:6px;">
-                            <img src="bsu_logo.png" alt="BSU"
-                                 style="height:48px;width:auto;display:block;margin:0 auto;">
-                        </td>
-                        <td style="border:1px solid black;width:29%;padding:5px 8px;">
-                            Reference No.: BatStateU-REC-ATT-11
-                        </td>
-                        <td style="border:1px solid black;width:32%;padding:5px 8px;">
-                            Effectivity Date: May 18, 2022
-                        </td>
-                        <td style="border:1px solid black;width:25%;padding:5px 8px;">
-                            Revision No.: 01
-                        </td>
-                    </tr>
-                    <tr>
-                        <td colspan="4"
-                            style="border:1px solid black;border-top:none;padding:10px 8px;
-                                   text-align:center;font-size:14px;font-weight:bold;
-                                   text-transform:uppercase;letter-spacing:1px;">
-                            Student Class Attendance
-                        </td>
-                    </tr>
-                </table>
-
-                <!-- Info block -->
-                <table style="width:100%;border-collapse:collapse;font-size:11px;table-layout:fixed;">
-                    <tr>
-                        <td style="border:1px solid black;border-top:none;padding:6px 10px;">
-                            Course Code and Title:&nbsp;&nbsp;${cls.subject || ''}&nbsp;(${cls.section || ''})
-                        </td>
-                    </tr>
-                    <tr>
-                        <td style="border:1px solid black;border-top:none;padding:6px 10px;">
-                            Name of Faculty:&nbsp;&nbsp;${faculty}
-                        </td>
-                    </tr>
-                </table>
-                <table style="width:100%;border-collapse:collapse;font-size:11px;table-layout:fixed;">
-                    <tr>
-                        <td style="border:1px solid black;border-top:none;width:35%;padding:6px 10px;">
-                            Date:&nbsp;${dispDate}
-                        </td>
-                        <td style="border:1px solid black;border-top:none;width:15%;padding:6px 10px;">
-                            Time:&nbsp;${timeVal}
-                        </td>
-                        <td style="border:1px solid black;border-top:none;width:50%;padding:6px 10px;">
-                            Room/Venue:&nbsp;${roomVal}
-                        </td>
-                    </tr>
-                </table>
-
-                <!-- Gray shade divider — matches BSU reference format -->
-                <table style="width:100%;border-collapse:collapse;table-layout:fixed;">
-                    <tr>
-                        <td colspan="4"
-                            style="border:1px solid black;border-top:none;
-                                   background-color:#d9d9d9;
-                                   -webkit-print-color-adjust:exact;
-                                   print-color-adjust:exact;
-                                   height:10px;padding:0;font-size:1px;line-height:1px;">&nbsp;</td>
-                    </tr>
-                </table>
-
-                <!-- Two-column attendance roster — fixed 30 rows per column -->
-                <table style="width:100%;border-collapse:collapse;font-size:11px;table-layout:fixed;">
-                    <thead>
-                        <tr style="text-align:center;font-weight:bold;">
-                            <td style="border:1px solid black;border-top:none;width:35%;padding:5px;">NAME</td>
-                            <td style="border:1px solid black;border-top:none;width:15%;padding:5px;">SIGNATURE</td>
-                            <td style="border:1px solid black;border-top:none;width:35%;padding:5px;">NAME</td>
-                            <td style="border:1px solid black;border-top:none;width:15%;padding:5px;">SIGNATURE</td>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        ${rosterRows}
-                    </tbody>
-                </table>
-            </div>`;
+        if (window._attendancePdfUrl) URL.revokeObjectURL(window._attendancePdfUrl);
+        const pdfUrl = URL.createObjectURL(pdfBlob);
+        window._attendancePdfUrl = pdfUrl;
 
         const frame = document.getElementById('printFrame');
-        const fdoc  = frame.contentDocument || frame.contentWindow.document;
-        fdoc.open();
-        fdoc.write(`<!DOCTYPE html><html><head>
-            <meta charset="UTF-8">
-            <style>
-                * { box-sizing:border-box; margin:0; padding:0; }
-                body { background:#f3f4f6; font-family:'Times New Roman',Times,serif;
-                       padding:24px; overflow-y:auto; }
-                table { border-collapse:collapse; width:100%; }
-            </style>
-        </head><body>${html}</body></html>`);
-        fdoc.close();
+        frame.src = pdfUrl;
 
-        // ── Print button — clean isolated window, auto-triggers print dialog ──
+        // ── Print — open the same PDF in a clean window and trigger the browser's print dialog ──
         window.printSheet = () => {
-            const win = window.open('', '_blank', 'width=950,height=750');
-            win.document.write(`<!DOCTYPE html><html><head>
-                <meta charset="UTF-8">
-                <style>
-                    * { box-sizing:border-box; margin:0; padding:0; }
-                    body { background:white; font-family:'Times New Roman',Times,serif; padding:16px; }
-                    table { border-collapse:collapse; width:100%; }
-                    @media print {
-                        body { padding:0; margin:0; }
-                        * { -webkit-print-color-adjust:exact !important;
-                            print-color-adjust:exact !important; }
-                    }
-                </style>
-                </head><body>${html}</body></html>`);
-            win.document.close();
-            win.focus();
-            setTimeout(() => { win.print(); }, 400);
+            const win = window.open(pdfUrl, '_blank', 'width=950,height=750');
+            if (!win) { alert('Please allow popups for this site to print.'); return; }
+            win.addEventListener('load', () => win.print());
         };
 
-        // ── Download PDF — uses Flask backend (reportlab) for reliable PDF ───
-        // html2pdf/html2canvas produces blank PDFs due to canvas rendering bugs.
-        // The backend generates a proper PDF using reportlab and streams it back.
+        // ── Download PDF — reuse the already-fetched blob, same bytes as the preview/print ──
         const dlBtn = document.getElementById('downloadBtn');
         if (dlBtn) {
-            dlBtn.onclick = async () => {
-                const origHTML = dlBtn.innerHTML;
-                dlBtn.innerHTML = '<span>Downloading...</span>';
-                dlBtn.disabled  = true;
-
-                try {
-                    const sp  = session_time ? `?session_time=${encodeURIComponent(session_time)}` : '';
-                    const res = await authFetch(`/api/download_pdf/${class_code}/${date}${sp}`);
-
-                    if (!res.ok) throw new Error(`Server error ${res.status}`);
-
-                    const blob = await res.blob();
-                    const url  = URL.createObjectURL(blob);
-                    const a    = document.createElement('a');
-                    a.href     = url;
-                    a.download = `Attendance_${cls.subject || class_code}_${shortDate}.pdf`;
-                    document.body.appendChild(a);
-                    a.click();
-                    document.body.removeChild(a);
-                    URL.revokeObjectURL(url);
-                } catch (err) {
-                    console.error('Download failed:', err);
-                    alert('PDF download failed: ' + err.message);
-                } finally {
-                    dlBtn.innerHTML = origHTML;
-                    dlBtn.disabled  = false;
-                    if (window.lucide) lucide.createIcons();
-                }
+            dlBtn.onclick = () => {
+                const a    = document.createElement('a');
+                a.href     = pdfUrl;
+                a.download = `Attendance_${cls.subject || class_code}_${shortDate}.pdf`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
             };
         }
 
@@ -1388,6 +1181,9 @@ async function viewAndPrintPDF(class_code, date, session_time) {
                     dispDate, rawDate: date, timeVal, faculty,
                     class_code, session_time: session_time || '',
                 });
+                // Switch the iframe out of PDF-viewer mode back to a plain,
+                // writable HTML document before injecting the report.
+                frame.src = 'about:blank';
                 const pfdoc = frame.contentDocument || frame.contentWindow.document;
                 pfdoc.open();
                 pfdoc.write(previewHtml);
