@@ -1,85 +1,67 @@
 """
-pdf_generator.py — BatStateU-REC-ATT-11 Revision 01
-=====================================================
-FIXED in this version:
-  ✓ Footer removed (no Prepared by / Noted by / timestamp)
-  ✓ Page size: 8.5" × 13" (Folio/F4)
-  ✓ Margins: top=17.5mm left=25.4mm bottom=6.3mm right=25.4mm
-  ✓ All borders: 0.5 pt throughout
-  ✓ NAME/SIGNATURE header row: white (NOT gray-shaded)
-  ✓ Gray shade on divider bar ONLY (between info block and roster)
-  ✓ Seamless flush borders between all stacked tables (no gaps/doubles)
-  ✓ PDF generated in-memory (BytesIO) — no disk writes, safe on Render
+pdf_generator.py — overlays attendance data onto the official
+BatStateU-REC-ATT-11 template (assets/attendance_template.pdf) using
+PyMuPDF, instead of rebuilding the form from scratch with ReportLab
+flowables. The template file IS the page background, so borders,
+margins, fonts and spacing are pixel-identical to the university's form
+by construction — nothing to fight or drift out of alignment.
 
-Layout (matches HTML reference exactly):
-  HDR ROW 0 : Logo (14%) | Reference No. (29%) | Effectivity Date (32%) | Revision No. (25%)
-  HDR ROW 1 : STUDENT CLASS ATTENDANCE  (spans full width)
-  INFO ROW 0 : Course Code and Title          (full width)
-  INFO ROW 1 : Assigned Faculty               (full width)
-  INFO ROW 2 : Date (25%) | Time (30%) | Room/Venue (45%)
-  INFO ROW 3 : ████ GRAY DIVIDER ████         (full width, 8 pt tall)
-  ROSTER HDR : NAME | SIGNATURE | NAME | SIGNATURE  (white, bold, centered)
-  ROWS 1-30  : numbered slots — present/late filled; blanks for manual sign
+Layout coordinates below were measured directly off the template's own
+vector borders/text (see get_drawings()/get_text("words") on the PDF),
+not eyeballed.
 """
 
 import os
 import re
+from io import BytesIO
 from datetime import datetime
 
-from reportlab.lib.pagesizes import letter
-from reportlab.lib import colors
-from reportlab.lib.units import mm, inch
-from reportlab.platypus import (
-    SimpleDocTemplate, Table, TableStyle,
-    Paragraph, Spacer, Image as RLImage
-)
-from io import BytesIO
+import fitz  # PyMuPDF
 import urllib.request
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib.enums import TA_CENTER, TA_LEFT
 
-# ── COLOURS ──────────────────────────────────────────────────────────────────
-# Names are always plain black, no per-status tag — matches the on-screen
-# preview/print sheet in script.js exactly, which is the reference format.
-BLACK      = colors.black
-GRAY_LIGHT = colors.HexColor("#D9D9D9")   # divider bar only
+# ── TEMPLATE ─────────────────────────────────────────────────────────────────
+TEMPLATE_PATH = os.path.join(os.path.dirname(__file__), "assets", "attendance_template.pdf")
 
-# ── FONTS ────────────────────────────────────────────────────────────────────
-TNR      = "Times-Roman"
-TNR_BOLD = "Times-Bold"
+FONT      = "Times-Roman"
+FONT_BOLD = "Times-Bold"
+BLACK     = (0, 0, 0)
 
-# ── PAGE GEOMETRY ────────────────────────────────────────────────────────────
-PAGE_W   = 8.5 * inch
-PAGE_H   = 13  * inch
-TOP_M    = 17.5 * mm
-LEFT_M   = 25.4 * mm
-BOTTOM_M = 6.3  * mm
-RIGHT_M  = 25.4 * mm
-USABLE   = PAGE_W - LEFT_M - RIGHT_M   # 468 pt
+# ── HEADER / INFO FIELD POSITIONS (baseline-left points) ────────────────────
+# max_w is the remaining room to the cell's right border, used for
+# shrink-to-fit when a value is too long for the printed line.
+CC_TITLE = dict(x=148, y=135.7, size=10, max_w=576.6 - 8 - 148)
+FACULTY  = dict(x=123, y=154.1, size=10, max_w=576.6 - 8 - 123)
+DATE_F   = dict(x=70,  y=172.7, size=10, max_w=193.4 - 8 - 70)
+TIME_F   = dict(x=230, y=172.7, size=10, max_w=294.3 - 8 - 230)
+ROOM_F   = dict(x=367, y=172.7, size=10, max_w=576.6 - 8 - 367)
 
-# ── BORDER WEIGHT ─────────────────────────────────────────────────────────────
-B = 0.5
+# ── ROSTER GEOMETRY ──────────────────────────────────────────────────────────
+# y-boundaries of the 30 roster row bands (row i spans ROW_DIVIDERS[i]..[i+1]).
+ROW_DIVIDERS = [
+    204.1, 222.7, 241.1, 259.6, 278.1, 296.7, 315.1, 333.7, 352.1, 370.7,
+    389.1, 407.7, 426.1, 444.7, 463.1, 481.7, 500.1, 518.7, 537.1, 555.7,
+    574.1, 592.7, 611.1, 629.8, 648.2, 666.8, 685.2, 703.8, 722.2, 740.8, 759.2,
+]
+ROWS_PER_COL  = 30
+ROW_FONT_SIZE = 9
 
-# ── COLUMN WIDTHS ─────────────────────────────────────────────────────────────
-H_LOGO = USABLE * 0.14
-H_REF  = USABLE * 0.29
-H_EFF  = USABLE * 0.32
-H_REV  = USABLE * 0.25
+NAME1_X, NAME1_RIGHT = 58,    193.65
+SIG1_X0,  SIG1_X1    = 193.65, 294.5
+NAME2_X, NAME2_RIGHT = 316.5, 576.78
+SIG2_X0,  SIG2_X1    = 458.75, 576.78
+# (SIG2 column visually starts at 458.75, NAME2 column ends there)
+NAME2_RIGHT = 458.75
 
-I_DATE = USABLE * 0.35
-I_TIME = USABLE * 0.15
-I_ROOM = USABLE * 0.50
+NAME1_MAXW = NAME1_RIGHT - 4 - NAME1_X
+NAME2_MAXW = NAME2_RIGHT - 4 - NAME2_X
 
-R_NAME = USABLE * 0.35
-R_SIG  = USABLE * 0.15
-
-SIG_MAX_W = R_SIG - 6
-SIG_MAX_H = 12
+SIG_MAX_H = 12  # legacy signature-image cap height, points
 
 # ── HELPERS ──────────────────────────────────────────────────────────────────
 
 def _safe(s):
     return re.sub(r'[\\/:*?"<>|,\s]', '_', str(s)).strip('_')
+
 
 def _fmt_date(d):
     try:
@@ -88,20 +70,45 @@ def _fmt_date(d):
     except Exception:
         return d
 
-def _p(name, styles, **kw):
-    return ParagraphStyle(name, parent=styles["Normal"], **kw)
 
-def _no_top(extra=None):
-    """Box border without top edge — prevents double lines when stacking tables."""
-    cmds = [
-        ("LINEBEFORE", (0,  0), (0,  -1), B, BLACK),
-        ("LINEAFTER",  (-1, 0), (-1, -1), B, BLACK),
-        ("LINEBELOW",  (0,  -1), (-1, -1), B, BLACK),
-        ("INNERGRID",  (0,  0), (-1, -1), B, BLACK),
-    ]
-    if extra:
-        cmds.extend(extra)
-    return cmds
+def _fit_size(text, fontname, size, max_w, floor=5.5):
+    """Shrink fontsize until text fits max_w, down to floor."""
+    s = size
+    while s > floor and fitz.get_text_length(text, fontname=fontname, fontsize=s) > max_w:
+        s -= 0.5
+    return s
+
+
+def _fit_text(text, fontname, size, max_w):
+    """Shrink fontsize to fit max_w; if still too long at floor size,
+    truncate with an ellipsis so it never bleeds into the next cell."""
+    size = _fit_size(text, fontname, size, max_w)
+    if fitz.get_text_length(text, fontname=fontname, fontsize=size) <= max_w:
+        return text, size
+    while text and fitz.get_text_length(text + "…", fontname=fontname, fontsize=size) > max_w:
+        text = text[:-1]
+    return text + "…", size
+
+
+def _draw_field(page, spec, text, fontname=FONT):
+    text = str(text or "").strip()
+    if not text:
+        return
+    text, size = _fit_text(text, fontname, spec["size"], spec["max_w"])
+    page.insert_text((spec["x"], spec["y"]), text, fontname=fontname, fontsize=size, color=BLACK)
+
+
+def _draw_name(page, x, baseline, name, max_w):
+    name = str(name or "").strip()
+    if not name:
+        return
+    name, size = _fit_text(name, FONT, ROW_FONT_SIZE, max_w)
+    page.insert_text((x, baseline), name, fontname=FONT, fontsize=size, color=BLACK)
+
+
+def _insert_centered(page, cx, baseline, text, fontname, size):
+    w = fitz.get_text_length(text, fontname=fontname, fontsize=size)
+    page.insert_text((cx - w / 2, baseline), text, fontname=fontname, fontsize=size, color=BLACK)
 
 
 # ── SIGNATURE IMAGE FETCHER ───────────────────────────────────────────────────
@@ -122,49 +129,54 @@ def _fetch_image_bytes(url):
         _fetch_image_bytes._cache[url] = b""
         return b""
 
+
 _fetch_image_bytes._cache = {}
 
 
-def _sig_cell(sig_path, status, norm9c_style):
-    """Return a ReportLab flowable for the SIGNATURE column cell."""
-    # "SIGNED" marker — render as plain text for attended, blank for absent.
-    # Excused counts as attended: the signature represents that the student
-    # was physically in class, same as a manual paper sheet would. Partial
-    # is treated like Absent here — didn't attend enough to count.
-    if sig_path == "SIGNED":
-        attended = status in ("Present", "Late", "Excused")
-        if not attended:
-            return Paragraph("", norm9c_style)
-        return Paragraph(
-            "SIGNED",
-            ParagraphStyle("signed_txt", parent=norm9c_style, alignment=TA_CENTER,
-                           spaceAfter=0, spaceBefore=0)
-        )
+def _insert_sig_image(page, raw, x0, x1, row_top, row_bottom):
+    try:
+        from PIL import Image
+        img = Image.open(BytesIO(raw))
+        nat_w, nat_h = img.size
+    except Exception as e:
+        print(f"[PDF] Image render error: {e}")
+        return
+    if nat_w <= 0 or nat_h <= 0:
+        return
+    avail_w = (x1 - x0) - 6
+    scale   = min(avail_w / nat_w, SIG_MAX_H / nat_h, 1.0)
+    w, h    = nat_w * scale, nat_h * scale
+    cx      = (x0 + x1) / 2
+    cy      = (row_top + row_bottom) / 2
+    rect    = fitz.Rect(cx - w / 2, cy - h / 2, cx + w / 2, cy + h / 2)
+    try:
+        page.insert_image(rect, stream=raw, keep_proportion=True)
+    except Exception as e:
+        print(f"[PDF] Image render error: {e}")
 
-    # Legacy: render stored signature image for old records
+
+def _draw_sig(page, x0, x1, row_top, row_bottom, rec):
+    """SIGNED counts as attended (Present/Late/Excused) — the mark represents
+    physical attendance, same as a manual paper sheet. Legacy records that
+    still carry a stored signature image are rendered as an image instead."""
+    status   = rec.get("status")
+    sig_path = rec.get("sig_path", "")
+    baseline = row_bottom - 3.5
+
+    if sig_path == "SIGNED":
+        if status in ("Present", "Late", "Excused"):
+            _insert_centered(page, (x0 + x1) / 2, baseline, "SIGNED", FONT, ROW_FONT_SIZE)
+        return
+
     if sig_path:
-        img_src = None
+        raw = None
         if sig_path.startswith("http://") or sig_path.startswith("https://"):
             raw = _fetch_image_bytes(sig_path)
-            if raw:
-                img_src = BytesIO(raw)
         elif os.path.isfile(sig_path):
-            img_src = sig_path
-
-        if img_src is not None:
-            try:
-                img = RLImage(img_src)
-                nat_w, nat_h = img.imageWidth, img.imageHeight
-                if nat_w > 0 and nat_h > 0:
-                    scale          = min(SIG_MAX_W / nat_w, SIG_MAX_H / nat_h, 1.0)
-                    img.drawWidth  = nat_w * scale
-                    img.drawHeight = nat_h * scale
-                    img.hAlign     = "CENTER"
-                    return img
-            except Exception as e:
-                print(f"[PDF] Image render error: {e}")
-
-    return Paragraph("", norm9c_style)
+            with open(sig_path, "rb") as f:
+                raw = f.read()
+        if raw:
+            _insert_sig_image(page, raw, x0, x1, row_top, row_bottom)
 
 
 # ── MAIN ENTRY POINT ─────────────────────────────────────────────────────────
@@ -176,186 +188,49 @@ def generate_attendance_pdf(class_id, subject, section, room, date,
         records = []
 
     filename = f"Log_{_safe(date)}_{_safe(session_time or 'session')}_{_safe(section)}.pdf"
-    buf      = BytesIO()
 
-    doc = SimpleDocTemplate(
-        buf,
-        pagesize=(PAGE_W, PAGE_H),
-        leftMargin=LEFT_M,  rightMargin=RIGHT_M,
-        topMargin=TOP_M,    bottomMargin=BOTTOM_M,
-    )
+    doc  = fitz.open(TEMPLATE_PATH)
+    page = doc[0]
 
-    # ── PARAGRAPH STYLES ─────────────────────────────────────────────────────
-    ss = getSampleStyleSheet()
+    _draw_field(page, CC_TITLE, f"{subject}  ({section})")
+    _draw_field(page, FACULTY,  faculty_name)
+    _draw_field(page, DATE_F,   _fmt_date(date))
+    _draw_field(page, TIME_F,   time_str)
+    _draw_field(page, ROOM_F,   room)
 
-    def ps(name, **kw):
-        return _p(name, ss, **kw)
-
-    norm9   = ps("n9",   fontSize=9,  fontName=TNR)
-    norm9c  = ps("n9c",  fontSize=9,  fontName=TNR,      alignment=TA_CENTER)
-    norm10  = ps("n10",  fontSize=10, fontName=TNR)
-    bold10c = ps("b10c", fontSize=10, fontName=TNR_BOLD,  alignment=TA_CENTER)
-    bold12c = ps("b12c", fontSize=12, fontName=TNR_BOLD,  alignment=TA_CENTER)
-    bold9c  = ps("b9c",  fontSize=9,  fontName=TNR_BOLD,  alignment=TA_CENTER)
-
-    story   = []
-
-    # ══════════════════════════════════════════════════════════════════════════
-    # TABLE 1 — HEADER
-    # ══════════════════════════════════════════════════════════════════════════
-    LOGO_PATH = "bsu_logo.png"
-    if os.path.exists(LOGO_PATH):
-        logo_cell = RLImage(LOGO_PATH, width=38, height=38)
-    else:
-        logo_cell = Paragraph(
-            "Batangas State<br/>University",
-            ps("lc", fontSize=7, fontName=TNR_BOLD, alignment=TA_CENTER)
-        )
-
-    hdr_data = [
-        [
-            logo_cell,
-            Paragraph("Reference No.:  BatStateU-REC-ATT-11",
-                      ps("rn", fontSize=9, fontName=TNR, leading=13)),
-            Paragraph("Effectivity Date:  May 18, 2022",
-                      ps("ed", fontSize=9, fontName=TNR)),
-            Paragraph("Revision No.:  01",
-                      ps("rv", fontSize=9, fontName=TNR)),
-        ],
-        [Paragraph("STUDENT CLASS ATTENDANCE", bold12c), "", "", ""],
-    ]
-
-    hdr_tbl = Table(hdr_data, colWidths=[H_LOGO, H_REF, H_EFF, H_REV])
-    hdr_tbl.setStyle(TableStyle([
-        ("BOX",           (0, 0), (-1, -1), B, BLACK),
-        ("INNERGRID",     (0, 0), (-1,  0), B, BLACK),
-        ("LINEBELOW",     (0, 0), (-1,  0), B, BLACK),
-        ("SPAN",          (0, 1), (-1,  1)),
-        ("ALIGN",         (0, 0), (0,  0), "CENTER"),
-        ("ALIGN",         (0, 1), (-1, 1), "CENTER"),
-        ("VALIGN",        (0, 0), (-1, -1), "MIDDLE"),
-        ("TOPPADDING",    (0, 0), (-1,  0), 6),
-        ("BOTTOMPADDING", (0, 0), (-1,  0), 6),
-        ("LEFTPADDING",   (1, 0), (-1,  0), 6),
-        ("RIGHTPADDING",  (0, 0), (-1,  0), 4),
-        ("TOPPADDING",    (0, 1), (-1,  1), 7),
-        ("BOTTOMPADDING", (0, 1), (-1,  1), 7),
-    ]))
-    story.append(hdr_tbl)
-
-    # ══════════════════════════════════════════════════════════════════════════
-    # TABLE 2 — INFO BLOCK + GRAY DIVIDER
-    # ══════════════════════════════════════════════════════════════════════════
-    disp_date = _fmt_date(date)
-
-    info_data = [
-        [Paragraph(f"Course Code and Title:  {subject}  ({section})",
-                   ps("cc", fontSize=10, fontName=TNR)), "", ""],
-        [Paragraph(f"Name of Faculty:  {faculty_name}",
-                   ps("af", fontSize=10, fontName=TNR)), "", ""],
-        [
-            Paragraph(f"Date: {disp_date}",     ps("dt", fontSize=10, fontName=TNR)),
-            Paragraph(f"Time: {time_str}",      ps("tm", fontSize=10, fontName=TNR)),
-            Paragraph(f"Room/Venue: {room}",    ps("rm", fontSize=10, fontName=TNR)),
-        ],
-        ["", "", ""],   # gray divider row
-    ]
-
-    info_tbl = Table(
-        info_data,
-        colWidths=[I_DATE, I_TIME, I_ROOM],
-        rowHeights=[None, None, None, 8],
-    )
-    info_tbl.setStyle(TableStyle(_no_top([
-        ("SPAN",          (0, 0), (-1,  0)),
-        ("SPAN",          (0, 1), (-1,  1)),
-        ("SPAN",          (0, 3), (-1,  3)),
-        ("BACKGROUND",    (0, 3), (-1,  3), GRAY_LIGHT),
-        ("VALIGN",        (0, 0), (-1, -1), "MIDDLE"),
-        ("ALIGN",         (0, 0), (-1,  2), "LEFT"),
-        ("TOPPADDING",    (0, 0), (-1,  2), 5),
-        ("BOTTOMPADDING", (0, 0), (-1,  2), 5),
-        ("LEFTPADDING",   (0, 0), (-1,  2), 8),
-        ("RIGHTPADDING",  (0, 0), (-1,  2), 4),
-        ("TOPPADDING",    (0, 3), (-1,  3), 0),
-        ("BOTTOMPADDING", (0, 3), (-1,  3), 0),
-        ("LEFTPADDING",   (0, 3), (-1,  3), 0),
-        ("RIGHTPADDING",  (0, 3), (-1,  3), 0),
-    ])))
-    story.append(info_tbl)
-
-    # ══════════════════════════════════════════════════════════════════════════
-    # TABLE 3 — ATTENDANCE ROSTER
-    # ══════════════════════════════════════════════════════════════════════════
     # Present, Late, and Excused all indicate the student attended the class
     # in some form and belong on the official sheet. Partial is treated the
     # same as Absent here — falling below the attendance-duration threshold
-    # means they didn't really attend enough to count, so neither appears
-    # anywhere on the sheet, same as the on-screen preview/print.
+    # means they didn't attend enough to count, so neither appears anywhere
+    # on the sheet, matching the on-screen preview/print reference.
     present  = [r for r in records if r.get("status") == "Present"]
     late     = [r for r in records if r.get("status") == "Late"]
     excused  = [r for r in records if r.get("status") == "Excused"]
     attended = present + late + excused
 
-    ROWS_PER_COL = 30
-    slot = {}
-    for idx, r in enumerate(attended):
-        if idx < ROWS_PER_COL * 2:
-            slot[idx] = r
-
-    roster_rows = [[
-        Paragraph("NAME",      bold9c),
-        Paragraph("SIGNATURE", bold9c),
-        Paragraph("NAME",      bold9c),
-        Paragraph("SIGNATURE", bold9c),
-    ]]
-
     for i in range(ROWS_PER_COL):
-        left_r  = slot.get(i)
-        right_r = slot.get(i + ROWS_PER_COL)
+        row_top    = ROW_DIVIDERS[i]
+        row_bottom = ROW_DIVIDERS[i + 1]
+        baseline   = row_bottom - 3.5
+
+        left_r  = attended[i]                if i < len(attended) else None
+        right_r = attended[i + ROWS_PER_COL] if i + ROWS_PER_COL < len(attended) else None
 
         if left_r:
-            st      = left_r["status"]
-            l_nm    = Paragraph(f"{i+1}. {left_r['name']}",
-                                ps(f"ln{i}", fontSize=9, fontName=TNR, textColor=BLACK))
-            l_sg    = _sig_cell(left_r.get("sig_path", ""), st, norm9c)
-        else:
-            l_nm = Paragraph(f"{i+1}.", ps(f"le{i}", fontSize=9, fontName=TNR))
-            l_sg = Paragraph("", norm9)
-
+            _draw_name(page, NAME1_X, baseline, left_r["name"], NAME1_MAXW)
+            _draw_sig(page, SIG1_X0, SIG1_X1, row_top, row_bottom, left_r)
         if right_r:
-            st      = right_r["status"]
-            r_nm    = Paragraph(f"{i+1+ROWS_PER_COL}. {right_r['name']}",
-                                ps(f"rn{i}", fontSize=9, fontName=TNR, textColor=BLACK))
-            r_sg    = _sig_cell(right_r.get("sig_path", ""), st, norm9c)
-        else:
-            r_nm = Paragraph(f"{i+1+ROWS_PER_COL}.", ps(f"re{i}", fontSize=9, fontName=TNR))
-            r_sg = Paragraph("", norm9)
-
-        roster_rows.append([l_nm, l_sg, r_nm, r_sg])
-
-    roster_tbl = Table(
-        roster_rows,
-        colWidths=[R_NAME, R_SIG, R_NAME, R_SIG],
-        repeatRows=1,
-        rowHeights=[16] + [14] * ROWS_PER_COL,
-    )
-    roster_tbl.setStyle(TableStyle(_no_top([
-        ("ALIGN",         (0, 0), (-1,  0), "CENTER"),
-        ("VALIGN",        (0, 0), (-1, -1), "MIDDLE"),
-        ("TOPPADDING",    (0, 0), (-1, -1), 2),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
-        ("LEFTPADDING",   (0, 0), (-1, -1), 4),
-        ("RIGHTPADDING",  (0, 0), (-1, -1), 2),
-    ])))
-    story.append(roster_tbl)
+            _draw_name(page, NAME2_X, baseline, right_r["name"], NAME2_MAXW)
+            _draw_sig(page, SIG2_X0, SIG2_X1, row_top, row_bottom, right_r)
 
     # No appendix section — the official BatStateU-REC-ATT-11 sheet (and the
-    # on-screen preview/print it must match) lists attended students only.
-    # Absent and Partial students simply don't appear anywhere on the form.
+    # on-screen preview/print it must match) lists attended students only,
+    # capped at the form's 60 printed slots. Absent/Partial students don't
+    # appear anywhere on the form.
 
-    # ── BUILD ────────────────────────────────────────────────────────────────
-    doc.build(story)
+    buf = BytesIO()
+    doc.save(buf)
+    doc.close()
     buf.seek(0)
     print(f"[PDF] Generated in-memory: {filename}")
     return buf, filename

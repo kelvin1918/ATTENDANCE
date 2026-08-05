@@ -2174,9 +2174,7 @@ def student_registration_page(token):
   <div class="success" id="successMsg">
     <div class="check"><svg width="52" height="52" fill="none" stroke="#22C55E" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg></div>
     <h2>Submitted for Approval!</h2>
-    <p>Your registration has been submitted successfully.<br>
-       Your instructor will review and approve your registration.<br>
-       You will be added to the attendance system once approved.</p>
+    <p>Your registration has been submitted successfully. Your instructor will review and approve your registration, and you will be added to the attendance system once approved.</p>
   </div>
 </div>
 

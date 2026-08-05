@@ -2,7 +2,8 @@ flask
 flask-cors
 werkzeug
 psycopg2-binary
-reportlab
+PyMuPDF
+Pillow
 python-dotenv
 cloudinary
 insightface
