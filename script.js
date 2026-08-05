@@ -1147,8 +1147,12 @@ async function viewAndPrintPDF(class_code, date, session_time) {
         const pdfUrl = URL.createObjectURL(pdfBlob);
         window._attendancePdfUrl = pdfUrl;
 
+        // Chrome's built-in PDF viewer supports these open-parameters in the
+        // URL fragment to hide its own toolbar/side nav and fit the page to
+        // the iframe's width — leaves just the plain white sheet, since the
+        // app already has its own Print/Download buttons above the preview.
         const frame = document.getElementById('printFrame');
-        frame.src = pdfUrl;
+        frame.src = pdfUrl + '#toolbar=0&navpanes=0&scrollbar=0&view=FitH';
 
         // ── Print — open the same PDF in a clean window and trigger the browser's print dialog ──
         window.printSheet = () => {
