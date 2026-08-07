@@ -532,6 +532,9 @@ label.field-label{display:block;font-size:12px;font-weight:600;
 .toast-error{background:var(--red)}
 .toast-info{background:#1E40AF}
 @keyframes toastIn{from{opacity:0;transform:translateX(20px)}to{opacity:1;transform:none}}
+#sync-toast{flex-direction:column;align-items:stretch;gap:6px}
+.toast-progress-track{width:100%;height:4px;background:rgba(255,255,255,.3);border-radius:2px;overflow:hidden}
+.toast-progress-fill{height:100%;background:#fff;border-radius:2px;transition:width .3s ease}
 
 /* ── STUDENT STATUS BADGES ─────────────────────────────────────────────── */
 .badge-face-ok{display:inline-flex;align-items:center;gap:3px;padding:1px 7px;
@@ -1511,13 +1514,27 @@ async function runFaceSync(opts = {}) {
       return;
     }
 
+    if (!silent) _updateSyncToast('Checking for new photos…', 0);
+
     // Poll the shared progress endpoint until the background sync finishes
     let data = {done: false};
     while (!data.done) {
       await new Promise(r => setTimeout(r, 400));
       const pRes = await fetch('/api/local/sync_progress');
       data = await pRes.json();
+
+      if (!silent) {
+        const total   = data.total || 0;
+        const checked = (data.synced || 0) + (data.skipped || 0);
+        const pct     = total > 0 ? Math.round((checked / total) * 100) : 0;
+        _updateSyncToast(
+          total > 0 ? `Syncing photos… ${pct}% (${checked}/${total})` : 'Syncing photos…',
+          pct
+        );
+      }
     }
+
+    _removeSyncToast();
 
     if (data.error) {
       if (!silent) toast('Sync error: ' + data.error, 'error');
@@ -1527,6 +1544,7 @@ async function runFaceSync(opts = {}) {
       toast('Already up to date', 'info');
     }
   } catch {
+    _removeSyncToast();
     if (!silent) toast('Cannot reach the server.', 'error');
   } finally {
     if (!silent) {
@@ -1534,6 +1552,25 @@ async function runFaceSync(opts = {}) {
       btn.classList.remove('spinning');
     }
   }
+}
+
+function _updateSyncToast(text, pct) {
+  let el = document.getElementById('sync-toast');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'sync-toast';
+    el.className = 'toast toast-info';
+    el.innerHTML = `<span id="sync-toast-text"></span>
+      <div class="toast-progress-track"><div class="toast-progress-fill" id="sync-toast-fill" style="width:0%"></div></div>`;
+    document.getElementById('toast-container').appendChild(el);
+  }
+  el.querySelector('#sync-toast-text').textContent = text;
+  el.querySelector('#sync-toast-fill').style.width = pct + '%';
+}
+
+function _removeSyncToast() {
+  const el = document.getElementById('sync-toast');
+  if (el) el.remove();
 }
 
 document.getElementById('btn-sync-now').addEventListener('click', () => runFaceSync());
@@ -1698,7 +1735,10 @@ function renderClassGrid(dayFilter) {
 // Day tabs removed
 
 // Logout
-document.getElementById('btn-logout').addEventListener('click', () => {
+document.getElementById('btn-logout').addEventListener('click', async () => {
+  const confirmed = await showLogoutConfirm();
+  if (!confirmed) return;
+
   stopAutoSync();
   STATE.email = ''; STATE.name = ''; STATE.classes = [];
   showScreen('screen-login');
@@ -2481,6 +2521,49 @@ async function deleteStudent(studentId, studentName) {
   } catch {
     toast('Network error during delete.', 'error');
   }
+}
+
+function showLogoutConfirm() {
+  return new Promise(resolve => {
+    const overlay = document.createElement('div');
+    overlay.style.cssText = `position:fixed;inset:0;background:rgba(0,0,0,.7);
+      z-index:2000;display:flex;align-items:center;justify-content:center;
+      backdrop-filter:blur(4px)`;
+    overlay.innerHTML = `
+      <div style="background:#1a1a1a;border:1px solid #2a2a2a;border-radius:16px;
+                  padding:28px 32px;width:340px;text-align:center">
+        <div style="width:44px;height:44px;background:rgba(211,47,47,.15);border-radius:50%;
+                    display:flex;align-items:center;justify-content:center;margin:0 auto 16px;
+                    border:1px solid rgba(211,47,47,.3)">
+          <svg width="18" height="18" fill="none" stroke="#D32F2F" stroke-width="2" viewBox="0 0 24 24">
+            <path d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
+                  stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <p style="font-size:15px;font-weight:700;color:#fff;margin-bottom:8px">Sign Out</p>
+        <p style="font-size:13px;color:#777;margin-bottom:24px;line-height:1.5">
+          Are you sure you want to sign out?
+        </p>
+        <div style="display:flex;gap:10px">
+          <button id="logout-cancel"
+            style="flex:1;padding:10px;border-radius:8px;border:1px solid #333;
+                   background:transparent;color:#888;font-family:inherit;
+                   font-size:13px;cursor:pointer">
+            Cancel
+          </button>
+          <button id="logout-confirm"
+            style="flex:1;padding:10px;border-radius:8px;border:none;
+                   background:#D32F2F;color:#fff;font-family:inherit;
+                   font-weight:700;font-size:13px;cursor:pointer">
+            Sign Out
+          </button>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+    overlay.querySelector('#logout-cancel').onclick  = () => { overlay.remove(); resolve(false); };
+    overlay.querySelector('#logout-confirm').onclick = () => { overlay.remove(); resolve(true);  };
+    overlay.onclick = e => { if (e.target === overlay) { overlay.remove(); resolve(false); } };
+  });
 }
 
 function showDeleteConfirm(name) {
