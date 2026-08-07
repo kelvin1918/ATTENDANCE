@@ -1493,10 +1493,12 @@ async function _advanceToClasses() {
    MANUAL / PERIODIC FACE SYNC (post-login)
    ═══════════════════════════════════════════════════════════════════════ */
 let _autoSyncInterval = null;
+let _syncSession       = 0;   // bumped on logout to invalidate any in-flight sync
 
 async function runFaceSync(opts = {}) {
-  const silent = !!opts.silent;
-  const btn = document.getElementById('btn-sync-now');
+  const silent    = !!opts.silent;
+  const mySession = _syncSession;
+  const btn       = document.getElementById('btn-sync-now');
 
   if (!silent) {
     if (btn.classList.contains('spinning')) return;   // already syncing
@@ -1509,6 +1511,8 @@ async function runFaceSync(opts = {}) {
       method: 'POST',
       headers: {'X-Instructor-Email': STATE.email}
     });
+    if (mySession !== _syncSession) return;   // logged out while request was in flight
+
     if (!res.ok) {
       if (!silent) toast('Sync failed — check connection.', 'error');
       return;
@@ -1520,8 +1524,11 @@ async function runFaceSync(opts = {}) {
     let data = {done: false};
     while (!data.done) {
       await new Promise(r => setTimeout(r, 400));
+      if (mySession !== _syncSession) { _removeSyncToast(); return; }
+
       const pRes = await fetch('/api/local/sync_progress');
       data = await pRes.json();
+      if (mySession !== _syncSession) { _removeSyncToast(); return; }
 
       if (!silent) {
         const total   = data.total || 0;
@@ -1535,6 +1542,7 @@ async function runFaceSync(opts = {}) {
     }
 
     _removeSyncToast();
+    if (mySession !== _syncSession) return;   // logged out right as it finished
 
     if (data.error) {
       if (!silent) toast('Sync error: ' + data.error, 'error');
@@ -1544,10 +1552,12 @@ async function runFaceSync(opts = {}) {
       toast('Already up to date', 'info');
     }
   } catch {
-    _removeSyncToast();
-    if (!silent) toast('Cannot reach the server.', 'error');
+    if (mySession === _syncSession) {
+      _removeSyncToast();
+      if (!silent) toast('Cannot reach the server.', 'error');
+    }
   } finally {
-    if (!silent) {
+    if (!silent && mySession === _syncSession) {
       btn.disabled = false;
       btn.classList.remove('spinning');
     }
@@ -1739,6 +1749,8 @@ document.getElementById('btn-logout').addEventListener('click', async () => {
   const confirmed = await showLogoutConfirm();
   if (!confirmed) return;
 
+  _syncSession++;        // invalidate any in-flight sync (manual or auto)
+  _removeSyncToast();
   stopAutoSync();
   STATE.email = ''; STATE.name = ''; STATE.classes = [];
   showScreen('screen-login');
